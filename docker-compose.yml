@@ -1,0 +1,16 @@
+
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - ./Data:/app/Data
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
