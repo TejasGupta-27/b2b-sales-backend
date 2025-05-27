@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     debug: bool = True
     cors_origins: str = "http://localhost:3000"
     
+    # Database Configuration
+    postgres_user: str = "myuser"
+    postgres_password: str = "mypassword"
+    postgres_db: str = "chat_db"
+    database_url: str = "postgresql://myuser:mypassword@db:5432/chat_db"
+    
     # Data directory
     data_dir: Path = Path("Data/json")
     

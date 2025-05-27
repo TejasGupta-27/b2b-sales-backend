@@ -15,29 +15,16 @@ class AIResponse(BaseModel):
     finish_reason: Optional[str] = None
 
 class AIProvider(ABC):
-    """Base class for all AI service providers"""
+    """Abstract base class for AI providers"""
     
-    def __init__(self, **kwargs):
-        self.config = kwargs
-        self.token_tracker = TokenTracker()
+    def __init__(self, **config):
+        self.config = config
+        self.usage_tracker = None
     
-    def _track_usage(self, usage: Dict[str, Any]):
-        """Track token usage for the request"""
-        if usage:
-            self.token_tracker.track_usage(
-                provider=self.provider_name,
-                model=self.config.get("deployment_name", "unknown"),
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0)
-            )
-
+    @property
     @abstractmethod
-    async def generate_response(
-        self, 
-        messages: List[AIMessage], 
-        **kwargs
-    ) -> AIResponse:
-        """Generate response from the AI provider"""
+    def provider_name(self) -> str:
+        """Return the name of the provider"""
         pass
     
     @abstractmethod
@@ -45,8 +32,16 @@ class AIProvider(ABC):
         """Check if the provider is properly configured"""
         pass
     
-    @property
     @abstractmethod
-    def provider_name(self) -> str:
-        """Return the name of the provider"""
-        pass 
+    async def generate_response(
+        self, 
+        messages: List[AIMessage], 
+        **kwargs
+    ) -> AIResponse:
+        """Generate a response from the AI provider"""
+        pass
+    
+    def _track_usage(self, usage: Dict[str, Any]):
+        """Track token usage"""
+        if self.usage_tracker:
+            self.usage_tracker.track_usage(self.provider_name, usage) 
