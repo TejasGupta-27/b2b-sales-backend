@@ -25,6 +25,7 @@ from models.chat import MessageType, ChatRequest, ChatResponse
 from routes.leads import router as leads_router
 from config import settings
 from ai_services.b2b_sales_agent import B2BSalesAgent
+from routes import quotes
 
 # Configure logging
 log_dir = "logs"
@@ -56,6 +57,9 @@ app.add_middleware(
 
 # Include lead management routes
 app.include_router(leads_router)
+
+# Include the quotes router
+app.include_router(quotes.router, prefix="/api/quotes", tags=["quotes"])
 
 # Sales-specific models
 class SalesChatMessage(BaseModel):
@@ -108,53 +112,107 @@ class LeadResponse(BaseModel):
 async def root():
     return {"message": "B2B Sales Agent API is running!"}
 
-@app.post("/api/sales-chat", response_model=SalesResponse)
-async def sales_chat(conversation: SalesConversation):
-    """B2B Sales conversation endpoint"""
-    
+@app.post("/api/sales-chat")
+async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     try:
-        # Create base AI provider
-        base_provider = AIServiceFactory.create_provider("azure_openai")
+        logger.info(f"Sales chat request: {request}")
         
-        # Create B2B sales agent
-        sales_agent = B2BSalesAgent(base_provider)
+        # Handle lead management (existing code)
+        lead_id = request.lead_id
+        if not lead_id:
+            lead_id = str(uuid.uuid4())
+            lead = DBLead(
+                id=lead_id,
+                company_name="Unknown",
+                contact_name="Unknown",
+                email="unknown@example.com",
+                status="new",
+                created_at=datetime.now()
+            )
+            db.add(lead)
+            db.flush()
         
-        # Prepare messages
-        messages = [
-            AIMessage(role="user", content=conversation.message)
-        ]
+        # Save user message
+        user_message = DBChatMessage(
+            id=str(uuid.uuid4()),
+            lead_id=lead_id,
+            message_type=MessageType.USER,
+            content=request.message,
+            stage=request.conversation_stage or "discovery"
+        )
+        db.add(user_message)
+        db.flush()
         
-        # Generate response
-        response = await sales_agent.generate_response(
-            messages=messages,
-            customer_context=conversation.customer_context,
-            max_tokens=1000,
-            temperature=0.7
+        # Prepare conversation history
+        messages = []
+        existing_messages = db.query(DBChatMessage).filter(
+            DBChatMessage.lead_id == lead_id
+        ).order_by(DBChatMessage.created_at).all()
+        
+        for msg in existing_messages:
+            role = "user" if msg.message_type == MessageType.USER else "assistant"
+            messages.append(AIMessage(role=role, content=msg.content))
+        
+        # Create B2B Sales Agent instead of generic AI provider
+        base_provider = AIServiceFactory.create_provider(request.provider)
+        b2b_agent = B2BSalesAgent(base_provider)
+        
+        # Get customer context from the lead
+        customer_context = None
+        lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
+        if lead_record:
+            customer_context = {
+                "company_name": lead_record.company_name,
+                "contact_name": lead_record.contact_name,
+                "email": lead_record.email,
+                "company_size": getattr(lead_record, 'company_size', None),
+                "industry": getattr(lead_record, 'industry', None),
+                "budget_range": getattr(lead_record, 'budget_range', None),
+                "timeline": getattr(lead_record, 'decision_timeline', None)
+            }
+        
+        # Generate response with sales context
+        response = await b2b_agent.generate_response(
+            messages, 
+            customer_context=customer_context
         )
         
-        # Extract recommendations and next steps
-        recommendations = []
-        next_steps = []
-        quote = None
+        # Save assistant response
+        response_metadata = {
+            "model": response.model,
+            "provider": response.provider,
+            "usage": response.usage
+        }
         
-        # Ensure response has required fields
-        if not hasattr(response, 'content'):
-            raise ValueError("Response missing required 'content' field")
-            
-        # Create SalesResponse object
-        sales_response = SalesResponse(
+        # Add quote information if generated
+        if response.metadata and 'quote' in response.metadata:
+            response_metadata['quote'] = response.metadata['quote']
+        
+        assistant_message = DBChatMessage(
+            id=str(uuid.uuid4()),
+            lead_id=lead_id,
+            message_type=MessageType.ASSISTANT,
             content=response.content,
-            quote=quote,
-            recommendations=recommendations,
-            next_steps=next_steps
+            stage=request.conversation_stage or "discovery",
+            message_metadata=response_metadata
+        )
+        db.add(assistant_message)
+        db.commit()
+        
+        # Prepare response
+        chat_response = ChatResponse(
+            message=response.content,
+            lead_id=lead_id,
+            conversation_stage=request.conversation_stage or "discovery",
+            metadata=response.metadata
         )
         
-        logger.debug(f"Returning sales response: {sales_response}")
-        return sales_response
+        return chat_response
         
     except Exception as e:
-        logger.error(f"Error in sales conversation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in sales conversation: {str(e)}")
+        logger.error(f"Error in sales chat: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/products")
 async def get_products():
@@ -166,7 +224,7 @@ async def get_products():
 
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
-    """Generate a detailed quotation"""
+    """Generate a detailed quotation (legacy endpoint)"""
     base_provider = AIServiceFactory.create_provider("azure_openai")
     sales_agent = B2BSalesAgent(base_provider)
     

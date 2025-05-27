@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir "fastapi[all]" "uvicorn[standard]" python-dotenv 
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p Data/json logs
+RUN mkdir -p Data/json Data/quotes logs services
 
 # Expose port
 EXPOSE 3001

@@ -13,6 +13,7 @@ class AIResponse(BaseModel):
     provider: str
     usage: Optional[Dict[str, Any]] = None
     finish_reason: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 class AIProvider(ABC):
     """Abstract base class for AI providers"""
