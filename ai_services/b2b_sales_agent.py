@@ -330,4 +330,19 @@ Remember: You're not just selling hardware - you're selling business transformat
         return await self.quote_agent.generate_quote_from_conversation(
             [],
             quote_request.get('customer_info', {})
-        ) 
+        )
+    
+    async def generate_quote_with_pdf(self, quote_request: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate quote with PDF (for API compatibility)"""
+        # Convert quote request to conversation format for the quote agent
+        fake_conversation = [
+            AIMessage(role="user", content="I need a quote for the following requirements:"),
+            AIMessage(role="user", content=json.dumps(quote_request, indent=2))
+        ]
+        
+        quote = await self.quote_agent.generate_quote_from_conversation(
+            fake_conversation,
+            quote_request.get('customer_info', {})
+        )
+        
+        return quote 

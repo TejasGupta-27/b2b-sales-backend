@@ -42,27 +42,42 @@ class QuoteGenerationAgent(AIProvider):
         
         print(f"🔍 Quote Agent: Analyzing conversation for quote requirements...")
         print(f"📝 Messages to analyze: {len(conversation_messages)}")
+        print(f"👤 Customer context available: {bool(customer_context)}")
         
-        # Extract technical requirements from sales conversation
-        requirements = await self._extract_requirements_from_conversation(
-            conversation_messages, 
-            customer_context
-        )
-        
-        if not requirements:
-            print("❌ Quote Agent: No extractable requirements found")
-            return None
+        try:
+            # Extract technical requirements from sales conversation
+            requirements = await self._extract_requirements_from_conversation(
+                conversation_messages, 
+                customer_context
+            )
             
-        print(f"✅ Quote Agent: Extracted {len(requirements.get('hardware_items', []))} hardware items")
-        
-        # Generate comprehensive quote
-        quote = self._generate_comprehensive_quote(requirements)
-        
-        # Generate PDF automatically
-        quote = await self._generate_quote_pdf(quote)
-        
-        print(f"📄 Quote Agent: Complete quote generated with ID {quote['id']}")
-        return quote
+            if not requirements:
+                print("❌ Quote Agent: No extractable requirements found")
+                # Try fallback extraction with more lenient criteria
+                requirements = self._fallback_requirements_extraction(conversation_messages, customer_context)
+                
+            if not requirements:
+                print("❌ Quote Agent: Even fallback extraction failed")
+                return None
+                
+            print(f"✅ Quote Agent: Extracted {len(requirements.get('hardware_items', []))} hardware items")
+            
+            # Generate comprehensive quote
+            quote = self._generate_comprehensive_quote(requirements)
+            
+            # Generate PDF automatically
+            quote = await self._generate_quote_pdf(quote)
+            
+            print(f"📄 Quote Agent: Complete quote generated with ID {quote['id']}")
+            print(f"📄 PDF status: {'Generated' if 'pdf_url' in quote else 'Failed'}")
+            
+            return quote
+            
+        except Exception as e:
+            print(f"❌ Quote Agent: Error in quote generation: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     async def _extract_requirements_from_conversation(
         self,
@@ -441,3 +456,54 @@ Extract technical requirements as JSON:""")
                 ]
             }
         ] 
+
+    def _fallback_requirements_extraction(
+        self, 
+        conversation_messages: List[AIMessage], 
+        customer_context: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """More aggressive fallback extraction when normal methods fail"""
+        
+        print("🔄 Quote Agent: Using aggressive fallback extraction...")
+        
+        # Create basic requirements even with minimal information
+        conversation_text = " ".join([msg.content.lower() for msg in conversation_messages])
+        
+        hardware_items = []
+        
+        # Always include a basic workstation if any business discussion happened
+        if any(term in conversation_text for term in ['business', 'work', 'computer', 'system', 'solution']):
+            hardware_items.append({
+                "category": "workstation",
+                "name": "Professional Business Workstation",
+                "description": "High-performance workstation for business productivity",
+                "specifications": {"processor": "Intel Core i7", "ram": "32GB", "storage": "1TB SSD"},
+                "quantity": 1,
+                "estimated_price": 1499,
+                "justification": "Essential business computing platform"
+            })
+        
+        # Add basic services
+        hardware_items.append({
+            "category": "service",
+            "name": "Professional Setup & Support",
+            "description": "Complete installation and configuration service",
+            "specifications": {"timeline": "1-2 weeks", "includes": "Setup, training, support"},
+            "quantity": 1,
+            "estimated_price": 299,
+            "justification": "Professional implementation ensures optimal performance"
+        })
+        
+        if hardware_items:
+            total_budget = sum(item['estimated_price'] * item['quantity'] for item in hardware_items)
+            
+            return {
+                "hardware_items": hardware_items,
+                "total_estimated_budget": total_budget,
+                "timeline": "1-2 weeks",
+                "confidence_level": 0.6,
+                "extraction_method": "aggressive_fallback",
+                "customer_info": customer_context or {}
+            }
+        
+        return None 

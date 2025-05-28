@@ -3,10 +3,10 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-class MessageType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
+class MessageType(Enum):
+    USER = "USER"
+    ASSISTANT = "ASSISTANT"
+    SYSTEM = "SYSTEM"
 
 class ChatMessage(BaseModel):
     role: str
@@ -17,10 +17,10 @@ class ChatRequest(BaseModel):
     message: str
     lead_id: Optional[str] = None
     conversation_stage: Optional[str] = "discovery"
-    conversation_history: Optional[List[ChatMessage]] = []
+    customer_context: Optional[Dict[str, Any]] = None
 
 class ChatResponse(BaseModel):
     message: str
-    lead_id: str
-    conversation_stage: str
+    lead_id: Optional[str] = None
+    conversation_stage: str = "discovery"
     metadata: Optional[Dict[str, Any]] = None 

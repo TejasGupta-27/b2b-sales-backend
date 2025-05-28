@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements files
 COPY pyproject.toml requirements.txt ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir "fastapi[all]" "uvicorn[standard]" python-dotenv aiofiles psycopg2-binary -r requirements.txt
+# Install Python dependencies with specific elasticsearch version
+RUN pip install --no-cache-dir "fastapi[all]" "uvicorn[standard]" python-dotenv aiofiles psycopg2-binary "elasticsearch==8.11.0" -r requirements.txt
 
 # Copy application code
 COPY . .

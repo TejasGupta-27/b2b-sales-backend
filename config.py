@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     postgres_db: str = "chat_db"
     database_url: str = "postgresql://myuser:mypassword@db:5432/chat_db"
     
+    # Elasticsearch Configuration
+    elasticsearch_url: str = "http://localhost:9200"
+    elasticsearch_index_products: str = "products"
+    elasticsearch_index_solutions: str = "solutions"
+    
     # Data directory
     data_dir: Path = Path("Data/json")
     
