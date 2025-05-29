@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     huggingface_api_key: Optional[str] = None
     huggingface_model: str = "microsoft/DialoGPT-medium"
     
+    # Data loading configuration
+    force_reload_data: bool = False
+    skip_data_loading: bool = False
+    
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert comma-separated CORS origins to list"""

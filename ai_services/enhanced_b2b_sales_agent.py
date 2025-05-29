@@ -55,25 +55,36 @@ class EnhancedB2BSalesAgent(AIProvider):
         print(f"   🎯 Quote Ready: {flow_analysis.get('quote_ready', False)}")
         print(f"   🤖 AI Reasoning: {flow_analysis.get('reasoning', 'N/A')}")
         
-        # Step 2: Get AI-powered action suggestions
+        # Step 2: Enhanced quote readiness check
+        enhanced_quote_ready = self._enhanced_quote_readiness_check(messages, flow_analysis)
+        
+        # Override flow analysis if enhanced check indicates readiness
+        if enhanced_quote_ready:
+            flow_analysis['should_generate_quote'] = True
+            flow_analysis['quote_ready'] = True
+            flow_analysis['current_stage'] = 'quote_generation'
+            print("✅ Enhanced quote readiness check overrode flow analysis - customer is ready for quote!")
+        
+        # Step 3: Get AI-powered action suggestions
         action_guidance = await self.flow_agent.suggest_next_actions(flow_analysis, messages)
         
         print(f"💡 AI Action Guidance: {action_guidance.get('primary_action', 'continue')}")
         
-        # Step 3: Execute based on AI recommendations
+        # Step 4: Execute based on AI recommendations
         if flow_analysis.get('should_generate_quote', False):
             response = await self._handle_quote_ready_conversation(messages, customer_context, flow_analysis)
         else:
             response = await self._handle_discovery_conversation(messages, customer_context, flow_analysis)
         
-        # Step 4: Add intelligent flow analysis to metadata
+        # Step 5: Add intelligent flow analysis to metadata
         if not hasattr(response, 'metadata') or response.metadata is None:
             response.metadata = {}
         
         response.metadata.update({
             'ai_flow_analysis': flow_analysis,
             'action_guidance': action_guidance,
-            'intelligent_flow_managed': True
+            'intelligent_flow_managed': True,
+            'enhanced_quote_check': enhanced_quote_ready
         })
         
         return response
@@ -483,35 +494,37 @@ APPROACH:
         requirements = retrieval_result.get('requirements', {})
         
         if products:
-            context += "=== RELEVANT PRODUCTS FOUND ===\n"
-            for product in products[:3]:  # Top 3 products
-                context += f"• {product.get('name', 'Unknown')}: {product.get('description', 'No description')}\n"
+            context += "=== RELEVANT PRODUCTS FOUND IN DATABASE ===\n"
+            for i, product in enumerate(products[:3], 1):  # Top 3 products
+                context += f"{i}. {product.get('name', 'Unknown')}\n"
+                context += f"   Description: {product.get('description', 'No description')}\n"
                 if 'price' in product:
-                    context += f"  Price: ${product['price']:,.2f}\n"
-                context += f"  Match Score: {product.get('_score', 0):.2f}\n\n"
+                    context += f"   Price: ${product['price']:,.2f}\n"
+                if 'specifications' in product:
+                    specs = product['specifications']
+                    if isinstance(specs, dict):
+                        spec_str = ', '.join([f"{k}: {v}" for k, v in specs.items()][:3])
+                        context += f"   Key Specs: {spec_str}\n"
+                context += f"   Relevance Score: {product.get('_score', 0):.2f}/10\n"
+                context += f"   Product ID: {product.get('id', 'N/A')}\n\n"
         
-        if solutions:
-            context += "=== RELEVANT SOLUTIONS FOUND ===\n"
-            for solution in solutions:
-                context += f"• {solution.get('name', 'Unknown')}: {solution.get('description', 'No description')}\n"
-                if 'target_price' in solution:
-                    context += f"  Target Price: ${solution['target_price']:,.2f}\n"
-                context += f"  Match Score: {solution.get('_score', 0):.2f}\n\n"
+        total_products = len(products)
+        context += f"📊 SEARCH RESULTS: Found {total_products} matching products in our database of 52,000+ items\n\n"
         
         if requirements:
-            context += "=== CUSTOMER REQUIREMENTS ANALYSIS ===\n"
+            context += "=== EXTRACTED CUSTOMER REQUIREMENTS ===\n"
             
             categories = requirements.get('product_categories', [])
             if categories:
-                context += f"Product Categories Needed: {', '.join(categories)}\n"
+                context += f"🎯 Product Categories: {', '.join(categories)}\n"
             
             tech_specs = requirements.get('technical_specs', {})
             if tech_specs:
-                context += f"Technical Requirements: {', '.join([f'{k}: {v}' for k, v in tech_specs.items()])}\n"
+                context += f"⚙️ Technical Requirements: {', '.join([f'{k}: {v}' for k, v in tech_specs.items()])}\n"
             
             business_reqs = requirements.get('business_requirements', {})
             if business_reqs:
-                context += f"Business Requirements: {json.dumps(business_reqs)}\n"
+                context += f"🏢 Business Context: {json.dumps(business_reqs, indent=2)}\n"
             
             context += "\n"
         
@@ -520,11 +533,11 @@ APPROACH:
         context += f"🎯 RECOMMENDATION CONFIDENCE: {confidence:.1%}\n"
         
         if confidence < 0.5:
-            context += "⚠️ Low confidence - focus on discovery to improve recommendations\n"
+            context += "⚠️ Low confidence - Ask more discovery questions to improve recommendations\n"
         elif confidence > 0.8:
-            context += "✅ High confidence - strong product-customer match identified\n"
+            context += "✅ High confidence - Excellent product-customer match identified!\n"
         
-        context += "\n💡 Use these dynamic recommendations to provide highly relevant, personalized suggestions!"
+        context += "\n💡 **Use these REAL products from our database to provide specific, accurate recommendations with actual pricing!**"
         
         return context
     
@@ -622,4 +635,83 @@ APPROACH:
             
             response.content += f"\n\nThis quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
             
-        return response 
+        return response
+    
+    def _enhanced_quote_readiness_check(self, messages: List[AIMessage], flow_analysis: Dict[str, Any]) -> bool:
+        """Enhanced logic to detect when customer is truly ready for a quote"""
+        
+        if not messages:
+            return False
+        
+        # Get the last few messages for analysis
+        recent_messages = messages[-3:] if len(messages) > 3 else messages
+        recent_text = " ".join([msg.content.lower() for msg in recent_messages if msg.content]).strip()
+        
+        print(f"🔍 Enhanced Quote Check - Recent text: {recent_text[:200]}...")
+        
+        # Strong quote request indicators
+        strong_quote_indicators = [
+            "prepare a detailed quote", "could you please prepare", "generate a quote",
+            "send me a quote", "i need a quote", "quote me", "quotation please",
+            "detailed proposal", "pricing proposal", "can you quote"
+        ]
+        
+        # Check for explicit quote requests
+        explicit_quote_request = any(phrase in recent_text for phrase in strong_quote_indicators)
+        
+        # Technical completeness indicators
+        tech_completeness_indicators = [
+            # Quantities
+            r'\d+\s*(servers?|units?|systems?)',
+            r'\d+×?\s*nvidia',
+            r'\d+\s*gpu',
+            
+            # Specific products/specs
+            'nvidia a100', 'supermicro', 'asus', 'chassis',
+            'installation', 'kubernetes', 'k8s', 'maintenance',
+            
+            # Timeline indicators
+            r'\d+[-–]\d+\s*weeks?',
+            'timeline', 'deployment', 'procurement'
+        ]
+        
+        import re
+        tech_mentions = sum(1 for pattern in tech_completeness_indicators 
+                           if re.search(pattern, recent_text))
+        
+        # Business context indicators
+        business_context_indicators = [
+            'training', 'inference', 'llm', 'machine learning',
+            'deployment', 'production', 'enterprise', 'business'
+        ]
+        
+        business_mentions = sum(1 for indicator in business_context_indicators 
+                               if indicator in recent_text)
+        
+        # Calculate readiness scores
+        explicit_request_score = 100 if explicit_quote_request else 0
+        tech_completeness_score = min(100, tech_mentions * 15)
+        business_context_score = min(100, business_mentions * 20)
+        
+        # Overall readiness calculation
+        overall_readiness = (explicit_request_score * 0.5 + 
+                            tech_completeness_score * 0.3 + 
+                            business_context_score * 0.2)
+        
+        print(f"🎯 Enhanced Readiness Scores:")
+        print(f"   📝 Explicit Request: {explicit_request_score}%")
+        print(f"   🔧 Tech Completeness: {tech_completeness_score}%")
+        print(f"   🏢 Business Context: {business_context_score}%")
+        print(f"   📊 Overall Readiness: {overall_readiness:.1f}%")
+        
+        # Decision threshold - much more aggressive for explicit requests
+        if explicit_quote_request:
+            is_ready = overall_readiness >= 50  # Lower threshold for explicit requests
+            print(f"✅ Explicit quote request detected - readiness threshold: 50%")
+        else:
+            is_ready = overall_readiness >= 80  # Higher threshold for implicit readiness
+            print(f"📋 Implicit readiness check - threshold: 80%")
+        
+        print(f"🎯 Final Decision: {'READY FOR QUOTE' if is_ready else 'CONTINUE DISCOVERY'}")
+        
+        return is_ready 

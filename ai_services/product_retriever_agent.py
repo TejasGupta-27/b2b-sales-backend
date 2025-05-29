@@ -189,36 +189,28 @@ Extract requirements as JSON:""")
         }
     
     async def _search_relevant_products(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search for relevant products based on requirements"""
+        """Search for products using enhanced requirements-based search"""
         
-        all_products = []
+        # Use the new requirements-based search
+        products = await self.elasticsearch.search_products_by_requirements(requirements)
         
-        # Search by categories
-        for category in requirements.get('product_categories', []):
-            products = await self.elasticsearch.search_products(
-                query=category,
-                filters={"category": category},
-                size=5
-            )
-            all_products.extend(products)
+        # If no results with requirements, try keyword search
+        if not products and requirements.get('search_keywords'):
+            for keyword in requirements['search_keywords']:
+                keyword_results = await self.elasticsearch.search_products(keyword, size=5)
+                products.extend(keyword_results)
         
-        # Search by keywords
-        for keyword in requirements.get('search_keywords', []):
-            products = await self.elasticsearch.search_products(
-                query=keyword,
-                size=3
-            )
-            all_products.extend(products)
-        
-        # Remove duplicates
+        # Remove duplicates and limit results
         seen_ids = set()
         unique_products = []
-        for product in all_products:
+        for product in products:
             if product.get('id') not in seen_ids:
                 seen_ids.add(product.get('id'))
                 unique_products.append(product)
+                if len(unique_products) >= 10:  # Limit to top 10
+                    break
         
-        return unique_products[:10]  # Limit to top 10
+        return unique_products
     
     async def _search_relevant_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Search for relevant pre-built solutions"""

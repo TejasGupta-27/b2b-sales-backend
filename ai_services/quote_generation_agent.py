@@ -7,15 +7,19 @@ from io import BytesIO
 
 from .base import AIProvider, AIMessage, AIResponse
 from services.pdf_generator import PDFGenerator
+from services.elasticsearch_service import ElasticsearchService
+from .dynamic_extraction_agent import DynamicExtractionAgent
 
 class QuoteGenerationAgent(AIProvider):
-    """Specialized agent purely for quote generation and PDF handling"""
+    """Completely dynamic quote generation with zero hardcoded assumptions"""
     
     def __init__(self, base_provider: AIProvider, **kwargs):
         super().__init__(**kwargs)
         self.base_provider = base_provider
         self.pdf_generator = PDFGenerator()
-        self.hardware_catalog = self._load_hardware_catalog()
+        self.elasticsearch = ElasticsearchService()
+        # Use the dynamic extraction agent
+        self.data_extractor = DynamicExtractionAgent(base_provider)
         
     @property
     def provider_name(self) -> str:
@@ -38,374 +42,192 @@ class QuoteGenerationAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
-        """Analyze conversation and generate comprehensive quote with PDF"""
+        """Generate completely dynamic quote from conversation"""
         
-        print(f"🔍 Quote Agent: Analyzing conversation for quote requirements...")
-        print(f"📝 Messages to analyze: {len(conversation_messages)}")
-        print(f"👤 Customer context available: {bool(customer_context)}")
+        print(f"🔍 Quote Agent: Starting dynamic analysis...")
         
         try:
-            # Extract technical requirements from sales conversation
-            requirements = await self._extract_requirements_from_conversation(
+            # Extract everything dynamically
+            extracted_data = await self.data_extractor.extract_data(
                 conversation_messages, 
                 customer_context
             )
             
-            if not requirements:
-                print("❌ Quote Agent: No extractable requirements found")
-                # Try fallback extraction with more lenient criteria
-                requirements = self._fallback_requirements_extraction(conversation_messages, customer_context)
-                
-            if not requirements:
-                print("❌ Quote Agent: Even fallback extraction failed")
+            if not extracted_data or not extracted_data.get('line_items'):
+                print("❌ Quote Agent: No data could be extracted")
                 return None
-                
-            print(f"✅ Quote Agent: Extracted {len(requirements.get('hardware_items', []))} hardware items")
             
-            # Generate comprehensive quote
-            quote = self._generate_comprehensive_quote(requirements)
+            # Generate quote using only extracted data
+            quote = await self._generate_fully_dynamic_quote(extracted_data)
             
-            # Generate PDF automatically
+            # Generate PDF
             quote = await self._generate_quote_pdf(quote)
             
-            print(f"📄 Quote Agent: Complete quote generated with ID {quote['id']}")
-            print(f"📄 PDF status: {'Generated' if 'pdf_url' in quote else 'Failed'}")
-            
+            print(f"📄 Quote Agent: Dynamic quote generated")
             return quote
             
         except Exception as e:
-            print(f"❌ Quote Agent: Error in quote generation: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Quote Agent: Error - {str(e)}")
             return None
     
-    async def _extract_requirements_from_conversation(
-        self,
-        messages: List[AIMessage],
-        customer_context: Optional[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """Extract technical requirements using AI analysis + fallback logic"""
+    async def _generate_fully_dynamic_quote(self, extracted_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate quote using ONLY extracted data - no assumptions"""
         
-        # Build conversation context
-        conversation_text = "\n".join([
-            f"{msg.role}: {msg.content}" for msg in messages[-12:]  # More context for better extraction
-        ])
+        import uuid
+        from datetime import datetime, timedelta
         
-        print(f"🤖 Quote Agent: Using AI to extract requirements...")
+        quote_id = str(uuid.uuid4())[:8]
+        current_time = datetime.now()
+        valid_until = current_time + timedelta(days=30)
         
-        try:
-            # Try AI-powered extraction first
-            requirements = await self._ai_powered_extraction(conversation_text, customer_context)
-            if requirements and requirements.get('hardware_items'):
-                print(f"✅ AI extraction successful")
-                return requirements
-        except Exception as e:
-            print(f"⚠️ AI extraction failed: {e}")
+        # Use extracted data directly
+        customer_info = extracted_data.get('customer_info', {})
+        line_items = extracted_data.get('line_items', [])
+        pricing = extracted_data.get('pricing', {})
+        business_context = extracted_data.get('business_context', {})
         
-        print(f"🔄 Quote Agent: Falling back to pattern matching...")
-        # Fallback to pattern matching
-        return self._pattern_based_extraction(conversation_text, customer_context)
-    
-    async def _ai_powered_extraction(
-        self, 
-        conversation_text: str, 
-        customer_context: Optional[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """Use AI to intelligently extract requirements"""
+        # Generate dynamic company name and title based on what was extracted
+        quote_title = await self._generate_dynamic_title(line_items, business_context)
+        company_tagline = await self._generate_dynamic_tagline(business_context)
         
-        extraction_prompt = """You are a technical requirements analyst. Extract hardware requirements from this sales conversation.
-
-ANALYZE FOR:
-1. Workstation needs (specifications, quantity)
-2. Storage requirements (capacity, RAID level, type)
-3. Networking needs (speed, switches, infrastructure)
-4. Display requirements (size, resolution, quantity)
-5. Services needed (installation, support, training)
-
-RETURN ONLY valid JSON in this exact format:
-{
-    "hardware_items": [
-        {
-            "category": "workstation|storage|networking|monitor|service",
-            "name": "Specific product name",
-            "description": "Detailed description with key specs",
-            "specifications": {"key": "value"},
-            "quantity": 1,
-            "estimated_price": 1999,
-            "justification": "Business reason for this item"
-        }
-    ],
-    "total_estimated_budget": 5000,
-    "confidence_level": 0.8,
-    "extraction_notes": "Key requirements identified"
-}
-
-Be specific about quantities, specifications, and pricing. Only include items clearly discussed in the conversation."""
-        
-        messages = [
-            AIMessage(role="system", content=extraction_prompt),
-            AIMessage(role="user", content=f"""CONVERSATION:
-{conversation_text}
-
-CUSTOMER CONTEXT:
-{json.dumps(customer_context or {}, indent=2)}
-
-Extract technical requirements as JSON:""")
-        ]
-        
-        response = await self.base_provider.generate_response(messages)
-        
-        # Parse JSON from response
-        json_start = response.content.find('{')
-        json_end = response.content.rfind('}') + 1
-        
-        if json_start >= 0 and json_end > json_start:
-            requirements_json = response.content[json_start:json_end]
-            requirements = json.loads(requirements_json)
-            
-            # Validate and enhance
-            if requirements.get('hardware_items'):
-                requirements['customer_info'] = customer_context or {}
-                requirements['extraction_method'] = 'ai_powered'
-                return requirements
-        
-        return None
-    
-    def _pattern_based_extraction(
-        self, 
-        conversation_text: str, 
-        customer_context: Optional[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """Fallback pattern-based extraction with improved detection"""
-        
-        conversation_lower = conversation_text.lower()
-        hardware_items = []
-        
-        print(f"🔍 Pattern matching analysis...")
-        
-        # Enhanced workstation detection
-        workstation_patterns = ['workstation', 'desktop', 'computer', 'pc', 'machine']
-        if any(pattern in conversation_lower for pattern in workstation_patterns):
-            
-            # Extract RAM requirements
-            ram_match = re.search(r'(\d+)\s*gb.*(?:ram|memory)', conversation_lower)
-            ram_size = f"{ram_match.group(1)}GB" if ram_match else "64GB"
-            
-            # Determine tier based on conversation context
-            if any(term in conversation_lower for term in ['professional', 'enterprise', 'high-performance', 'demanding']):
-                workstation = {
-                    "category": "workstation",
-                    "name": "Workstation Pro - Enterprise",
-                    "description": f"High-performance enterprise workstation with {ram_size} RAM, 1TB NVMe SSD",
-                    "specifications": {"processor": "Intel Core i9", "ram": ram_size, "storage": "1TB NVMe SSD"},
-                    "quantity": 1,
-                    "estimated_price": 1999,
-                    "justification": "Enterprise-grade performance for demanding business applications"
-                }
-            else:
-                workstation = {
-                    "category": "workstation",
-                    "name": "Workstation Pro - Professional",
-                    "description": f"Professional workstation with {ram_size} RAM, 512GB SSD",
-                    "specifications": {"processor": "Intel Core i7", "ram": ram_size, "storage": "512GB SSD"},
-                    "quantity": 1,
-                    "estimated_price": 1299,
-                    "justification": "Professional workstation for business productivity"
-                }
-            
-            hardware_items.append(workstation)
-            print(f"✅ Found workstation requirement")
-        
-        # Enhanced storage detection
-        storage_patterns = ['storage', 'nas', 'raid', 'backup', 'data']
-        tb_match = re.search(r'(\d+)\s*tb', conversation_lower)
-        
-        if any(pattern in conversation_lower for pattern in storage_patterns) or tb_match:
-            capacity = f"{tb_match.group(1)}TB" if tb_match else "10TB"
-            
-            if 'raid' in conversation_lower:
-                # RAID storage solution
-                hardware_items.append({
-                    "category": "storage",
-                    "name": f"Enterprise NAS RAID 5 Array - {capacity}",
-                    "description": f"Professional NAS with {capacity} usable capacity, RAID 5 protection",
-                    "specifications": {"capacity": capacity, "raid_level": "RAID 5", "drives": "4x 8TB Enterprise HDDs"},
-                    "quantity": 1,
-                    "estimated_price": 1000,
-                    "justification": "Redundant storage for business data protection"
-                })
-                print(f"✅ Found RAID storage requirement")
-            else:
-                # Standard storage
-                hardware_items.append({
-                    "category": "storage",
-                    "name": f"Business Storage Solution - {capacity}",
-                    "description": f"Professional storage solution with {capacity} capacity",
-                    "specifications": {"capacity": capacity, "type": "Enterprise"},
-                    "quantity": 1,
-                    "estimated_price": 600,
-                    "justification": "Reliable storage for business data"
-                })
-                print(f"✅ Found storage requirement")
-        
-        # Enhanced networking detection
-        network_patterns = ['10gbe', '10 gigabit', '10gb', 'networking', 'switch', 'network']
-        if any(pattern in conversation_lower for pattern in network_patterns):
-            
-            # 10GbE NIC
-            hardware_items.append({
-                "category": "networking",
-                "name": "10 Gigabit Ethernet Network Card",
-                "description": "PCIe 10GbE network interface card for high-speed connectivity",
-                "specifications": {"speed": "10 Gbps", "interface": "PCIe x8"},
-                "quantity": 1,
-                "estimated_price": 300,
-                "justification": "High-speed network connectivity for demanding applications"
-            })
-            
-            # 10GbE Switch
-            hardware_items.append({
-                "category": "networking", 
-                "name": "8-Port 10 Gigabit Ethernet Switch",
-                "description": "Managed 8-port 10GbE switch for enterprise networking",
-                "specifications": {"ports": 8, "speed": "10 Gbps", "management": "Web-managed"},
-                "quantity": 1,
-                "estimated_price": 800,
-                "justification": "Network infrastructure for high-performance connectivity"
-            })
-            print(f"✅ Found networking requirements")
-        
-        # Monitor detection
-        monitor_patterns = ['monitor', 'display', 'screen', '4k', 'professional display']
-        if any(pattern in conversation_lower for pattern in monitor_patterns):
-            hardware_items.append({
-                "category": "monitor",
-                "name": "Professional 4K Monitor - 27\"",
-                "description": "27-inch 4K UHD professional display with color accuracy",
-                "specifications": {"size": "27 inches", "resolution": "4K UHD (3840x2160)", "features": "USB-C, HDR"},
-                "quantity": 1,
-                "estimated_price": 399,
-                "justification": "Professional display for detailed work and presentations"
-            })
-            print(f"✅ Found monitor requirement")
-        
-        if not hardware_items:
-            print(f"❌ No hardware requirements detected in patterns")
-            return None
-        
-        # Always add professional services
-        hardware_items.append({
-            "category": "service",
-            "name": "Professional Installation & Setup",
-            "description": "Complete installation, configuration, and testing of all hardware",
-            "specifications": {"timeline": "1-2 weeks", "includes": "Configuration, testing, training"},
-            "quantity": 1,
-            "estimated_price": 300,
-            "justification": "Professional setup ensures optimal performance and reliability"
-        })
-        
-        total_budget = sum(item['estimated_price'] * item['quantity'] for item in hardware_items)
-        
-        return {
-            "hardware_items": hardware_items,
-            "total_estimated_budget": total_budget,
-            "timeline": "1-2 weeks",
-            "special_requirements": ["Professional installation", "Warranty support", "Performance optimization"],
-            "confidence_level": 0.8,
-            "extraction_method": "pattern_based",
-            "customer_info": customer_context or {}
-        }
-    
-    def _generate_comprehensive_quote(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate a comprehensive, professional quote"""
-        
-        hardware_items = requirements.get('hardware_items', [])
-        customer_info = requirements.get('customer_info', {})
-        
-        # Calculate pricing with professional structure
-        subtotal = sum(item['estimated_price'] * item['quantity'] for item in hardware_items)
-        
-        # Apply volume discounts if applicable
-        if len(hardware_items) >= 5:
-            volume_discount = subtotal * 0.05  # 5% for complex solutions
-            subtotal -= volume_discount
-        
-        tax_rate = 0.08
-        tax_amount = subtotal * tax_rate
-        total = subtotal + tax_amount
-        
-        # Build professional line items
-        line_items = []
-        for item in hardware_items:
-            line_items.append({
-                "name": item['name'],
-                "description": item['description'],
-                "specifications": item.get('specifications', {}),
-                "quantity": item['quantity'],
-                "unit_price": item['estimated_price'],
-                "total_price": item['estimated_price'] * item['quantity'],
-                "category": item['category'],
-                "justification": item.get('justification', '')
-            })
-        
-        # Generate comprehensive quote
         quote = {
-            "id": str(uuid.uuid4()),
-            "quote_number": f"QUO-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}",
-            "created_at": datetime.now().isoformat(),
-            "valid_until": (datetime.now() + timedelta(days=30)).isoformat(),
+            "id": quote_id,
+            "quote_number": f"QTE-{current_time.strftime('%Y%m%d')}-{quote_id.upper()}",
+            "created_at": current_time.isoformat(),
+            "valid_until": valid_until.isoformat(),
             
-            "customer_info": {
-                "company_name": customer_info.get("company_name", "Valued Customer"),
-                "contact_name": customer_info.get("contact_name", ""),
-                "email": customer_info.get("email", ""),
-                "company_size": customer_info.get("company_size", ""),
-                "industry": customer_info.get("industry", ""),
-                "budget_range": customer_info.get("budget_range", ""),
-                "timeline": customer_info.get("timeline", "")
-            },
+            # Dynamic company info
+            "seller_company_name": "TechSolutions Inc.",  # This could be configurable
+            "seller_tagline": company_tagline,
             
+            # Dynamic quote title
+            "quote_title": quote_title,
+            
+            # All customer info from extraction
+            "customer_info": customer_info,
+            
+            # Dynamic section titles
+            "items_section_title": await self._generate_section_title(line_items),
             "line_items": line_items,
             
-            "pricing": {
-                "subtotal": subtotal,
-                "tax_rate": tax_rate,
-                "tax_amount": tax_amount,
-                "total": total,
-                "currency": "USD"
-            },
+            # Calculated pricing
+            "pricing": pricing,
             
-            "solution_summary": {
-                "total_items": len(line_items),
-                "categories": list(set([item['category'] for item in line_items])),
-                "key_benefits": [
-                    "Enterprise-grade reliability and performance",
-                    "Professional installation and configuration", 
-                    "Comprehensive warranty and support",
-                    "Scalable for future business growth"
-                ]
-            },
+            # Dynamic terms
+            "terms": await self._generate_dynamic_terms(line_items, business_context, pricing),
             
-            "terms": [
-                "Quote valid for 30 days from issue date",
-                "Professional installation and setup included",
-                "3-year comprehensive warranty on all hardware",
-                "Payment terms: Net 30 days for approved accounts",
-                "24/7 technical support included for first year",
-                "Training and documentation provided"
-            ],
+            # Business context
+            "business_context": business_context,
             
-            "next_steps": [
-                "Review quote details and specifications",
-                "Schedule implementation planning meeting",
-                "Finalize delivery and installation timeline",
-                "Process purchase order and initiate delivery"
-            ],
-            
-            "requirements": requirements
+            # Source data
+            "extraction_data": extracted_data
         }
         
         return quote
+    
+    async def _generate_dynamic_title(self, line_items: List[Dict], business_context: Dict) -> str:
+        """Generate quote title based on actual content"""
+        
+        title_prompt = f"""Generate a professional quote title based on these items:
+
+Items: {[item.get('name', '') for item in line_items]}
+Business context: {business_context.get('use_case', '')}
+
+Generate a concise, professional quote title (ALL CAPS). Examples:
+- GPU SERVER SOLUTION QUOTATION
+- WORKSTATION UPGRADE QUOTATION  
+- TECHNOLOGY INFRASTRUCTURE QUOTATION
+
+Respond with only the title."""
+
+        try:
+            messages = [AIMessage(role="user", content=title_prompt)]
+            response = await self.base_provider.generate_response(messages)
+            return response.content.strip().upper()
+        except:
+            return "TECHNOLOGY SOLUTION QUOTATION"
+    
+    async def _generate_dynamic_tagline(self, business_context: Dict) -> str:
+        """Generate company tagline based on customer needs"""
+        
+        use_case = business_context.get('use_case', '')
+        if not use_case:
+            return "Professional Technology Solutions"
+        
+        tagline_prompt = f"""Generate a short company tagline for a tech solution provider working on: {use_case}
+
+Make it professional and relevant. Examples:
+- "Specialized AI Infrastructure Solutions"
+- "Enterprise Computing Excellence" 
+- "Custom Technology Solutions"
+
+Respond with only the tagline."""
+
+        try:
+            messages = [AIMessage(role="user", content=tagline_prompt)]
+            response = await self.base_provider.generate_response(messages)
+            return response.content.strip()
+        except:
+            return "Professional Technology Solutions"
+    
+    async def _generate_section_title(self, line_items: List[Dict]) -> str:
+        """Generate section title based on items"""
+        
+        if not line_items:
+            return "Recommended Solution"
+        
+        # Analyze items to create appropriate title
+        item_names = [item.get('name', '') for item in line_items]
+        
+        title_prompt = f"""Generate a section title for these items in a quote:
+
+Items: {item_names}
+
+Generate a professional section title. Examples:
+- "Recommended GPU Infrastructure"
+- "Proposed Workstation Solution"
+- "Technology Implementation Package"
+
+Respond with only the title."""
+
+        try:
+            messages = [AIMessage(role="user", content=title_prompt)]
+            response = await self.base_provider.generate_response(messages)
+            return response.content.strip()
+        except:
+            return "Recommended Solution"
+    
+    async def _generate_dynamic_terms(self, line_items: List[Dict], business_context: Dict, pricing: Dict) -> List[str]:
+        """Generate terms based on actual quote content"""
+        
+        terms_prompt = f"""Generate appropriate terms and conditions for this quote:
+
+Items: {[item.get('name', '') for item in line_items]}
+Total value: ${pricing.get('total', 0):,.2f}
+Business context: {business_context}
+
+Generate 5-7 relevant terms and conditions. Consider:
+- Quote validity period
+- Payment terms based on value
+- Delivery/installation terms
+- Warranty terms
+- Support terms
+
+Respond with a JSON array of terms."""
+
+        try:
+            messages = [AIMessage(role="user", content=terms_prompt)]
+            response = await self.base_provider.generate_response(messages)
+            terms = json.loads(response.content.strip())
+            return terms if isinstance(terms, list) else []
+        except:
+            return [
+                "Quote valid for 30 days from issue date",
+                "Payment terms based on total value",
+                "Professional installation included where applicable",
+                "Warranty coverage as specified per item",
+                "Technical support included"
+            ]
     
     async def _generate_quote_pdf(self, quote: Dict[str, Any]) -> Dict[str, Any]:
         """Generate PDF for the quote"""
@@ -430,80 +252,9 @@ Extract technical requirements as JSON:""")
             quote['pdf_error'] = str(e)
         
         return quote
-    
-    def _load_hardware_catalog(self) -> List[Dict[str, Any]]:
-        """Load hardware catalog for quote generation"""
-        return [
-            {
-                "category": "workstation",
-                "models": [
-                    {"name": "Workstation Pro Professional", "base_price": 1299, "specs": {"ram": "32GB", "storage": "512GB SSD"}},
-                    {"name": "Workstation Pro Enterprise", "base_price": 1999, "specs": {"ram": "64GB", "storage": "1TB SSD"}}
-                ]
-            },
-            {
-                "category": "storage", 
-                "models": [
-                    {"name": "Enterprise HDD 8TB", "base_price": 250, "specs": {"capacity": "8TB", "type": "Enterprise"}},
-                    {"name": "NAS RAID Array", "base_price": 1000, "specs": {"raid": "RAID 5", "capacity": "Variable"}}
-                ]
-            },
-            {
-                "category": "networking",
-                "models": [
-                    {"name": "10GbE Network Card", "base_price": 300, "specs": {"speed": "10 Gbps"}},
-                    {"name": "10GbE Switch 8-port", "base_price": 800, "specs": {"ports": 8, "speed": "10 Gbps"}}
-                ]
-            }
-        ] 
 
-    def _fallback_requirements_extraction(
-        self, 
-        conversation_messages: List[AIMessage], 
-        customer_context: Optional[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """More aggressive fallback extraction when normal methods fail"""
-        
-        print("🔄 Quote Agent: Using aggressive fallback extraction...")
-        
-        # Create basic requirements even with minimal information
-        conversation_text = " ".join([msg.content.lower() for msg in conversation_messages])
-        
-        hardware_items = []
-        
-        # Always include a basic workstation if any business discussion happened
-        if any(term in conversation_text for term in ['business', 'work', 'computer', 'system', 'solution']):
-            hardware_items.append({
-                "category": "workstation",
-                "name": "Professional Business Workstation",
-                "description": "High-performance workstation for business productivity",
-                "specifications": {"processor": "Intel Core i7", "ram": "32GB", "storage": "1TB SSD"},
-                "quantity": 1,
-                "estimated_price": 1499,
-                "justification": "Essential business computing platform"
-            })
-        
-        # Add basic services
-        hardware_items.append({
-            "category": "service",
-            "name": "Professional Setup & Support",
-            "description": "Complete installation and configuration service",
-            "specifications": {"timeline": "1-2 weeks", "includes": "Setup, training, support"},
-            "quantity": 1,
-            "estimated_price": 299,
-            "justification": "Professional implementation ensures optimal performance"
-        })
-        
-        if hardware_items:
-            total_budget = sum(item['estimated_price'] * item['quantity'] for item in hardware_items)
-            
-            return {
-                "hardware_items": hardware_items,
-                "total_estimated_budget": total_budget,
-                "timeline": "1-2 weeks",
-                "confidence_level": 0.6,
-                "extraction_method": "aggressive_fallback",
-                "customer_info": customer_context or {}
-            }
-        
-        return None 
+    # Remove the problematic get_product_catalog method entirely
+    # def get_product_catalog(self):
+    #     """This method should now be dynamic - fetch from Elasticsearch"""
+    #     # This can be removed since we're using Elasticsearch directly
+    #     pass 

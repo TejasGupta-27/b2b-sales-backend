@@ -42,39 +42,78 @@ class ConversationFlowAgent(AIProvider):
         # Parse AI response into structured data
         flow_analysis = self._parse_ai_analysis(response.content, messages, customer_context)
         
-        # Enhanced override for ANY quote requests - be more aggressive in detecting quote intent
+        # STRICTER quote detection - require multiple criteria to be met
         conversation_text = " ".join([msg.content.lower() for msg in messages])
+        
+        # Check for explicit quote requests
         quote_indicators = [
             'give me the pdf', 'generate quote', 'pdf quote', 'send quote', 
             'yes give me the pdf', 'create quote', 'make quote', 'quote me',
             'i want a quote', 'can i get a quote', 'price quote', 'quotation',
-            'how much', 'what does it cost', 'pricing', 'price'
+            'send me a quote', 'can you quote', 'get me pricing'
         ]
         
-        quote_detected = any(phrase in conversation_text for phrase in quote_indicators)
-        print(f"🔍 Quote indicators detected: {quote_detected}")
+        explicit_quote_request = any(phrase in conversation_text for phrase in quote_indicators)
+        print(f"🔍 Explicit quote request detected: {explicit_quote_request}")
         
-        if quote_detected:
-            print("🎯 Overriding analysis - quote explicitly requested")
+        # STRICTER REQUIREMENTS - All conditions must be met for quote readiness
+        min_business_score = 70
+        min_technical_score = 70  
+        min_decision_score = 80
+        min_conversation_depth = 3  # At least 3 user messages
+        
+        user_messages = [msg for msg in messages if msg.role == "user"]
+        conversation_depth = len(user_messages)
+        
+        business_score = flow_analysis.get('business_context_score', 0)
+        technical_score = flow_analysis.get('technical_requirements_score', 0)
+        decision_score = flow_analysis.get('decision_readiness_score', 0)
+        
+        # Check if ALL criteria are met
+        criteria_met = {
+            'explicit_request': explicit_quote_request,
+            'business_context': business_score >= min_business_score,
+            'technical_requirements': technical_score >= min_technical_score,
+            'decision_readiness': decision_score >= min_decision_score,
+            'conversation_depth': conversation_depth >= min_conversation_depth
+        }
+        
+        print(f"📋 Quote Readiness Criteria:")
+        for criterion, met in criteria_met.items():
+            print(f"   {criterion}: {'✅' if met else '❌'} ({business_score if 'business' in criterion else technical_score if 'technical' in criterion else decision_score if 'decision' in criterion else conversation_depth if 'depth' in criterion else 'Yes' if met else 'No'})")
+        
+        all_criteria_met = all(criteria_met.values())
+        
+        # Only override if ALL criteria are met AND explicit request exists
+        if all_criteria_met and explicit_quote_request:
+            print("✅ ALL criteria met - quote generation approved")
             flow_analysis.update({
                 'quote_ready': True,
                 'should_generate_quote': True,
-                'business_context_score': max(flow_analysis.get('business_context_score', 0), 85),
-                'technical_requirements_score': max(flow_analysis.get('technical_requirements_score', 0), 85),
-                'decision_readiness_score': max(flow_analysis.get('decision_readiness_score', 0), 95),
                 'current_stage': 'quote_ready',
-                'reasoning': 'Customer explicitly requested quote generation - immediate quote ready'
+                'reasoning': f'All quote criteria satisfied: explicit request + sufficient context (B:{business_score}% T:{technical_score}% D:{decision_score}%)'
+            })
+        else:
+            print("❌ Quote criteria not fully met - continuing discovery")
+            # Force quote_ready to False if criteria not met
+            flow_analysis.update({
+                'quote_ready': False,
+                'should_generate_quote': False,
+                'current_stage': 'deep_discovery' if conversation_depth >= 2 else 'initial_discovery',
+                'reasoning': f'Quote criteria incomplete: {", ".join([k for k, v in criteria_met.items() if not v])}'
             })
         
         # Add some computed metrics
         flow_analysis.update({
             "conversation_metrics": self._calculate_conversation_metrics(messages),
             "ai_analysis_raw": response.content,
-            "analysis_timestamp": datetime.now().isoformat()
+            "analysis_timestamp": datetime.now().isoformat(),
+            "criteria_analysis": criteria_met
         })
         
         print(f"📊 Final Analysis - Quote Ready: {flow_analysis.get('quote_ready', False)}")
         print(f"📊 Should Generate Quote: {flow_analysis.get('should_generate_quote', False)}")
+        print(f"📊 Current Stage: {flow_analysis.get('current_stage', 'unknown')}")
         
         return flow_analysis
     
@@ -83,7 +122,7 @@ class ConversationFlowAgent(AIProvider):
         messages: List[AIMessage], 
         customer_context: Optional[Dict[str, Any]]
     ) -> str:
-        """Build intelligent prompt for conversation flow analysis"""
+        """Build simplified prompt for conversation flow analysis"""
         
         # Extract conversation content
         conversation_text = "\n".join([
@@ -102,61 +141,28 @@ CUSTOMER CONTEXT:
 - Timeline: {customer_context.get('timeline', 'Unknown')}
 """
         
-        return f"""You are an expert conversation flow analyst for B2B sales. Analyze this sales conversation and provide intelligent insights about readiness for quote generation.
+        return f"""Analyze this B2B sales conversation to understand the customer's readiness for a quote.
 
 {customer_info}
 
-RECENT CONVERSATION:
+CONVERSATION:
 {conversation_text}
 
-ANALYSIS FRAMEWORK:
-1. **Business Context Completeness** (0-100%):
-   - Do we know their industry, company size, use case?
-   - Are their business needs clear?
+Please evaluate:
+1. How well do we understand their business needs?
+2. Are technical requirements clear?
+3. Has the customer expressed interest in pricing?
+4. What information is still needed?
 
-2. **Technical Requirements Clarity** (0-100%):
-   - Are technical specifications discussed in detail?
-   - Do we understand their performance needs?
-   - Are specific products/solutions mentioned?
+Respond with a brief assessment including:
+- Business context understanding (percentage)
+- Technical requirements clarity (percentage)  
+- Decision readiness level (percentage)
+- Whether a quote should be generated (yes/no)
+- What's missing for a complete quote
+- Recommended next steps
 
-3. **Decision-Making Readiness** (0-100%):
-   - Has budget/timeline been discussed?
-   - Are decision makers identified?
-   - Is there urgency or buying intent?
-
-4. **Quote Readiness Assessment**:
-   - Is the customer explicitly asking for quotes/pricing?
-   - Do we have enough information for accurate recommendations?
-   - What's missing for a complete quote?
-
-5. **Conversation Stage**:
-   - initial_discovery / deep_discovery / solution_presentation / quote_ready / closing
-
-6. **Next Best Actions**:
-   - What should the sales agent focus on next?
-   - What questions still need to be asked?
-   - Should we generate a quote or continue discovery?
-
-Please respond in this EXACT JSON format:
-
-json
-{{
-"business_context_score": 85,
-"technical_requirements_score": 70,
-"decision_readiness_score": 60,
-"quote_ready": true,
-"confidence_level": "high",
-"current_stage": "solution_presentation",
-"reasoning": "Customer has provided detailed technical specs and explicitly requested pricing. Technical requirements are well-defined with specific product mentions.",
-"missing_information": ["decision timeline", "exact budget range"],
-"next_best_actions": ["generate comprehensive quote", "discuss implementation timeline"],
-"should_generate_quote": true,
-"key_insights": ["Customer is technically savvy", "Ready to move to pricing", "Has specific requirements"],
-"conversation_quality": "excellent"
-}}
-
-
-Base your analysis on the actual conversation content, explicit customer requests, and sales best practices."""
+Keep your response conversational and helpful."""
     
     def _parse_ai_analysis(
         self, 

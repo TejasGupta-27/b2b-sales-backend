@@ -82,10 +82,6 @@ class AzureOpenAIProvider(AIProvider):
             # Log the configuration (excluding sensitive data)
             logger.info(f"Initializing Azure OpenAI client with endpoint: {endpoint}")
             logger.info(f"Using deployment: {self.config['deployment_name']}")
-            logger.info(f"API version: {self.config.get('api_version', '2024-02-15-preview')}")
-            
-            # Log input messages
-            logger.info(f"Input messages: {[{'role': m.role, 'content': m.content} for m in messages]}")
             
             client = AsyncAzureOpenAI(
                 azure_endpoint=endpoint,
@@ -97,12 +93,9 @@ class AzureOpenAIProvider(AIProvider):
             formatted_messages = [
                 {
                     "role": msg.role,
-                    "content": msg.content  # Remove the nested structure
+                    "content": msg.content
                 } for msg in messages
             ]
-            
-            # Log the formatted messages for debugging
-            logger.debug(f"Formatted messages: {formatted_messages}")
             
             try:
                 logger.info("Making request to Azure OpenAI API...")
@@ -110,7 +103,7 @@ class AzureOpenAIProvider(AIProvider):
                     model=self.config['deployment_name'],
                     messages=formatted_messages,
                     max_tokens=kwargs.get("max_tokens", 800),
-                    temperature=kwargs.get("temperature", 1),
+                    temperature=kwargs.get("temperature", 0.7),  # Lower temperature
                     top_p=kwargs.get("top_p", 1),
                     frequency_penalty=kwargs.get("frequency_penalty", 0),
                     presence_penalty=kwargs.get("presence_penalty", 0),
@@ -120,58 +113,48 @@ class AzureOpenAIProvider(AIProvider):
                 logger.info("Successfully received response from Azure OpenAI API")
                 
             except Exception as api_error:
+                # Check if it's a content filter error
+                if hasattr(api_error, 'response') and 'content_filter' in str(api_error):
+                    logger.warning("Content filter triggered - using fallback response")
+                    return AIResponse(
+                        content="I apologize, but I need to rephrase my response. Let me help you with your business technology needs. What specific requirements can I assist you with today?",
+                        model=self.config["deployment_name"],
+                        provider=self.provider_name,
+                        usage={"prompt_tokens": 0, "completion_tokens": 20, "total_tokens": 20},
+                        finish_reason="content_filter_fallback"
+                    )
+                
                 logger.error(f"Azure OpenAI API error: {str(api_error)}")
-                logger.error(f"Request parameters: model={self.config['deployment_name']}, messages={formatted_messages}")
-                logger.error(f"Error type: {type(api_error).__name__}")
-                if hasattr(api_error, 'response'):
-                    logger.error(f"Response status: {api_error.response.status_code if hasattr(api_error.response, 'status_code') else 'N/A'}")
-                    logger.error(f"Response body: {api_error.response.text if hasattr(api_error.response, 'text') else 'N/A'}")
                 raise
             
-            try:
-                if not response.choices:
-                    logger.error("No response choices returned from Azure OpenAI")
-                    raise Exception("No response choices returned from Azure OpenAI")
-                    
-                choice = response.choices[0]
-                logger.debug(f"Response choice: {choice}")
+            # Process successful response
+            if not response.choices:
+                logger.error("No response choices returned from Azure OpenAI")
+                raise Exception("No response choices returned from Azure OpenAI")
                 
-                if not choice.message:
-                    logger.error("No message in response choice")
-                    raise Exception("No message in response choice")
-                
-                # Log the response content and structure for debugging
-                logger.debug(f"Response choice message: {choice.message}")
-                logger.debug(f"Response choice message content: {choice.message.content}")
-                logger.debug(f"Response usage: {response.usage}")
-                
-                result = AIResponse(
-                    content=choice.message.content or "",
-                    model=self.config["deployment_name"],
-                    provider=self.provider_name,
-                    usage={
-                        "prompt_tokens": response.usage.prompt_tokens,
-                        "completion_tokens": response.usage.completion_tokens,
-                        "total_tokens": response.usage.total_tokens
-                    },
-                    finish_reason=choice.finish_reason
-                )
-                
-                # Track usage
-                self._track_usage(result.usage)
-                
-                return result
-                
-            except Exception as response_error:
-                logger.error(f"Error processing response: {str(response_error)}")
-                logger.error(f"Response object: {response}")
-                logger.error(f"Response type: {type(response)}")
-                raise Exception(f"Error processing Azure OpenAI response: {str(response_error)}")
-                
+            choice = response.choices[0]
+            
+            if not choice.message:
+                logger.error("No message in response choice")
+                raise Exception("No message in response choice")
+            
+            result = AIResponse(
+                content=choice.message.content or "",
+                model=self.config["deployment_name"],
+                provider=self.provider_name,
+                usage={
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                },
+                finish_reason=choice.finish_reason
+            )
+            
+            # Track usage
+            self._track_usage(result.usage)
+            
+            return result
+            
         except Exception as e:
             logger.exception("Error in Azure OpenAI request")
-            logger.error(f"Full error details: {str(e)}")
-            logger.error(f"Error type: {type(e).__name__}")
-            if hasattr(e, '__cause__'):
-                logger.error(f"Caused by: {str(e.__cause__)}")
             raise Exception(f"Error calling Azure OpenAI: {str(e)}") 

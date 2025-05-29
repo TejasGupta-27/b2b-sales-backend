@@ -441,7 +441,7 @@ async def elasticsearch_status():
             "error": str(e)
         }
 
-# Add the missing history management endpoints
+
 @app.get("/api/chat/history/{lead_id}")
 async def get_chat_history(lead_id: str):
     """Get chat history for a specific lead"""
@@ -627,6 +627,26 @@ async def get_conversation(lead_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"❌ Get conversation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/data-status")
+async def get_data_status():
+    """Get status of loaded data"""
+    try:
+        stats = await elasticsearch_service.get_product_stats()
+        categories = await elasticsearch_service.get_product_categories()
+        
+        return {
+            "elasticsearch_status": "healthy",
+            "product_stats": stats,
+            "available_categories": categories,
+            "data_source": "json_files" if stats["total_products"] > 3 else "sample_data"
+        }
+    except Exception as e:
+        logger.error(f"❌ Data status error: {e}")
+        return {
+            "elasticsearch_status": "unhealthy",
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn
