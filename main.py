@@ -141,7 +141,7 @@ async def shutdown_event():
 async def root():
     return {"message": "B2B Sales AI Assistant is running with dynamic product intelligence!"}
 
-@app.post("/api/sales-chat")
+@app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     """Enhanced sales chat endpoint with multi-agent collaboration"""
     try:
