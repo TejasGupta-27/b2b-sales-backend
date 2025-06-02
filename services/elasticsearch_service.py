@@ -122,6 +122,8 @@ class ElasticsearchService:
             products_count = await self.client.count(index=self.products_index)
             solutions_count = await self.client.count(index=self.solutions_index)
             
+            print(f"📊 Current data: {products_count['count']} products, {solutions_count['count']} solutions")
+            
             if products_count['count'] > 0 and solutions_count['count'] > 0:
                 logger.info(f"Data already exists: {products_count['count']} products, {solutions_count['count']} solutions. Skipping reload.")
                 return
@@ -131,27 +133,33 @@ class ElasticsearchService:
             
             # Load products from JSON files
             data_dir = Path("Data/json")
+            products_loaded = 0
+            
             if data_dir.exists() and any(data_dir.glob("*.json")):
                 logger.info(f"Loading products from {data_dir}")
-                await self._load_products_from_json(data_dir)
+                products_loaded = await self._load_products_from_json(data_dir)
                 
-                # Check if we loaded any products
-                response = await self.client.count(index=self.products_index)
-                product_count = response['count']
-                
-                if product_count == 0:
+                if products_loaded == 0:
                     logger.warning("No products loaded from JSON files, loading sample data")
                     await self._load_sample_products()
+                    products_loaded = 3  # Sample products count
                 else:
-                    logger.info(f"Successfully loaded {product_count} products from JSON files")
+                    logger.info(f"Successfully loaded {products_loaded} products from JSON files")
             else:
                 logger.warning(f"Data directory not found or empty: {data_dir}")
                 await self._load_sample_products()
+                products_loaded = 3  # Sample products count
             
             # Load solutions only if none exist
             solutions_response = await self.client.count(index=self.solutions_index)
             if solutions_response['count'] == 0:
                 await self._load_sample_solutions()
+            
+            # Refresh indices to make data immediately available
+            await self.client.indices.refresh(index=self.products_index)
+            await self.client.indices.refresh(index=self.solutions_index)
+            
+            print(f"✅ Data loading complete: {products_loaded} products loaded")
             
         except Exception as e:
             logger.warning(f"Could not load initial data: {e}")
@@ -164,6 +172,10 @@ class ElasticsearchService:
                 solutions_count = await self.client.count(index=self.solutions_index)
                 if solutions_count['count'] == 0:
                     await self._load_sample_solutions()
+                
+                # Refresh indices
+                await self.client.indices.refresh(index=self.products_index)
+                await self.client.indices.refresh(index=self.solutions_index)
             except:
                 logger.error("Failed to load any data")
     
@@ -290,16 +302,20 @@ class ElasticsearchService:
         
         logger.info(f"Loaded {len(sample_solutions)} sample solutions")
     
-    async def _load_products_from_json(self, data_dir: Path):
+    async def _load_products_from_json(self, data_dir: Path) -> int:
         """Load products from JSON files in data directory with enhanced processing"""
         product_files = list(data_dir.glob("*.json"))
         loaded_count = 0
         
+        print(f"📁 Found {len(product_files)} JSON files to process")
+        
         for file_path in product_files:
             try:
+                print(f"📄 Processing file: {file_path}")
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 
+                file_loaded = 0
                 # Handle different JSON structures
                 if isinstance(data, list):
                     for item in data:
@@ -307,11 +323,13 @@ class ElasticsearchService:
                             processed_product = self._process_product_data(item)
                             await self.index_product(processed_product)
                             loaded_count += 1
+                            file_loaded += 1
                 elif isinstance(data, dict):
                     if self._is_valid_product(data):
                         processed_product = self._process_product_data(data)
                         await self.index_product(processed_product)
                         loaded_count += 1
+                        file_loaded += 1
                     elif 'products' in data:
                         # Handle nested structure like {"products": [...]}
                         for item in data['products']:
@@ -319,12 +337,14 @@ class ElasticsearchService:
                                 processed_product = self._process_product_data(item)
                                 await self.index_product(processed_product)
                                 loaded_count += 1
+                                file_loaded += 1
                             
-                logger.info(f"Loaded {loaded_count} products from {file_path}")
+                print(f"✅ Loaded {file_loaded} products from {file_path}")
             except Exception as e:
-                logger.error(f"Failed to load products from {file_path}: {e}")
+                print(f"❌ Failed to load products from {file_path}: {e}")
         
-        logger.info(f"Total products loaded: {loaded_count}")
+        print(f"📊 Total products loaded: {loaded_count}")
+        return loaded_count
 
     def _is_valid_product(self, item: Dict[str, Any]) -> bool:
         """Check if item has minimum required fields for a product"""
@@ -475,112 +495,94 @@ class ElasticsearchService:
         except Exception as e:
             logger.error(f"Failed to index solution {solution.get('id')}: {e}")
     
-    async def search_products(self, query: str, filters: Optional[Dict] = None, size: int = 10) -> List[Dict]:
-        """Enhanced product search with better relevance scoring"""
+    async def search_products(self, query: str = "", size: int = 10, category: str = None) -> List[Dict]:
+        """Search products with improved handling for empty queries"""
         
-        # Build the search query
         search_body = {
-            "query": {
-                "bool": {
-                    "should": [
-                        # Exact name matches get highest score
-                        {
-                            "match_phrase": {
-                                "name": {
-                                    "query": query,
-                                    "boost": 5.0
-                                }
-                            }
-                        },
-                        # Partial name matches
-                        {
-                            "match": {
-                                "name": {
-                                    "query": query,
-                                    "boost": 3.0,
-                                    "fuzziness": "AUTO"
-                                }
-                            }
-                        },
-                        # Description matches
-                        {
-                            "match": {
-                                "description": {
-                                    "query": query,
-                                    "boost": 2.0
-                                }
-                            }
-                        },
-                        # Features and use cases
-                        {
-                            "multi_match": {
-                                "query": query,
-                                "fields": ["features", "use_cases"],
-                                "boost": 1.5
-                            }
-                        },
-                        # Tags and category
-                        {
-                            "multi_match": {
-                                "query": query,
-                                "fields": ["tags", "category"],
-                                "boost": 1.0
-                            }
-                        },
-                        # Search text (comprehensive field)
-                        {
-                            "match": {
-                                "search_text": {
-                                    "query": query,
-                                    "boost": 0.5
-                                }
-                            }
-                        }
-                    ],
-                    "minimum_should_match": 1
-                }
-            },
             "size": size,
-            "_source": {
-                "excludes": ["search_text"]  # Don't return the search_text field
-            }
+            "sort": [{"_score": {"order": "desc"}}]
         }
         
-        # Add filters
-        if filters:
-            filter_clauses = []
-            for key, value in filters.items():
-                if isinstance(value, list):
-                    filter_clauses.append({"terms": {key: value}})
-                elif key == "price_range":
-                    # Handle price range filtering
-                    if isinstance(value, dict) and ("min" in value or "max" in value):
-                        price_filter = {"range": {"price": {}}}
-                        if "min" in value:
-                            price_filter["range"]["price"]["gte"] = value["min"]
-                        if "max" in value:
-                            price_filter["range"]["price"]["lte"] = value["max"]
-                        filter_clauses.append(price_filter)
-                else:
-                    filter_clauses.append({"term": {key: value}})
-            
-            if filter_clauses:
-                search_body["query"]["bool"]["filter"] = filter_clauses
+        if not query or query.strip() == "":
+            # For empty queries, return random sample of products
+            search_body["query"] = {"match_all": {}}
+            # Add random scoring for variety
+            search_body["query"] = {
+                "function_score": {
+                    "query": {"match_all": {}},
+                    "random_score": {},
+                    "boost_mode": "replace"
+                }
+            }
+            print(f"🔍 Empty query - returning random sample of {size} products")
+        else:
+            # For non-empty queries, use multi-match
+            search_body["query"] = {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["name^3", "description^2", "category", "tags", "features"],
+                    "fuzziness": "AUTO"
+                }
+            }
+            print(f"🔍 Searching for: '{query}'")
+        
+        # Add category filter if specified
+        if category:
+            if "bool" not in search_body["query"]:
+                search_body["query"] = {
+                    "bool": {
+                        "must": [search_body["query"]],
+                        "filter": []
+                    }
+                }
+            search_body["query"]["bool"]["filter"].append({
+                "term": {"category": category}
+            })
         
         try:
+            print(f"🔍 Executing search with body: {json.dumps(search_body, indent=2)}")
             response = await self.client.search(index=self.products_index, **search_body)
-            results = []
             
+            results = []
             for hit in response["hits"]["hits"]:
                 product = hit["_source"]
-                product["_score"] = hit["_score"]  # Include relevance score
+                product["_score"] = hit.get("_score", 0)
                 results.append(product)
             
-            logger.info(f"Found {len(results)} products for query: '{query}'")
+            print(f"✅ Search returned {len(results)} products")
             return results
             
         except Exception as e:
             logger.error(f"Product search failed: {e}")
+            print(f"❌ Search failed: {e}")
+            return []
+
+    async def get_random_products(self, size: int = 10) -> List[Dict]:
+        """Get random products for testing/sampling"""
+        try:
+            search_body = {
+                "size": size,
+                "query": {
+                    "function_score": {
+                        "query": {"match_all": {}},
+                        "random_score": {},
+                        "boost_mode": "replace"
+                    }
+                }
+            }
+            
+            response = await self.client.search(index=self.products_index, **search_body)
+            
+            results = []
+            for hit in response["hits"]["hits"]:
+                product = hit["_source"]
+                results.append(product)
+            
+            print(f"✅ Retrieved {len(results)} random products")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Random products retrieval failed: {e}")
             return []
     
     async def search_solutions(self, requirements: Dict[str, Any], size: int = 5) -> List[Dict]:
@@ -718,7 +720,9 @@ class ElasticsearchService:
             raise
 
     async def search_products_by_requirements(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
-        """Search products based on extracted requirements"""
+        """Search products based on extracted requirements with better fallback"""
+        
+        print(f"🔍 Elasticsearch: Searching with requirements: {requirements}")
         
         search_body = {
             "query": {
@@ -736,23 +740,29 @@ class ElasticsearchService:
             search_body["query"]["bool"]["filter"].append({
                 "terms": {"category": categories}
             })
+            print(f"🏷️ Filtering by categories: {categories}")
         
-        # Technical specs matching
+        # Keywords matching - make this more flexible
+        keywords = requirements.get('search_keywords', [])
+        for keyword in keywords:
+            search_body["query"]["bool"]["should"].append({
+                "multi_match": {
+                    "query": keyword,
+                    "fields": ["name^3", "description^2", "tags", "features", "use_cases"],
+                    "fuzziness": "AUTO",
+                    "minimum_should_match": "50%"
+                }
+            })
+        
+        # Technical specs matching - improved
         tech_specs = requirements.get('technical_specs', {})
         if tech_specs:
             for spec_key, spec_value in tech_specs.items():
-                # Search in specifications field
+                # Search in specifications field and other relevant fields
                 search_body["query"]["bool"]["should"].append({
-                    "nested": {
-                        "path": "specifications",
-                        "query": {
-                            "bool": {
-                                "should": [
-                                    {"wildcard": {"specifications.*": f"*{spec_value}*"}},
-                                    {"match": {"specifications.*": spec_value}}
-                                ]
-                            }
-                        },
+                    "multi_match": {
+                        "query": f"{spec_key} {spec_value}",
+                        "fields": ["specifications.*", "description", "features"],
                         "boost": 2.0
                     }
                 })
@@ -770,25 +780,16 @@ class ElasticsearchService:
                     }
                 })
         
-        # Keywords matching
-        keywords = requirements.get('search_keywords', [])
-        for keyword in keywords:
-            search_body["query"]["bool"]["should"].append({
-                "multi_match": {
-                    "query": keyword,
-                    "fields": ["name^3", "description^2", "tags", "features"],
-                    "fuzziness": "AUTO"
-                }
-            })
-        
-        # Ensure at least some criteria match
-        if search_body["query"]["bool"]["should"]:
-            search_body["query"]["bool"]["minimum_should_match"] = 1
-        else:
-            # Fallback to match all if no specific criteria
+        # If no specific criteria, search all products
+        if not search_body["query"]["bool"]["should"] and not search_body["query"]["bool"]["filter"]:
             search_body["query"] = {"match_all": {}}
+            print("🔍 No specific criteria, searching all products")
+        else:
+            # Ensure at least some criteria match
+            search_body["query"]["bool"]["minimum_should_match"] = 1
         
         try:
+            print(f"🔍 Executing search with body: {json.dumps(search_body, indent=2)}")
             response = await self.client.search(index=self.products_index, **search_body)
             results = []
             
@@ -797,11 +798,13 @@ class ElasticsearchService:
                 product["_score"] = hit["_score"]
                 results.append(product)
             
-            logger.info(f"Found {len(results)} products for requirements")
+            print(f"✅ Elasticsearch returned {len(results)} products")
             return results
             
         except Exception as e:
             logger.error(f"Requirements-based search failed: {e}")
+            print(f"❌ Search failed: {e}")
+            # Return empty list instead of falling back to samples
             return []
 
 # Global instance

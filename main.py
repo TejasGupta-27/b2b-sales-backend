@@ -648,6 +648,60 @@ async def get_data_status():
             "error": str(e)
         }
 
+@app.get("/api/debug/elasticsearch")
+async def debug_elasticsearch():
+    """Debug endpoint to check Elasticsearch status and data"""
+    try:
+        # Check connection
+        info = await elasticsearch_service.client.info()
+        
+        # Get product count
+        products_count = await elasticsearch_service.client.count(index=elasticsearch_service.products_index)
+        solutions_count = await elasticsearch_service.client.count(index=elasticsearch_service.solutions_index)
+        
+        # Get sample products
+        sample_products = await elasticsearch_service.search_products("", size=5)
+        
+        # Get categories
+        categories = await elasticsearch_service.get_product_categories()
+        
+        return {
+            "elasticsearch_info": info,
+            "indices": {
+                "products": {
+                    "count": products_count['count'],
+                    "index_name": elasticsearch_service.products_index
+                },
+                "solutions": {
+                    "count": solutions_count['count'],
+                    "index_name": elasticsearch_service.solutions_index
+                }
+            },
+            "sample_products": sample_products,
+            "available_categories": categories,
+            "status": "healthy"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/api/debug/force-reload")
+async def force_reload_elasticsearch():
+    """Force reload Elasticsearch data"""
+    try:
+        await elasticsearch_service.reindex_all_data()
+        stats = await elasticsearch_service.get_product_stats()
+        return {
+            "message": "Data reloaded successfully",
+            "stats": stats
+        }
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

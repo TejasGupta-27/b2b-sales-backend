@@ -191,25 +191,64 @@ Extract requirements as JSON:""")
     async def _search_relevant_products(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Search for products using enhanced requirements-based search"""
         
-        # Use the new requirements-based search
-        products = await self.elasticsearch.search_products_by_requirements(requirements)
+        print(f"🔍 Searching products with requirements: {requirements}")
         
-        # If no results with requirements, try keyword search
+        # First, check if Elasticsearch has data
+        try:
+            stats = await self.elasticsearch.get_product_stats()
+            total_products = stats.get('total_products', 0)
+            print(f"📊 Elasticsearch has {total_products} products available")
+            
+            if total_products == 0:
+                print("⚠️ No products found in Elasticsearch, loading sample data...")
+                await self.elasticsearch.load_initial_data()
+                # Recheck after loading
+                stats = await self.elasticsearch.get_product_stats()
+                total_products = stats.get('total_products', 0)
+                print(f"📊 After loading: {total_products} products available")
+        except Exception as e:
+            print(f"❌ Error checking Elasticsearch stats: {e}")
+            return []
+        
+        # Use the requirements-based search
+        products = await self.elasticsearch.search_products_by_requirements(requirements, size=20)
+        print(f"🎯 Requirements search returned {len(products)} products")
+        
+        # If no results with requirements, try broader keyword search
         if not products and requirements.get('search_keywords'):
+            print("🔍 Trying keyword search as fallback...")
             for keyword in requirements['search_keywords']:
-                keyword_results = await self.elasticsearch.search_products(keyword, size=5)
+                keyword_results = await self.elasticsearch.search_products(keyword, size=10)
                 products.extend(keyword_results)
+                print(f"🔍 Keyword '{keyword}' returned {len(keyword_results)} products")
+        
+        # If still no results, try category-based search
+        if not products and requirements.get('product_categories'):
+            print("🔍 Trying category-based search...")
+            for category in requirements['product_categories']:
+                category_results = await self.elasticsearch.search_products(category, size=10)
+                products.extend(category_results)
+                print(f"🔍 Category '{category}' returned {len(category_results)} products")
+        
+        # If still no results, do a general search
+        if not products:
+            print("🔍 Trying general search...")
+            general_results = await self.elasticsearch.search_products("", size=10)
+            products.extend(general_results)
+            print(f"🔍 General search returned {len(general_results)} products")
         
         # Remove duplicates and limit results
         seen_ids = set()
         unique_products = []
         for product in products:
-            if product.get('id') not in seen_ids:
-                seen_ids.add(product.get('id'))
+            product_id = product.get('id')
+            if product_id and product_id not in seen_ids:
+                seen_ids.add(product_id)
                 unique_products.append(product)
                 if len(unique_products) >= 10:  # Limit to top 10
                     break
         
+        print(f"✅ Final result: {len(unique_products)} unique products")
         return unique_products
     
     async def _search_relevant_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
