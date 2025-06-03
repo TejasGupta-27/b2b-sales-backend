@@ -2,9 +2,12 @@ import aiohttp
 import json
 import logging
 import os
-from typing import List
+from typing import List, Type, Optional, Union, Dict, Any
 from urllib.parse import urljoin, urlparse
+from pydantic import BaseModel
+from openai import AsyncAzureOpenAI
 from .base import AIProvider, AIMessage, AIResponse
+from .function_models import *
 
 # Configure logging
 log_dir = "logs"
@@ -74,69 +77,28 @@ class AzureOpenAIProvider(AIProvider):
             raise ValueError("Azure OpenAI provider is not properly configured")
         
         try:
-            from openai import AsyncAzureOpenAI
-            
-            # Validate and format the endpoint
-            endpoint = self._validate_endpoint(self.config['endpoint'])
-            
-            # Log the configuration (excluding sensitive data)
-            logger.info(f"Initializing Azure OpenAI client with endpoint: {endpoint}")
-            logger.info(f"Using deployment: {self.config['deployment_name']}")
-            
             client = AsyncAzureOpenAI(
-                azure_endpoint=endpoint,
-                api_key=self.config['api_key'],
-                api_version=self.config.get('api_version', '2024-02-15-preview')
+                api_key=self.config["api_key"],
+                api_version=self.config.get("api_version", "2024-02-15-preview"),
+                azure_endpoint=self._validate_endpoint(self.config["endpoint"])
             )
             
-            # Convert AIMessage objects to dict format expected by Azure OpenAI
-            formatted_messages = [
-                {
-                    "role": msg.role,
-                    "content": msg.content
-                } for msg in messages
+            openai_messages = [
+                {"role": msg.role, "content": msg.content} 
+                for msg in messages
             ]
             
-            try:
-                logger.info("Making request to Azure OpenAI API...")
-                response = await client.chat.completions.create(
-                    model=self.config['deployment_name'],
-                    messages=formatted_messages,
-                    max_tokens=kwargs.get("max_tokens", 800),
-                    temperature=kwargs.get("temperature", 0.7),  # Lower temperature
-                    top_p=kwargs.get("top_p", 1),
-                    frequency_penalty=kwargs.get("frequency_penalty", 0),
-                    presence_penalty=kwargs.get("presence_penalty", 0),
-                    stop=kwargs.get("stop", None),
-                    stream=kwargs.get("stream", False)
-                )
-                logger.info("Successfully received response from Azure OpenAI API")
-                
-            except Exception as api_error:
-                # Check if it's a content filter error
-                if hasattr(api_error, 'response') and 'content_filter' in str(api_error):
-                    logger.warning("Content filter triggered - using fallback response")
-                    return AIResponse(
-                        content="I apologize, but I need to rephrase my response. Let me help you with your business technology needs. What specific requirements can I assist you with today?",
-                        model=self.config["deployment_name"],
-                        provider=self.provider_name,
-                        usage={"prompt_tokens": 0, "completion_tokens": 20, "total_tokens": 20},
-                        finish_reason="content_filter_fallback"
-                    )
-                
-                logger.error(f"Azure OpenAI API error: {str(api_error)}")
-                raise
+            response = await client.chat.completions.create(
+                model=self.config["deployment_name"],
+                messages=openai_messages,
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 1000),
+                top_p=kwargs.get("top_p", 0.95),
+                frequency_penalty=kwargs.get("frequency_penalty", 0),
+                presence_penalty=kwargs.get("presence_penalty", 0)
+            )
             
-            # Process successful response
-            if not response.choices:
-                logger.error("No response choices returned from Azure OpenAI")
-                raise Exception("No response choices returned from Azure OpenAI")
-                
             choice = response.choices[0]
-            
-            if not choice.message:
-                logger.error("No message in response choice")
-                raise Exception("No message in response choice")
             
             result = AIResponse(
                 content=choice.message.content or "",
@@ -150,11 +112,77 @@ class AzureOpenAIProvider(AIProvider):
                 finish_reason=choice.finish_reason
             )
             
-            # Track usage
             self._track_usage(result.usage)
-            
             return result
             
         except Exception as e:
             logger.exception("Error in Azure OpenAI request")
-            raise Exception(f"Error calling Azure OpenAI: {str(e)}") 
+            raise Exception(f"Error calling Azure OpenAI: {str(e)}")
+    
+    async def generate_structured_response(
+        self,
+        messages: List[AIMessage],
+        response_model: Type[BaseModel],
+        **kwargs
+    ) -> BaseModel:
+        """Generate a structured response using function calling"""
+        if not self.is_configured():
+            raise ValueError("Azure OpenAI provider is not properly configured")
+        
+        try:
+            client = AsyncAzureOpenAI(
+                api_key=self.config["api_key"],
+                api_version=self.config.get("api_version", "2024-02-15-preview"),
+                azure_endpoint=self._validate_endpoint(self.config["endpoint"])
+            )
+            
+            # Convert Pydantic model to OpenAI function schema
+            function_schema = self._pydantic_to_function_schema(response_model)
+            
+            openai_messages = [
+                {"role": msg.role, "content": msg.content} 
+                for msg in messages
+            ]
+            
+            response = await client.chat.completions.create(
+                model=self.config["deployment_name"],
+                messages=openai_messages,
+                functions=[function_schema],
+                function_call={"name": function_schema["name"]},
+                temperature=kwargs.get("temperature", 0.1),  # Lower temperature for structured output
+                max_tokens=kwargs.get("max_tokens", 2000)
+            )
+            
+            choice = response.choices[0]
+            
+            if choice.message.function_call:
+                function_args = json.loads(choice.message.function_call.arguments)
+                return response_model(**function_args)
+            else:
+                raise ValueError("No function call in response")
+            
+        except Exception as e:
+            logger.exception("Error in structured Azure OpenAI request")
+            raise Exception(f"Error calling Azure OpenAI for structured response: {str(e)}")
+    
+    def _pydantic_to_function_schema(self, model: Type[BaseModel]) -> Dict[str, Any]:
+        """Convert Pydantic model to OpenAI function schema with better enum handling"""
+        schema = model.model_json_schema()
+        
+        # Enhance enum descriptions
+        if 'properties' in schema:
+            for prop_name, prop_schema in schema['properties'].items():
+                if 'enum' in prop_schema:
+                    # Add clear description of valid values
+                    valid_values = ', '.join(f"'{v}'" for v in prop_schema['enum'])
+                    prop_schema['description'] = f"{prop_schema.get('description', '')} Valid values: {valid_values}"
+                
+                # Emphasize required fields
+                if prop_name in schema.get('required', []):
+                    prop_schema['description'] = f"[REQUIRED] {prop_schema.get('description', '')}"
+        
+        return {
+            "name": model.__name__.lower(),
+            "description": f"Structured response for {model.__name__}. ALL required fields must be included.",
+            "parameters": schema
+        } 

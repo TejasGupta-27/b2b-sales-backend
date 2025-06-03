@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Type
 from pydantic import BaseModel
 from .token_tracker import TokenTracker
 
@@ -41,6 +41,16 @@ class AIProvider(ABC):
     ) -> AIResponse:
         """Generate a response from the AI provider"""
         pass
+    
+    async def generate_structured_response(
+        self,
+        messages: List[AIMessage],
+        response_model: Type[BaseModel],
+        **kwargs
+    ) -> BaseModel:
+        """Generate a structured response using the specified Pydantic model"""
+        # Default implementation - providers should override this
+        raise NotImplementedError("Structured response not implemented for this provider")
     
     def _track_usage(self, usage: Dict[str, Any]):
         """Track token usage"""

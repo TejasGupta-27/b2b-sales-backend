@@ -30,11 +30,11 @@ class PDFGenerator:
         # Quote title style
         self.styles.add(ParagraphStyle(
             name='QuoteTitle',
-            parent=self.styles['Heading2'],
-            fontSize=18,
-            textColor=colors.HexColor('#048A81'),
-            alignment=TA_LEFT,
-            spaceAfter=20
+            parent=self.styles['Heading1'],
+            fontSize=16,
+            spaceAfter=12,
+            textColor=colors.HexColor('#2c3e50'),
+            alignment=TA_CENTER
         ))
         
         # Section header style
@@ -67,278 +67,202 @@ class PDFGenerator:
             fontSize=8,
             leading=10
         ))
+        
+        # Add custom styles for the new quote format
+        self.styles.add(ParagraphStyle(
+            name='CompanyTagline',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#7f8c8d'),
+            alignment=TA_CENTER,
+            spaceAfter=20
+        ))
     
     def generate_quote_pdf(self, quote_data: Dict[str, Any]) -> BytesIO:
-        """Generate a professional PDF quotation with dynamic content"""
-        print(f"🔍 PDF DEBUG: Quote data keys: {list(quote_data.keys())}")
-        
-        if 'line_items' in quote_data:
-            print(f"🔍 PDF DEBUG: Line items count: {len(quote_data['line_items'])}")
-            for i, item in enumerate(quote_data['line_items'][:3]):  # Show first 3 items
-                print(f"🔍 PDF DEBUG: Item {i}: {item.get('name', 'NO NAME')} - ${item.get('unit_price', 0)}")
-        
+        """Generate PDF from quote data"""
         buffer = BytesIO()
-        doc = SimpleDocTemplate(
-            buffer, 
-            pagesize=A4,
-            rightMargin=50,
-            leftMargin=50,
-            topMargin=50,
-            bottomMargin=50
-        )
-        
-        story = []
         
         try:
-            # FIXED: Dynamic Company Header (Your company name, not customer's)
-            seller_company = quote_data.get('seller_company_name', 'Otsuka-Shokai')
-            seller_tagline = quote_data.get('seller_tagline', 'Professional Technology Solutions')
+            # Create PDF document with better margins
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=letter,
+                rightMargin=50,
+                leftMargin=50,
+                topMargin=50,
+                bottomMargin=50
+            )
             
-            print(f"🔍 PDF DEBUG: Using company name: {seller_company}")
+            # Build PDF content
+            story = []
             
-            story.append(Paragraph(seller_company, self.styles['CompanyHeader']))
-            story.append(Paragraph(seller_tagline, self.styles['Normal']))
-            story.append(Spacer(1, 20))
+            # Header with title and tagline
+            story.append(Paragraph(quote_data.get('quote_title', 'Technology Solution Quote'), self.styles['QuoteTitle']))
+            story.append(Paragraph(quote_data.get('company_tagline', 'Professional Technology Solutions'), self.styles['CompanyTagline']))
+            story.append(Spacer(1, 12))
             
-            # FIXED: Dynamic Quote Title
-            quote_title = quote_data.get('quote_title', 'TECHNOLOGY SOLUTION QUOTATION')
-            print(f"🔍 PDF DEBUG: Quote title: {quote_title}")
-            story.append(Paragraph(quote_title, self.styles['QuoteTitle']))
-            
-            # Quote Info Table
-            quote_number = quote_data.get('quote_number', quote_data.get('id', 'N/A'))
-            created_date = quote_data.get('created_at', datetime.now().isoformat())
-            valid_until = quote_data.get('valid_until', datetime.now().isoformat())
-            
-            # Parse dates properly
-            try:
-                if isinstance(created_date, str):
-                    created_dt = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
-                else:
-                    created_dt = created_date
-                    
-                if isinstance(valid_until, str):
-                    valid_dt = datetime.fromisoformat(valid_until.replace('Z', '+00:00'))
-                else:
-                    valid_dt = valid_until
-            except:
-                created_dt = datetime.now()
-                valid_dt = datetime.now() + timedelta(days=30)
-            
-            quote_info_data = [
-                ['Quote Number:', quote_number],
-                ['Date:', created_dt.strftime('%B %d, %Y')],
-                ['Valid Until:', valid_dt.strftime('%B %d, %Y')],
+            # Quote information
+            quote_info = [
+                ['Quote Number:', quote_data.get('quote_number', 'N/A')],
+                ['Date:', quote_data.get('created_at', '')[:10] if quote_data.get('created_at') else 'N/A'],
+                ['Valid Until:', quote_data.get('valid_until', '')[:10] if quote_data.get('valid_until') else 'N/A'],
             ]
             
-            quote_info_table = Table(quote_info_data, colWidths=[1.5*inch, 3*inch])
-            quote_info_table.setStyle(TableStyle([
+            quote_table = Table(quote_info, colWidths=[2*inch, 3*inch])
+            quote_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 10),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ]))
-            story.append(quote_info_table)
-            story.append(Spacer(1, 15))
+            story.append(quote_table)
+            story.append(Spacer(1, 20))
             
-            # FIXED: Dynamic Customer Information
+            # Customer information
             customer_info = quote_data.get('customer_info', {})
-            print(f"🔍 PDF DEBUG: Customer info keys: {list(customer_info.keys())}")
-            
             if customer_info:
-                story.append(Paragraph("Customer Information", self.styles['SectionHeader']))
+                story.append(Paragraph('Customer Information', self.styles['Heading2']))
                 
                 customer_data = []
-                if customer_info.get('company_name'):
-                    customer_data.append(['Company:', customer_info['company_name']])
-                if customer_info.get('contact_name'):
-                    customer_data.append(['Contact:', customer_info['contact_name']])
+                if customer_info.get('company'):
+                    customer_data.append(['Company:', customer_info['company']])
+                if customer_info.get('contact'):
+                    customer_data.append(['Contact:', customer_info['contact']])
                 if customer_info.get('email'):
                     customer_data.append(['Email:', customer_info['email']])
                 if customer_info.get('phone'):
                     customer_data.append(['Phone:', customer_info['phone']])
-                if customer_info.get('industry'):
-                    customer_data.append(['Industry:', customer_info['industry']])
-                
-                print(f"🔍 PDF DEBUG: Customer data rows: {len(customer_data)}")
                 
                 if customer_data:
-                    customer_table = Table(customer_data, colWidths=[1.5*inch, 4*inch])
+                    customer_table = Table(customer_data, colWidths=[2*inch, 3*inch])
                     customer_table.setStyle(TableStyle([
                         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                        ('FONTSIZE', (0, 0), (-1, -1), 9),
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                     ]))
                     story.append(customer_table)
-                    story.append(Spacer(1, 15))
+                story.append(Spacer(1, 20))
             
-            # FIXED: Hardware Items Table with ACTUAL DATA
-            items_title = quote_data.get('items_section_title', 'Recommended Solution')
-            story.append(Paragraph(items_title, self.styles['SectionHeader']))
+            # Line items with better text wrapping
+            story.append(Paragraph('Quote Details', self.styles['Heading2']))
             
             line_items = quote_data.get('line_items', [])
-            print(f"🔍 PDF DEBUG: Processing {len(line_items)} line items")
-            
             if line_items:
-                # Table headers
-                hardware_data = [['Item', 'Description', 'Qty', 'Unit Price', 'Total']]
+                # Create table headers
+                table_data = [['Item', 'Description', 'Qty', 'Unit Price', 'Total']]
                 
-                for i, item in enumerate(line_items):
-                    print(f"🔍 PDF DEBUG: Processing item {i}: {item}")
+                # Add line items with text wrapping
+                for item in line_items:
+                    # Wrap description text in Paragraph for better formatting
+                    description = item.get('description', '')
+                    if len(description) > 50:  # If description is long, use paragraph style
+                        desc_para = Paragraph(description, self.styles['TableCell'])
+                    else:
+                        desc_para = description
                     
-                    # Get item data with fallbacks
-                    name = item.get('name') or item.get('product_name') or f"Item {i+1}"
-                    description = item.get('description') or item.get('product_description') or 'No description'
-                    quantity = item.get('quantity', 1)
-                    unit_price = float(item.get('unit_price') or item.get('price') or 0)
-                    total_price = float(item.get('total_price') or (unit_price * quantity))
-                    
-                    # Add specifications if available
-                    specs = item.get('specifications', {})
-                    if specs and isinstance(specs, dict):
-                        spec_lines = []
-                        for key, value in list(specs.items())[:3]:  # Limit to 3 specs
-                            spec_lines.append(f"{key}: {value}")
-                        if spec_lines:
-                            description += f"\n• {' • '.join(spec_lines)}"
-                    
-                    # Wrap description in Paragraph for proper text handling
-                    desc_paragraph = Paragraph(description, self.styles['TableCell'])
-                    
-                    hardware_data.append([
-                        Paragraph(name, self.styles['TableCell']),
-                        desc_paragraph,
-                        str(quantity),
-                        f"${unit_price:,.2f}",
-                        f"${total_price:,.2f}"
+                    table_data.append([
+                        Paragraph(item.get('name', ''), self.styles['TableCell']),
+                        desc_para,
+                        str(item.get('quantity', 1)),
+                        f"${item.get('unit_price', 0):,.2f}",
+                        f"${item.get('total_price', 0):,.2f}"
                     ])
-                    
-                    print(f"🔍 PDF DEBUG: Added row - {name}: ${unit_price} x {quantity} = ${total_price}")
                 
-                # Create table with proper column widths
-                hardware_table = Table(
-                    hardware_data, 
-                    colWidths=[1.8*inch, 2.8*inch, 0.5*inch, 0.9*inch, 0.9*inch],
-                    repeatRows=1
-                )
-                
-                hardware_table.setStyle(TableStyle([
+                # Create table with adjusted column widths
+                items_table = Table(table_data, colWidths=[1.2*inch, 3*inch, 0.6*inch, 0.8*inch, 0.9*inch])
+                items_table.setStyle(TableStyle([
                     # Header styling
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#048A81')),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                     ('FONTSIZE', (0, 0), (-1, 0), 10),
-                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
                     
                     # Data styling
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 1), (-1, -1), 9),
-                    ('ALIGN', (0, 1), (0, -1), 'LEFT'),   # Item name
-                    ('ALIGN', (1, 1), (1, -1), 'LEFT'),   # Description
-                    ('ALIGN', (2, 1), (2, -1), 'CENTER'), # Qty
-                    ('ALIGN', (3, 1), (3, -1), 'RIGHT'),  # Unit price
-                    ('ALIGN', (4, 1), (4, -1), 'RIGHT'),  # Total
+                    ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),  # Right align numbers
+                    ('ALIGN', (0, 1), (1, -1), 'LEFT'),    # Left align text
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),   # Top align for better text wrapping
                     
-                    # Padding and borders
-                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    # Grid
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                    
+                    # Alternating row colors
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+                    
+                    # Add padding for better readability
                     ('TOPPADDING', (0, 0), (-1, -1), 8),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
                     ('LEFTPADDING', (0, 0), (-1, -1), 6),
                     ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-                    
-                    # Grid
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                    ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#048A81')),
-                    
-                    # Alternating row colors
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')])
                 ]))
                 
-                story.append(hardware_table)
-            else:
-                # Fallback if no line items
-                story.append(Paragraph("No items specified in this quote.", self.styles['Normal']))
+                # Enable automatic row splitting for long content
+                items_table.repeatRows = 1  # Repeat header row on new pages
+                story.append(items_table)
+                story.append(Spacer(1, 20))
             
-            story.append(Spacer(1, 20))
-            
-            # FIXED: Dynamic Pricing Summary
-            pricing = quote_data.get('pricing', {})
-            subtotal = pricing.get('subtotal', 0)
-            tax_amount = pricing.get('tax_amount', 0)
-            total = pricing.get('total', subtotal + tax_amount)
-            
-            print(f"🔍 PDF DEBUG: Pricing - Subtotal: ${subtotal}, Tax: ${tax_amount}, Total: ${total}")
-            
-            story.append(Paragraph("Investment Summary", self.styles['SectionHeader']))
-            
+            # Pricing summary
+            currency = quote_data.get('currency', 'USD')
             pricing_data = [
-                ['Subtotal:', f"${subtotal:,.2f}"],
-                ['Tax:', f"${tax_amount:,.2f}"],
-                ['', ''],  # Spacer
-                ['Total Investment:', f"${total:,.2f}"],
+                ['Subtotal:', f"${quote_data.get('subtotal', 0):,.2f} {currency}"],
+                ['Tax:', f"${quote_data.get('tax_amount', 0):,.2f} {currency}"],
+                ['Total:', f"${quote_data.get('total', 0):,.2f} {currency}"]
             ]
             
-            pricing_table = Table(pricing_data, colWidths=[3*inch, 1.5*inch])
+            pricing_table = Table(pricing_data, colWidths=[4*inch, 2*inch])
             pricing_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-                ('FONTNAME', (0, 0), (0, -3), 'Helvetica'),
-                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -3), 11),
-                ('FONTSIZE', (0, -1), (-1, -1), 14),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, 1), 'Helvetica'),
+                ('FONTNAME', (1, 2), (1, 2), 'Helvetica-Bold'),  # Bold total
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('FONTSIZE', (1, 2), (1, 2), 12),  # Larger total
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('LINEABOVE', (0, -1), (-1, -1), 2, colors.black),
-                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F0F8F0')),
-                ('TEXTCOLOR', (0, -1), (-1, -1), colors.HexColor('#2E7D32')),
+                ('LINEBELOW', (0, 1), (-1, 1), 1, colors.black),  # Line above total
             ]))
             story.append(pricing_table)
+            story.append(Spacer(1, 30))
             
-            story.append(Spacer(1, 20))
-            
-            # Terms and Conditions
-            story.append(Paragraph("Terms and Conditions", self.styles['SectionHeader']))
-            
-            terms = quote_data.get('terms', [])
-            for i, term in enumerate(terms, 1):
-                story.append(Paragraph(f"{i}. {term}", self.styles['Normal']))
-                story.append(Spacer(1, 4))
-            
-            # Notes
-            notes = quote_data.get('notes', [])
-            if notes:
+            # Terms and conditions
+            terms = quote_data.get('terms_and_conditions', [])
+            if terms:
+                story.append(Paragraph('Terms and Conditions', self.styles['Heading2']))
+                for term in terms:
+                    story.append(Paragraph(f"• {term}", self.styles['Normal']))
                 story.append(Spacer(1, 15))
-                story.append(Paragraph("Additional Notes", self.styles['SectionHeader']))
-                for note in notes:
+            
+            # Implementation notes
+            implementation_notes = quote_data.get('implementation_notes', [])
+            if implementation_notes:
+                story.append(Paragraph('Implementation Notes', self.styles['Heading2']))
+                for note in implementation_notes:
                     story.append(Paragraph(f"• {note}", self.styles['Normal']))
-                    story.append(Spacer(1, 3))
+                story.append(Spacer(1, 15))
             
-            story.append(Spacer(1, 25))
-            
-            # Footer
-            story.append(Paragraph("Thank you for considering our hardware solutions. We look forward to supporting your business technology needs!", self.styles['Normal']))
-            story.append(Spacer(1, 15))
-            story.append(Paragraph("For questions about this quote, please contact us at sales@techsolutions.com or call (555) 123-4567", self.styles['SmallText']))
+            # Next steps
+            next_steps = quote_data.get('next_steps', [])
+            if next_steps:
+                story.append(Paragraph('Next Steps', self.styles['Heading2']))
+                for step in next_steps:
+                    story.append(Paragraph(f"• {step}", self.styles['Normal']))
             
             # Build PDF
-            print(f"DEBUG: Building PDF with {len(story)} elements")
             doc.build(story)
             buffer.seek(0)
-            print(f"DEBUG: PDF buffer size: {len(buffer.getvalue())} bytes")
+            
+            return buffer
             
         except Exception as e:
-            print(f"DEBUG: Error building PDF: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
-        
-        return buffer
+            print(f"❌ PDF generation error: {str(e)}")
+            raise e
     
     def save_pdf_to_file(self, quote_data: Dict[str, Any], filename: str = None) -> str:
         """Save PDF to file and return the file path"""
         if filename is None:
-            quote_id = quote_data.get('id', 'quote')
+            quote_id = quote_data.get('quote_id', 'quote')
             filename = f"quote_{quote_id}.pdf"
         
         # Ensure the quotes directory exists

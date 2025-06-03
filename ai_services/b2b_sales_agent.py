@@ -51,36 +51,45 @@ class B2BSalesAgent(AIProvider):
         
         return enhanced_response
     
-    async def _collaborate_with_quote_agent(self, response: AIResponse, customer_context: Optional[Dict]) -> AIResponse:
-        """Collaborate with quote agent when customer is ready for quotes"""
+    async def _collaborate_with_quote_agent(
+        self, 
+        response: AIResponse, 
+        customer_context: Optional[Dict[str, Any]]
+    ) -> AIResponse:
+        """Collaborate with quote generation agent when appropriate"""
         
-        # Ensure response has metadata
-        if not hasattr(response, 'metadata') or response.metadata is None:
-            response.metadata = {}
-        
-        # Check if customer is asking for quotes or we've discussed enough technical details
-        if self._should_generate_quote(response.content, self.conversation_context):
+        try:
+            # Check if we should generate a quote
+            should_quote = self._should_generate_quote(response.content, self.conversation_context)
             
-            print(f"DEBUG: Sales agent collaborating with quote agent...")
-            
-            # Let quote agent analyze the conversation and generate quote
-            quote = await self.quote_agent.generate_quote_from_conversation(
-                self.conversation_context,
-                customer_context
-            )
-            
-            if quote:
-                print(f"DEBUG: Quote agent provided quote with ID: {quote.get('id')}")
+            if should_quote:
+                print(f"💰 B2B Sales Agent: Collaborating with Quote Agent...")
                 
-                # Add quote to response metadata
-                response.metadata['quote'] = quote
+                # Generate quote from conversation
+                quote = await self.quote_agent.generate_quote_from_conversation(
+                    self.conversation_context,
+                    customer_context
+                )
                 
-                # Enhance sales response to incorporate the quote
-                response = self._enhance_response_with_quote(response, quote)
-            else:
-                print("DEBUG: Quote agent couldn't generate quote from conversation")
-        
-        return response
+                if quote and isinstance(quote, dict):
+                    # Enhance response with quote information
+                    response = self._enhance_response_with_quote(response, quote)
+                    
+                    # Add quote metadata to response
+                    if not response.metadata:
+                        response.metadata = {}
+                    response.metadata['quote_generated'] = True
+                    response.metadata['quote_id'] = quote.get('quote_id')
+                    response.metadata['quote_total'] = quote.get('total_amount')
+                else:
+                    print(f"⚠️ Quote generation failed or returned invalid data")
+                
+            return response
+            
+        except Exception as e:
+            print(f"❌ Quote collaboration failed: {str(e)}")
+            # Return original response if collaboration fails
+            return response
     
     def _enhance_response_with_quote(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
         """Enhance the sales response to incorporate the generated quote"""
@@ -113,7 +122,7 @@ class B2BSalesAgent(AIProvider):
             
         elif 'pdf_error' in quote:
             response.content += f"\n\nI've analyzed your requirements and prepared a quote, but encountered a technical issue with the PDF generation. Let me get this resolved for you right away."
-            
+        
         return response
     
     def _should_generate_quote(self, content: str, conversation: List[AIMessage]) -> bool:

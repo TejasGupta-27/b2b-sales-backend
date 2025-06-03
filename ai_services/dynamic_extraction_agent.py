@@ -2,9 +2,10 @@ import json
 import re
 from typing import List, Dict, Any, Optional
 from .base import AIProvider, AIMessage, AIResponse
+from .function_models import QuoteData, CustomerInfo, QuoteLineItem
 
 class DynamicExtractionAgent(AIProvider):
-    """Completely dynamic data extraction - no hardcoded assumptions"""
+    """Completely dynamic data extraction using Pydantic function calling"""
     
     def __init__(self, base_provider: AIProvider, **kwargs):
         super().__init__(**kwargs)
@@ -29,27 +30,138 @@ class DynamicExtractionAgent(AIProvider):
         self,
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Extract ALL data dynamically from conversation with zero assumptions"""
+    ) -> Optional[Dict[str, Any]]:
+        """Extract quote data using Pydantic function calling"""
         
-        print(f"🔍 Dynamic Extraction: Starting analysis...")
+        conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in conversation_messages])
         
-        # Build full conversation context
-        conversation_text = "\n".join([
-            f"{msg.role}: {msg.content}" for msg in conversation_messages
-        ])
+        extraction_prompt = f"""Extract all information needed to generate a business quote from this conversation.
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT: {customer_context or 'None'}
+
+Extract:
+- Customer information (company, contact, email, phone, industry)
+- All products/services mentioned with descriptions, quantities, and pricing
+- Business requirements and context
+- Calculate pricing where needed
+
+IMPORTANT REQUIREMENTS:
+1. Each line item MUST include:
+   - name: descriptive product/service name
+   - description: what this item provides
+   - quantity: number of units (minimum 1)
+   - unit_price: price per unit in USD
+   - total_price: unit_price × quantity
+   - specifications: technical details (can be empty dict {{}})
+
+2. Business context should include:
+   - use_case: primary purpose/application
+   - requirements: key business needs
+   - timeline: project timeline if mentioned
+   - industry_context: relevant industry information
+
+3. All monetary amounts should be realistic and in USD
+4. If specific pricing isn't mentioned, provide reasonable estimates based on the products discussed
+
+Only extract information that was explicitly mentioned or can be reasonably inferred from the conversation.
+Ensure ALL required fields are provided with appropriate values."""
+
+        try:
+            # Use structured response with Pydantic
+            quote_data = await self.base_provider.generate_structured_response(
+                [AIMessage(role="user", content=extraction_prompt)],
+                QuoteData
+            )
+            
+            return quote_data.model_dump()
+            
+        except Exception as e:
+            print(f"⚠️ Pydantic quote extraction failed: {e}")
+            # Enhanced fallback with proper field structure
+            return self._enhanced_fallback_extraction(conversation_text, customer_context)
+    
+    def _enhanced_fallback_extraction(self, conversation_text: str, customer_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Enhanced fallback extraction with proper Pydantic structure"""
         
-        # Step 1: Use AI to identify what's being discussed
-        discussion_analysis = await self._analyze_discussion_content(conversation_text)
+        # Extract basic information using patterns
+        import re
         
-        # Step 2: Extract specific data points mentioned
-        extracted_data = await self._extract_mentioned_data(conversation_text, discussion_analysis)
+        # Extract quantities and products
+        quantities = re.findall(r'\b(\d+)\s*(?:x\s*|units?\s*|pieces?\s*|servers?\s*)', conversation_text, re.IGNORECASE)
+        prices = re.findall(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', conversation_text)
         
-        # Step 3: Structure the data for quote generation
-        structured_data = await self._structure_extracted_data(extracted_data, customer_context)
+        # Extract product mentions
+        product_keywords = ['server', 'gpu', 'workstation', 'storage', 'network', 'nas', 'drive', 'ssd', 'hdd']
+        mentioned_products = [kw for kw in product_keywords if kw in conversation_text.lower()]
         
-        print(f"✅ Dynamic Extraction: Completed analysis")
-        return structured_data
+        # Build line items with all required fields
+        line_items = []
+        for i, product in enumerate(mentioned_products):
+            quantity = int(quantities[i]) if i < len(quantities) else 1
+            unit_price = float(prices[i].replace(',', '')) if i < len(prices) else 1000.0
+            
+            line_items.append({
+                "name": f"{product.title()} Solution",
+                "description": f"Professional {product} solution based on customer requirements",
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "total_price": unit_price * quantity,
+                "specifications": {}  # Empty dict as default
+            })
+        
+        # If no products found, create a generic item
+        if not line_items:
+            line_items.append({
+                "name": "Technology Solution",
+                "description": "Custom technology solution based on discussion",
+                "quantity": 1,
+                "unit_price": 5000.0,
+                "total_price": 5000.0,
+                "specifications": {}
+            })
+        
+        # Calculate totals
+        subtotal = sum(item["total_price"] for item in line_items)
+        tax_rate = 0.08
+        tax_amount = subtotal * tax_rate
+        total = subtotal + tax_amount
+        
+        # Build customer info
+        customer_info = {
+            "company": None,
+            "contact": None,
+            "email": None,
+            "phone": None,
+            "industry": None
+        }
+        
+        # Merge customer context if available
+        if customer_context:
+            for key in customer_info.keys():
+                if key in customer_context:
+                    customer_info[key] = customer_context[key]
+        
+        # Build business context
+        business_context = {
+            "use_case": "Technology solution",
+            "requirements": ["Technology upgrade", "Business improvement"],
+            "timeline": "Standard delivery",
+            "industry_context": customer_info.get("industry", "General business")
+        }
+        
+        return {
+            "customer_info": customer_info,
+            "line_items": line_items,
+            "subtotal": subtotal,
+            "tax_rate": tax_rate,
+            "tax_amount": tax_amount,
+            "total": total,
+            "currency": "USD",
+            "business_context": business_context
+        }
     
     async def _analyze_discussion_content(self, conversation_text: str) -> Dict[str, Any]:
         """First pass: Understand what is being discussed"""
@@ -182,7 +294,7 @@ IMPORTANT: Only include information that was actually mentioned in the conversat
         prices = re.findall(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', conversation_text)
         
         # Extract any product mentions
-        product_keywords = ['server', 'gpu', 'workstation', 'storage', 'network', 'computer', 'hardware']
+        product_keywords = ['server', 'gpu', 'workstation', 'storage', 'network', 'hardware']
         mentioned_products = [kw for kw in product_keywords if kw in conversation_text.lower()]
         
         return {

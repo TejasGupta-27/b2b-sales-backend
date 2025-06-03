@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from .base import AIProvider, AIMessage, AIResponse
+from .function_models import ConversationAnalysis
 
 class ConversationFlowAgent(AIProvider):
     """Intelligent agent for managing conversation flow and determining readiness for different stages"""
@@ -16,106 +17,61 @@ class ConversationFlowAgent(AIProvider):
     def is_configured(self) -> bool:
         return self.base_provider.is_configured()
     
-    async def analyze_conversation_flow(
-        self, 
-        messages: List[AIMessage], 
+    async def analyze_conversation_state(
+        self,
+        messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Intelligently analyze conversation flow using AI"""
+        """Analyze conversation state using Pydantic function calling"""
         
-        print("🧠 Conversation Flow Agent: Analyzing conversation intelligence...")
-        print(f"📝 Analyzing {len(messages)} messages")
+        conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
         
-        # Build analysis prompt for the AI
-        analysis_prompt = self._build_flow_analysis_prompt(messages, customer_context)
-        
-        # Create analysis messages
-        analysis_messages = [
-            AIMessage(role="system", content=analysis_prompt),
-            AIMessage(role="user", content="Please analyze this conversation and provide a comprehensive flow assessment.")
-        ]
-        
-        # Get AI analysis
-        response = await self.base_provider.generate_response(analysis_messages)
-        print(f"🤖 AI Analysis Response Length: {len(response.content)}")
-        
-        # Parse AI response into structured data
-        flow_analysis = self._parse_ai_analysis(response.content, messages, customer_context)
-        
-        # STRICTER quote detection - require multiple criteria to be met
-        conversation_text = " ".join([msg.content.lower() for msg in messages])
-        
-        # Check for explicit quote requests
-        quote_indicators = [
-            'give me the pdf', 'generate quote', 'pdf quote', 'send quote', 
-            'yes give me the pdf', 'create quote', 'make quote', 'quote me',
-            'i want a quote', 'can i get a quote', 'price quote', 'quotation',
-            'send me a quote', 'can you quote', 'get me pricing'
-        ]
-        
-        explicit_quote_request = any(phrase in conversation_text for phrase in quote_indicators)
-        print(f"🔍 Explicit quote request detected: {explicit_quote_request}")
-        
-        # STRICTER REQUIREMENTS - All conditions must be met for quote readiness
-        min_business_score = 70
-        min_technical_score = 70  
-        min_decision_score = 80
-        min_conversation_depth = 3  # At least 3 user messages
-        
-        user_messages = [msg for msg in messages if msg.role == "user"]
-        conversation_depth = len(user_messages)
-        
-        business_score = flow_analysis.get('business_context_score', 0)
-        technical_score = flow_analysis.get('technical_requirements_score', 0)
-        decision_score = flow_analysis.get('decision_readiness_score', 0)
-        
-        # Check if ALL criteria are met
-        criteria_met = {
-            'explicit_request': explicit_quote_request,
-            'business_context': business_score >= min_business_score,
-            'technical_requirements': technical_score >= min_technical_score,
-            'decision_readiness': decision_score >= min_decision_score,
-            'conversation_depth': conversation_depth >= min_conversation_depth
-        }
-        
-        print(f"📋 Quote Readiness Criteria:")
-        for criterion, met in criteria_met.items():
-            print(f"   {criterion}: {'✅' if met else '❌'} ({business_score if 'business' in criterion else technical_score if 'technical' in criterion else decision_score if 'decision' in criterion else conversation_depth if 'depth' in criterion else 'Yes' if met else 'No'})")
-        
-        all_criteria_met = all(criteria_met.values())
-        
-        # Only override if ALL criteria are met AND explicit request exists
-        if all_criteria_met and explicit_quote_request:
-            print("✅ ALL criteria met - quote generation approved")
-            flow_analysis.update({
-                'quote_ready': True,
-                'should_generate_quote': True,
-                'current_stage': 'quote_ready',
-                'reasoning': f'All quote criteria satisfied: explicit request + sufficient context (B:{business_score}% T:{technical_score}% D:{decision_score}%)'
-            })
-        else:
-            print("❌ Quote criteria not fully met - continuing discovery")
-            # Force quote_ready to False if criteria not met
-            flow_analysis.update({
-                'quote_ready': False,
-                'should_generate_quote': False,
-                'current_stage': 'deep_discovery' if conversation_depth >= 2 else 'initial_discovery',
-                'reasoning': f'Quote criteria incomplete: {", ".join([k for k, v in criteria_met.items() if not v])}'
-            })
-        
-        # Add some computed metrics
-        flow_analysis.update({
-            "conversation_metrics": self._calculate_conversation_metrics(messages),
-            "ai_analysis_raw": response.content,
-            "analysis_timestamp": datetime.now().isoformat(),
-            "criteria_analysis": criteria_met
-        })
-        
-        print(f"📊 Final Analysis - Quote Ready: {flow_analysis.get('quote_ready', False)}")
-        print(f"📊 Should Generate Quote: {flow_analysis.get('should_generate_quote', False)}")
-        print(f"📊 Current Stage: {flow_analysis.get('current_stage', 'unknown')}")
-        
-        return flow_analysis
+        analysis_prompt = f"""Analyze this B2B sales conversation to determine the current stage, readiness levels, and next steps.
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT: {customer_context or 'None'}
+
+IMPORTANT: For current_stage, you MUST use one of these exact values:
+- "initial_discovery" - First contact, basic information gathering
+- "deep_discovery" - Detailed requirements gathering
+- "solution_presentation" - Presenting solutions to customer
+- "quote_ready" - Customer is ready for pricing
+- "closing" - Final negotiation and closing
+
+Analyze the conversation comprehensively to understand:
+1. What stage of the sales process we're in (use exact values above)
+2. How much business context we understand (0-100)
+3. How clear the technical requirements are (0-100) 
+4. How ready the customer is to make a decision (0-100)
+5. Whether they're ready for a quote
+6. What information is still missing
+7. What questions should be asked next"""
+
+        try:
+            # Use structured response with Pydantic
+            analysis = await self.base_provider.generate_structured_response(
+                [AIMessage(role="user", content=analysis_prompt)],
+                ConversationAnalysis
+            )
+            
+            # Convert to dict with additional processing
+            analysis_dict = analysis.model_dump()
+            
+            # Add completion scores for compatibility
+            analysis_dict['completion_scores'] = {
+                'business_context': analysis.business_context_score / 100,
+                'technical_requirements': analysis.technical_requirements_score / 100,
+                'operational_requirements': analysis.decision_readiness_score / 100,
+                'pain_points': len([msg for msg in messages if 'problem' in msg.content.lower() or 'issue' in msg.content.lower()]) / 10
+            }
+            
+            return analysis_dict
+            
+        except Exception as e:
+            print(f"⚠️ Pydantic conversation analysis failed: {e}")
+            return self._fallback_analysis(messages, customer_context)
     
     def _build_flow_analysis_prompt(
         self, 

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     elasticsearch_index_products: str = "products"
     elasticsearch_index_solutions: str = "solutions"
     
+    # ChromaDB Configuration
+    chroma_db_path: str = "./chroma_db"
+    chroma_max_items_per_file: int = 50  # Limit items per JSON file
+    
     # Data directory
     data_dir: Path = Path("Data/json")
     
@@ -32,6 +36,11 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2024-02-15-preview"
     azure_openai_deployment_name: str = "gpt-4"
     
+    # Azure Embeddings (separate deployment)
+    azure_embedding_endpoint: Optional[str] = None
+    azure_embedding_api_key: Optional[str] = None
+    azure_embedding_deployment_name: str = "text-embedding-ada-002"
+    
     # Hugging Face
     huggingface_api_key: Optional[str] = None
     huggingface_model: str = "microsoft/DialoGPT-medium"
@@ -39,6 +48,11 @@ class Settings(BaseSettings):
     # Data loading configuration
     force_reload_data: bool = False
     skip_data_loading: bool = False
+    
+    # Hybrid search configuration
+    use_hybrid_retriever: bool = True
+    elasticsearch_weight: float = 0.4  # Weight for keyword search
+    semantic_weight: float = 0.6       # Weight for semantic search
     
     @property
     def cors_origins_list(self) -> List[str]:

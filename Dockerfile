@@ -2,26 +2,22 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
     build-essential \
-    postgresql-client \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements files
-COPY pyproject.toml requirements.txt ./
+COPY requirements.txt .
 
-# Install Python dependencies with specific elasticsearch version
-RUN pip install --no-cache-dir "fastapi[all]" "uvicorn[standard]" python-dotenv aiofiles psycopg2-binary "elasticsearch==8.11.0" -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p Data/json Data/quotes logs services
+RUN mkdir -p /app/chroma_db && chmod 755 /app/chroma_db
 
-# Expose port
 EXPOSE 3001
 
-# Simple command - let docker-compose handle the waiting
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload"]
+# Run the application
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload"]

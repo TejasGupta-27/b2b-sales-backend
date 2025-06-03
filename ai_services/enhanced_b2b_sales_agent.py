@@ -1,27 +1,46 @@
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+import asyncio
 
 from .base import AIProvider, AIMessage, AIResponse
 from .quote_generation_agent import QuoteGenerationAgent
 from .product_retriever_agent import ProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
+from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
+from .conversation_flow_manager import ConversationFlowAgent
+from config import settings
 
 class EnhancedB2BSalesAgent(AIProvider):
-    """Enhanced B2B Sales Agent with intelligent conversation flow management"""
+    """Enhanced B2B Sales Agent with hybrid retrieval capabilities"""
     
-    def __init__(self, base_provider: AIProvider, **kwargs):
+    def __init__(
+        self, 
+        base_provider: AIProvider,
+        use_hybrid_retriever: bool = True,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.base_provider = base_provider
-        
-        # Initialize collaborative agents
+        self.conversation_analyzer = ConversationFlowAgent(base_provider)
         self.quote_agent = QuoteGenerationAgent(base_provider)
-        self.retriever_agent = ProductRetrieverAgent(base_provider)
-        self.flow_agent = ConversationFlowAgent(base_provider)  # New intelligent flow agent
+        
+        # Choose retriever based on configuration
+        if use_hybrid_retriever and settings.azure_embedding_endpoint and settings.azure_embedding_api_key:
+            print("🔧 Using Hybrid Product Retriever (Elasticsearch + ChromaDB)")
+            self.retriever_agent = HybridProductRetrieverAgent(
+                base_provider=base_provider,
+                azure_embedding_endpoint=settings.azure_embedding_endpoint,
+                azure_embedding_key=settings.azure_embedding_api_key
+            )
+        else:
+            print("🔧 Using Standard Product Retriever (Elasticsearch only)")
+            self.retriever_agent = ProductRetrieverAgent(base_provider)
+        
+        self.product_recommendations = {}
         
         # Conversation context for multi-agent collaboration
         self.conversation_context = []
-        self.product_recommendations = {}
         self.customer_requirements = {}
         
     @property
@@ -30,6 +49,17 @@ class EnhancedB2BSalesAgent(AIProvider):
     
     def is_configured(self) -> bool:
         return self.base_provider.is_configured()
+    
+    async def initialize(self):
+        """Initialize the sales agent and its components"""
+        try:
+            # Initialize retriever agent if it's hybrid
+            if hasattr(self.retriever_agent, 'initialize'):
+                await self.retriever_agent.initialize()
+            print("✅ Enhanced B2B Sales Agent initialized successfully")
+        except Exception as e:
+            print(f"⚠️ Enhanced B2B Sales Agent initialization warning: {e}")
+            # Continue with standard retriever as fallback
     
     async def generate_response(
         self, 
@@ -45,7 +75,7 @@ class EnhancedB2BSalesAgent(AIProvider):
         print("🤝 Enhanced Sales Agent: Starting intelligent conversation flow analysis...")
         
         # Step 1: Use AI-powered flow analysis
-        flow_analysis = await self.flow_agent.analyze_conversation_flow(messages, customer_context)
+        flow_analysis = await self.conversation_analyzer.analyze_conversation_state(messages, customer_context)
         
         print(f"🧠 AI Flow Analysis:")
         print(f"   📊 Business Context: {flow_analysis.get('business_context_score', 0)}%")
@@ -66,7 +96,7 @@ class EnhancedB2BSalesAgent(AIProvider):
             print("✅ Enhanced quote readiness check overrode flow analysis - customer is ready for quote!")
         
         # Step 3: Get AI-powered action suggestions
-        action_guidance = await self.flow_agent.suggest_next_actions(flow_analysis, messages)
+        action_guidance = await self.conversation_analyzer.suggest_next_actions(flow_analysis, messages)
         
         print(f"💡 AI Action Guidance: {action_guidance.get('primary_action', 'continue')}")
         
@@ -313,31 +343,71 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
         messages: List[AIMessage], 
         customer_context: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Collaborate with retriever agent to get dynamic product recommendations"""
-        
-        print("🔍 Sales Agent: Collaborating with Retriever Agent...")
+        """Collaborate with hybrid product retriever agent"""
         
         try:
-            retrieval_result = await self.retriever_agent.analyze_conversation_and_retrieve(
-                messages, customer_context
-            )
+            print(f"🤝 Enhanced Sales Agent: Collaborating with {'Hybrid' if isinstance(self.retriever_agent, HybridProductRetrieverAgent) else 'Standard'} Product Retriever...")
             
-            print(f"✅ Retriever Agent provided {len(retrieval_result.get('products', []))} products and {len(retrieval_result.get('solutions', []))} solutions")
+            # Get product recommendations
+            retrieval_result = await self.retriever_agent.retrieve_products(messages, customer_context)
             
-            # Store for future reference
-            self.product_recommendations = retrieval_result
-            self.customer_requirements = retrieval_result.get('requirements', {})
+            # Ensure we have a proper dictionary structure
+            if not isinstance(retrieval_result, dict):
+                print(f"⚠️ Retriever returned unexpected type: {type(retrieval_result)}")
+                retrieval_result = {
+                    'products': retrieval_result if isinstance(retrieval_result, list) else [],
+                    'solutions': [],
+                    'requirements': {},
+                    'total_products': len(retrieval_result) if isinstance(retrieval_result, list) else 0,
+                    'total_solutions': 0,
+                    'success': False,
+                    'error': 'Unexpected return type from retriever'
+                }
             
-            return retrieval_result
+            # Extract results safely
+            products = retrieval_result.get('products', [])
+            solutions = retrieval_result.get('solutions', [])
+            requirements = retrieval_result.get('requirements', {})
+            search_methods = retrieval_result.get('search_methods', {})
+            
+            print(f"📦 Enhanced Sales Agent: Retrieved {len(products)} products, {len(solutions)} solutions")
+            
+            if search_methods:
+                print(f"🔍 Search method breakdown: {search_methods}")
+            
+            # Store for later use in quote generation
+            self.product_recommendations = {
+                'products': products,
+                'solutions': solutions,
+                'requirements': requirements,
+                'search_methods': search_methods,
+                'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0.5)
+            }
+            
+            return {
+                'products': products,
+                'solutions': solutions,
+                'requirements': requirements,
+                'search_methods': search_methods,
+                'retrieval_success': retrieval_result.get('success', False),
+                'retrieval_method': retrieval_result.get('retrieval_method', 'unknown'),
+                'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0.5)
+            }
             
         except Exception as e:
-            print(f"⚠️ Retriever collaboration failed: {e}")
+            print(f"⚠️ Retriever collaboration failed: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            
+            # Return safe fallback structure
             return {
                 'products': [],
                 'solutions': [],
                 'requirements': {},
-                'retrieval_confidence': 0,
-                'error': str(e)
+                'search_methods': {},
+                'retrieval_success': False,
+                'error': str(e),
+                'retrieval_confidence': 0.0
             }
     
     async def _collaborate_with_quote_agent(
@@ -485,59 +555,59 @@ APPROACH:
         return enhanced_messages
     
     def _build_dynamic_product_context(self, retrieval_result: Dict[str, Any]) -> str:
-        """Build dynamic product context from retrieval results"""
+        """Build enhanced product context including hybrid search info"""
         
-        context = "🛍️ DYNAMIC PRODUCT INTELLIGENCE:\n\n"
+        context = "🛍️ HYBRID PRODUCT INTELLIGENCE:\n\n"
         
         products = retrieval_result.get('products', [])
         solutions = retrieval_result.get('solutions', [])
         requirements = retrieval_result.get('requirements', {})
+        search_methods = retrieval_result.get('search_methods', {})
+        
+        if search_methods:
+            context += "=== HYBRID SEARCH RESULTS ===\n"
+            context += f"🔍 Elasticsearch (keyword): {search_methods.get('elasticsearch_products', 0)} products\n"
+            context += f"🧠 ChromaDB (semantic): {search_methods.get('chroma_products', 0)} products\n"
+            context += f"💡 Solutions (semantic): {search_methods.get('chroma_solutions', 0)} solutions\n"
+            context += f"🎯 Total merged: {search_methods.get('merged_products', 0)} products\n\n"
         
         if products:
-            context += "=== RELEVANT PRODUCTS FOUND IN DATABASE ===\n"
-            for i, product in enumerate(products[:3], 1):  # Top 3 products
+            context += "=== TOP HYBRID RECOMMENDATIONS ===\n"
+            for i, product in enumerate(products[:3], 1):
                 context += f"{i}. {product.get('name', 'Unknown')}\n"
                 context += f"   Description: {product.get('description', 'No description')}\n"
+                
                 if 'price' in product:
                     context += f"   Price: ${product['price']:,.2f}\n"
-                if 'specifications' in product:
-                    specs = product['specifications']
-                    if isinstance(specs, dict):
-                        spec_str = ', '.join([f"{k}: {v}" for k, v in specs.items()][:3])
-                        context += f"   Key Specs: {spec_str}\n"
-                context += f"   Relevance Score: {product.get('_score', 0):.2f}/10\n"
+                
+                # Show search source and scores
+                search_source = product.get('search_source', 'unknown')
+                context += f"   Found in: {search_source}\n"
+                
+                if product.get('keyword_score'):
+                    context += f"   Keyword relevance: {product['keyword_score']:.2f}\n"
+                
+                if product.get('semantic_score'):
+                    context += f"   Semantic similarity: {product['semantic_score']:.2f}\n"
+                
+                if product.get('hybrid_score'):
+                    context += f"   🎯 Hybrid score: {product['hybrid_score']:.2f}\n"
+                
                 context += f"   Product ID: {product.get('id', 'N/A')}\n\n"
         
-        total_products = len(products)
-        context += f"📊 SEARCH RESULTS: Found {total_products} matching products in our database of 52,000+ items\n\n"
-        
-        if requirements:
-            context += "=== EXTRACTED CUSTOMER REQUIREMENTS ===\n"
-            
-            categories = requirements.get('product_categories', [])
-            if categories:
-                context += f"🎯 Product Categories: {', '.join(categories)}\n"
-            
-            tech_specs = requirements.get('technical_specs', {})
-            if tech_specs:
-                context += f"⚙️ Technical Requirements: {', '.join([f'{k}: {v}' for k, v in tech_specs.items()])}\n"
-            
-            business_reqs = requirements.get('business_requirements', {})
-            if business_reqs:
-                context += f"🏢 Business Context: {json.dumps(business_reqs, indent=2)}\n"
-            
-            context += "\n"
-        
-        # Retrieval confidence
+        # Add confidence and method info
         confidence = retrieval_result.get('retrieval_confidence', 0)
-        context += f"🎯 RECOMMENDATION CONFIDENCE: {confidence:.1%}\n"
+        retrieval_method = retrieval_result.get('retrieval_method', 'unknown')
+        
+        context += f"🎯 HYBRID SEARCH CONFIDENCE: {confidence:.1%}\n"
+        context += f"🔧 RETRIEVAL METHOD: {retrieval_method}\n"
         
         if confidence < 0.5:
-            context += "⚠️ Low confidence - Ask more discovery questions to improve recommendations\n"
+            context += "⚠️ Low confidence - Ask more discovery questions for better semantic matching\n"
         elif confidence > 0.8:
-            context += "✅ High confidence - Excellent product-customer match identified!\n"
+            context += "✅ High confidence - Excellent keyword + semantic match!\n"
         
-        context += "\n💡 **Use these REAL products from our database to provide specific, accurate recommendations with actual pricing!**"
+        context += "\n💡 **Use these REAL products found through hybrid search (keyword + AI semantic) to provide specific recommendations!**"
         
         return context
     

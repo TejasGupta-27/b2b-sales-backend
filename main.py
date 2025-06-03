@@ -24,6 +24,7 @@ from routes.quotes import router as quotes_router
 # Import AI services
 from ai_services.factory import AIServiceFactory
 from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
+from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from ai_services.base import AIMessage
 
 # Import models
@@ -31,7 +32,8 @@ from models.chat import MessageType, ChatRequest, ChatResponse
 from models.lead import Lead
 
 # Import services
-from services.elasticsearch_service import elasticsearch_service
+from services.elasticsearch_service import get_elasticsearch_service
+from services.chroma_service import ChromaDBService
 
 # Import configuration
 from config import settings
@@ -107,26 +109,63 @@ class LeadResponse(BaseModel):
     created_at: str
     last_contact: Optional[str] = None
 
+# Add ChromaDB service initialization
+chroma_service = None
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialize all services on startup"""
+    """Initialize services on startup"""
+    global chroma_service
+    
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
         
-        # Test database connection
-        if not test_connection():
-            logger.error("❌ Database connection failed")
-            raise Exception("Database connection failed")
+        # Test database connection (remove await since it's not async)
+        test_connection()
         
         # Create database tables
         create_tables()
-        logger.info("✅ Database initialized")
         
-        # Initialize Elasticsearch
-        await elasticsearch_service.initialize()
-        logger.info("✅ Elasticsearch initialized")
+        # Initialize Elasticsearch (with error handling)
+        try:
+            elasticsearch_service = get_elasticsearch_service()
+            await elasticsearch_service.initialize()
+            logger.info("✅ Elasticsearch initialized successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Elasticsearch initialization failed: {e}")
+            logger.info("🔄 Continuing with fallback data...")
         
-        logger.info("🎉 Startup completed successfully!")
+        # Initialize ChromaDB if hybrid retriever is enabled
+        if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
+            try:
+                chroma_service = ChromaDBService(
+                    azure_embedding_endpoint=settings.azure_embedding_endpoint,
+                    azure_embedding_key=settings.azure_embedding_api_key
+                )
+                await chroma_service.initialize()
+                logger.info("✅ ChromaDB initialized successfully")
+                
+                # Check if ChromaDB is empty and needs population
+                stats = await chroma_service.get_collection_stats()
+                if stats["products_count"] == 0 and stats["solutions_count"] == 0:
+                    logger.info("🔄 ChromaDB is empty, loading data from JSON files...")
+                    result = await chroma_service.load_limited_data_from_json(max_per_file=50)
+                    logger.info(f"✅ ChromaDB data loading completed: {result}")
+                elif settings.force_reload_data:
+                    logger.info("🔄 Force reload enabled, reloading ChromaDB data...")
+                    result = await chroma_service.load_limited_data_from_json(max_per_file=50)
+                    logger.info(f"✅ ChromaDB force reload completed: {result}")
+                else:
+                    logger.info(f"✅ ChromaDB already has data: {stats}")
+                
+            except Exception as chroma_error:
+                logger.error(f"❌ ChromaDB initialization failed: {chroma_error}")
+                chroma_service = None
+                logger.info("🔄 Continuing without ChromaDB...")
+        else:
+            logger.info("⚠️ ChromaDB disabled or Azure embeddings not configured")
+        
+        logger.info("✅ Application startup completed")
         
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
@@ -134,8 +173,13 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Clean up on shutdown"""
-    await elasticsearch_service.close()
+    """Cleanup on shutdown"""
+    try:
+        elasticsearch_service = get_elasticsearch_service()
+        await elasticsearch_service.close()
+        logger.info("✅ Elasticsearch connection closed")
+    except Exception as e:
+        logger.warning(f"⚠️ Error during shutdown: {e}")
 
 @app.get("/")
 async def root():
@@ -143,9 +187,10 @@ async def root():
 
 @app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
-    """Enhanced sales chat endpoint with multi-agent collaboration"""
+    """Enhanced sales chat endpoint with hybrid retrieval"""
+    
     try:
-        logger.info(f"🚀 Enhanced Sales      Chat Request: {request.message}")
+        logger.info(f"🚀 Enhanced Sales Chat Request: {request.message}")
         
         # Handle lead management - fix enum usage
         lead_id = request.lead_id
@@ -156,13 +201,30 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 company_name="Unknown",
                 contact_name="Unknown", 
                 email="unknown@example.com",
-                status="NEW",  # Use uppercase to match database enum
+                status=LeadStatus.NEW,  # Use enum directly
                 created_at=datetime.now()
             )
             db.add(lead)
-            db.flush()
+            db.commit()  # Commit the lead first
+            logger.info(f"Created new lead: {lead_id}")
+        else:
+            # Check if lead exists
+            existing_lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
+            if not existing_lead:
+                # Create lead if it doesn't exist
+                lead = DBLead(
+                    id=lead_id,
+                    company_name="Unknown",
+                    contact_name="Unknown", 
+                    email="unknown@example.com",
+                    status=LeadStatus.NEW,
+                    created_at=datetime.now()
+                )
+                db.add(lead)
+                db.commit()
+                logger.info(f"Created missing lead: {lead_id}")
         
-        # Save user message - fix enum usage
+        # Save user message - now the lead definitely exists
         user_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
@@ -171,7 +233,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             stage=request.conversation_stage or "discovery"
         )
         db.add(user_message)
-        db.flush()
+        db.commit()  # Commit the user message
         
         # Prepare conversation history
         messages = []
@@ -180,12 +242,8 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
         ).order_by(DBChatMessage.created_at).all()
         
         for msg in existing_messages:
-            role = "user" if msg.message_type == MessageType.USER else "assistant"
+            role = "user" if msg.message_type == MessageType.USER.value else "assistant"
             messages.append(AIMessage(role=role, content=msg.content))
-        
-        # Create Enhanced B2B Sales Agent with Elasticsearch integration
-        base_provider = AIServiceFactory.create_provider(request.provider)
-        enhanced_agent = EnhancedB2BSalesAgent(base_provider)
         
         # Get customer context from the lead
         customer_context = None
@@ -201,12 +259,34 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 "timeline": getattr(lead_record, 'decision_timeline', None)
             }
         
-        # Generate enhanced response with multi-agent collaboration
-        response = await enhanced_agent.generate_response(
-            messages, 
-            customer_context=customer_context,
-            conversation_stage=request.conversation_stage or "discovery"
-        )
+        # Create Enhanced B2B Sales Agent with better error handling
+        try:
+            base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+            enhanced_agent = EnhancedB2BSalesAgent(
+                base_provider=base_provider,
+                use_hybrid_retriever=settings.use_hybrid_retriever
+            )
+            
+            # Initialize if needed
+            await enhanced_agent.initialize()
+            
+            # Generate response with error handling
+            response = await enhanced_agent.generate_response(
+                messages, 
+                customer_context=customer_context
+            )
+            
+        except Exception as agent_error:
+            logger.error(f"Agent error: {agent_error}")
+            # Fallback to basic response
+            base_provider = AIServiceFactory.create_provider(request.provider)
+            response = await base_provider.generate_response(messages)
+            
+            # Add error metadata
+            if not response.metadata:
+                response.metadata = {}
+            response.metadata['agent_error'] = str(agent_error)
+            response.metadata['fallback_used'] = True
         
         # Save assistant response with enhanced metadata
         response_metadata = {
@@ -254,16 +334,16 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
         return chat_response
         
     except Exception as e:
-        logger.error(f"❌ Enhanced sales chat error: {str(e)}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in sales chat endpoint")
+        db.rollback()  # Add rollback on error
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Keep all your existing working endpoints
 @app.get("/api/products")
 async def get_products():
     """Get available products and pricing"""
     base_provider = AIServiceFactory.create_provider("azure_openai")
-    sales_agent = B2BSalesAgent(base_provider)
+    sales_agent = EnhancedB2BSalesAgent(base_provider)
     
     return {"products": sales_agent.product_catalog}
 
@@ -271,7 +351,7 @@ async def get_products():
 async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation (legacy endpoint)"""
     base_provider = AIServiceFactory.create_provider("azure_openai")
-    sales_agent = B2BSalesAgent(base_provider)
+    sales_agent = EnhancedB2BSalesAgent(base_provider)
     
     quote = await sales_agent.generate_quote(quote_request)
     return {"quote": quote}
@@ -294,28 +374,28 @@ async def send_message(request: ChatRequest):
             # Check if lead exists, create if not
             lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
             if not lead:
-                # Create new lead with basic info - fix enum usage
+                # Create new lead with basic info
                 lead = DBLead(
                     id=lead_id,
                     company_name="Unknown",
                     contact_name="Unknown",
                     email="unknown@example.com",
-                    status="NEW"  # Use uppercase to match database enum
+                    status=LeadStatus.NEW  # Use the enum directly
                 )
                 db.add(lead)
-                db.flush()
+                db.commit()  # Commit the lead first
                 logger.info(f"Created new lead: {lead_id}")
             
-            # Save user message to database FIRST - fix enum usage
+            # Save user message to database
             user_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
-                message_type=MessageType.USER.value,  # Use .value to get the string
+                message_type=MessageType.USER.value,
                 content=request.message,
                 stage=request.conversation_stage or "discovery"
             )
             db.add(user_message)
-            db.flush()
+            db.commit()  # Commit the user message
             logger.info(f"Saved user message to database: {user_message.id}")
             
             # Prepare messages for AI (include conversation history)
@@ -327,18 +407,18 @@ async def send_message(request: ChatRequest):
             ).order_by(DBChatMessage.created_at).all()
             
             for msg in existing_messages:
-                role = "user" if msg.message_type == MessageType.USER else "assistant"
+                role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
             
             # Get AI response
             ai_provider = AIServiceFactory.create_provider()
             response = await ai_provider.generate_response(messages)
             
-            # Save assistant response to database - fix enum usage
+            # Save assistant response to database
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
-                message_type=MessageType.ASSISTANT.value,  # Use .value to get the string
+                message_type=MessageType.ASSISTANT.value,
                 content=response.content,
                 stage=request.conversation_stage or "discovery",
                 message_metadata={
@@ -393,7 +473,7 @@ async def send_message(request: ChatRequest):
         logger.error(f"Error in chat message: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# ... keep all your other existing endpoints ...
+
 
 # Add new Elasticsearch endpoints
 @app.get("/api/admin/reindex")
@@ -699,6 +779,116 @@ async def force_reload_elasticsearch():
         }
     except Exception as e:
         return {
+            "error": str(e)
+        }
+
+@app.get("/api/debug/hybrid-stats")
+async def get_hybrid_stats():
+    """Get statistics about hybrid search capabilities"""
+    try:
+        stats = {
+            "elasticsearch": await elasticsearch_service.get_product_stats(),
+            "hybrid_enabled": settings.use_hybrid_retriever,
+            "azure_embeddings_configured": bool(settings.azure_embedding_endpoint)
+        }
+        
+        if chroma_service:
+            stats["chroma"] = await chroma_service.get_collection_stats()
+        
+        return stats
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/debug/sync-chroma")
+async def sync_chroma_data():
+    """Manually sync limited data from JSON files to ChromaDB"""
+    try:
+        if not chroma_service:
+            return {"error": "ChromaDB not initialized"}
+        
+        # Use limited loading instead of full Elasticsearch sync
+        result = await chroma_service.load_limited_data_from_json(max_per_file=50)
+        stats = await chroma_service.get_collection_stats()
+        
+        return {
+            "message": "ChromaDB limited sync completed (50 items per JSON file)",
+            "loading_result": result,
+            "stats": stats
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+# Add new endpoint for limited population
+@app.post("/api/debug/populate-chroma-limited")
+async def populate_chroma_limited(max_per_file: int = 50):
+    """Populate ChromaDB with limited data from JSON files"""
+    try:
+        if not chroma_service:
+            return {"error": "ChromaDB not initialized"}
+        
+        result = await chroma_service.load_limited_data_from_json(max_per_file=max_per_file)
+        stats = await chroma_service.get_collection_stats()
+        
+        return {
+            "message": f"ChromaDB limited population completed (max {max_per_file} per file)",
+            "loading_result": result,
+            "final_stats": stats
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/debug/chroma-status")
+async def get_chroma_status():
+    """Get detailed ChromaDB status and perform test search"""
+    try:
+        if not chroma_service:
+            return {
+                "status": "not_initialized",
+                "error": "ChromaDB service not available",
+                "reason": "Either hybrid retrieval is disabled or Azure embeddings not configured"
+            }
+        
+        # Get collection stats
+        stats = await chroma_service.get_collection_stats()
+        
+        # Perform test searches if data exists
+        test_results = {}
+        if stats["products_count"] > 0:
+            try:
+                test_products = await chroma_service.semantic_search_products("laptop computer", n_results=3)
+                test_results["product_search"] = {
+                    "query": "laptop computer",
+                    "results_count": len(test_products),
+                    "sample_results": [p.get("name", "Unknown") for p in test_products[:3]]
+                }
+            except Exception as search_error:
+                test_results["product_search"] = {"error": str(search_error)}
+        
+        if stats["solutions_count"] > 0:
+            try:
+                test_solutions = await chroma_service.semantic_search_solutions("business automation", n_results=3)
+                test_results["solution_search"] = {
+                    "query": "business automation", 
+                    "results_count": len(test_solutions),
+                    "sample_results": [s.get("name", "Unknown") for s in test_solutions[:3]]
+                }
+            except Exception as search_error:
+                test_results["solution_search"] = {"error": str(search_error)}
+        
+        return {
+            "status": "healthy",
+            "stats": stats,
+            "test_searches": test_results,
+            "azure_endpoint_configured": bool(settings.azure_embedding_endpoint),
+            "hybrid_retrieval_enabled": settings.use_hybrid_retriever
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
             "error": str(e)
         }
 
