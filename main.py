@@ -20,6 +20,7 @@ from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 # Import routes
 from routes.leads import router as leads_router
 from routes.quotes import router as quotes_router
+from routes.speech import router as speech_router
 
 # Import AI services
 from ai_services.factory import AIServiceFactory
@@ -37,6 +38,10 @@ from services.chroma_service import ChromaDBService
 
 # Import configuration
 from config import settings
+
+# Import speech service
+from services.speech_service import SpeechService
+from dependencies import get_speech_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,9 +63,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Speech service dependency
+async def get_speech_service():
+    """Dependency to get speech service instance."""
+    service = SpeechService(model_name="medium")
+    await service.initialize()
+    try:
+        yield service
+    finally:
+        await service.close()
+
 # Include routers
 app.include_router(leads_router)
 app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
+app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 
 # Keep your working models
 class SalesChatMessage(BaseModel):
@@ -112,10 +128,13 @@ class LeadResponse(BaseModel):
 # Add ChromaDB service initialization
 chroma_service = None
 
+# Initialize speech service
+speech_service = None
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global chroma_service
+    global chroma_service, speech_service
     
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
