@@ -1,31 +1,18 @@
 version: 2.1
 jobs:
-  run-docker-compose:
+  docker-compose-build-up:
     docker:
       - image: cimg/base:stable
     steps:
       - checkout
       - setup_remote_docker
       - run:
-          name: Install Docker Compose
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y docker-compose
+          name: Docker Compose Build and Up (Debug)
+          command: DOCKER_BUILDKIT=1 docker-compose --log-level DEBUG up --build
       - run:
-          name: Ensure .env directory exists
-          command: mkdir -p $HOME/project
-      - run:
-          name: Copy .env file
-          command: |
-            if [ -f .env ]; then cp .env $HOME/project/.env; else touch $HOME/project/.env; fi
-      - run:
-          name: List Environment Variables (for debug)
-          command: printenv
-      - run:
-          name: Run Docker Compose (build and up)
-          command: docker-compose up --build -d
+          name: Show Docker Compose Container Logs
+          command: docker-compose logs
 workflows:
-  version: 2
-  docker-compose-workflow:
+  build_and_up:
     jobs:
-      - run-docker-compose
+      - docker-compose-build-up
