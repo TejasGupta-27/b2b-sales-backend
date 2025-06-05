@@ -1,0 +1,24 @@
+version: 2.1
+jobs:
+  docker-compose-build-up:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Create .env file if missing
+          command: |
+            if [ ! -f .env ]; then
+              echo "# Auto-generated .env file for CI" > .env
+            fi
+      - run:
+          name: Docker Compose Build and Up (Debug)
+          command: DOCKER_BUILDKIT=1 docker-compose --log-level DEBUG up --build
+      - run:
+          name: Show Docker Compose Container Logs
+          command: docker-compose logs
+workflows:
+  build_and_up:
+    jobs:
+      - docker-compose-build-up
