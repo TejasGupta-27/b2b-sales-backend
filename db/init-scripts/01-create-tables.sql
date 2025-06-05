@@ -1,6 +1,12 @@
 -- Create enum type for message types
 CREATE TYPE messagetype AS ENUM ('USER', 'ASSISTANT', 'SYSTEM');
 
+-- Create leads table first
+CREATE TABLE IF NOT EXISTS leads (
+    id VARCHAR PRIMARY KEY,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create chat_messages table
 CREATE TABLE IF NOT EXISTS chat_messages (
     id VARCHAR PRIMARY KEY,
@@ -15,4 +21,4 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_chat_messages_lead_id ON chat_messages(lead_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at); 
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at);
