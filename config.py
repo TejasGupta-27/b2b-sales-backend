@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # Azure Embeddings (separate deployment)
     azure_embedding_endpoint: Optional[str] = None
     azure_embedding_api_key: Optional[str] = None
+    azure_embedding_deployment: str
     azure_embedding_deployment_name: str = "text-embedding-ada-002"
     
     # Hugging Face

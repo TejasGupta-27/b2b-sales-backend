@@ -7,7 +7,7 @@ from typing import List, Optional
 from langchain_community.embeddings.azure_openai import AzureOpenAIEmbeddings
 from langchain_chroma import Chroma
 from pydantic import model_validator
-import newegg_scraper
+import web_scraper
 
 CHROMA_DIR = "./chroma_store"
 
@@ -67,9 +67,9 @@ def extract_metadata(chunk: str, search_query: str) -> dict:
 
 def build_chroma_vectorstore(search_query: str, clear_existing: bool = False):
     print(f"[INFO] Building Chroma vector DB for: {search_query}")
-    raw_text = newegg_scraper.text_data(search_query)
+    raw_text = web_scraper.text_data(search_query)
     product_blocks = parse_products(raw_text)
-    chunks = [newegg_scraper.clean_text(p) for p in product_blocks]
+    chunks = [web_scraper.clean_text(p) for p in product_blocks]
 
     embedder = get_embedder()
     vectordb = Chroma(

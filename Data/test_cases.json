@@ -1,0 +1,84 @@
+{
+    "test_cases": [
+        {
+            "question": "I need a high-performance workstation for 3D rendering and video editing. My budget is around $5000.",
+            "ground_truth": "Based on your requirements for 3D rendering and video editing, I recommend our Professional Workstation Pro X1. It features a high-end GPU, powerful CPU, and ample RAM to handle demanding creative workloads. The system is optimized for applications like Adobe Creative Suite and 3D modeling software.",
+            "customer_context": {
+                "company_size": "medium",
+                "industry": "creative_services",
+                "use_case": "content_creation"
+            },
+            "expected_stage": "solution_presentation"
+        },
+        {
+            "question": "We're looking to upgrade our server infrastructure. We need something that can handle high traffic and multiple databases.",
+            "ground_truth": "For your server infrastructure upgrade, I recommend our Enterprise Server Series E2. It's designed for high-traffic environments and features redundant power supplies, enterprise-grade storage, and advanced networking capabilities. The system can efficiently handle multiple databases and concurrent user connections.",
+            "customer_context": {
+                "company_size": "enterprise",
+                "industry": "technology",
+                "use_case": "server_infrastructure"
+            },
+            "expected_stage": "solution_presentation"
+        },
+        {
+            "question": "What's the best laptop for our sales team? They travel frequently and need good battery life.",
+            "ground_truth": "For your sales team's needs, I recommend our Business Ultrabook B3. It features long battery life (up to 12 hours), lightweight design, and fast performance. The laptop includes essential business features like fingerprint security and high-quality video conferencing capabilities.",
+            "customer_context": {
+                "company_size": "large",
+                "industry": "sales",
+                "use_case": "mobile_workforce"
+            },
+            "expected_stage": "solution_presentation"
+        },
+        {
+            "question": "We need a solution for our data center cooling. Our current system is inefficient and expensive to maintain.",
+            "ground_truth": "For your data center cooling needs, I recommend our Enterprise Cooling Solution ECS-5000. It features advanced thermal management, energy-efficient operation, and remote monitoring capabilities. The system is designed to reduce operational costs while maintaining optimal temperature control.",
+            "customer_context": {
+                "company_size": "enterprise",
+                "industry": "data_center",
+                "use_case": "infrastructure_optimization"
+            },
+            "expected_stage": "solution_presentation"
+        },
+        {
+            "question": "Looking for a gaming PC that can handle the latest games at high settings. Budget is flexible.",
+            "ground_truth": "For high-end gaming, I recommend our Gaming Elite G5. It features the latest GPU technology, high-refresh-rate display support, and advanced cooling. The system is optimized for gaming performance and can handle the latest titles at maximum settings.",
+            "customer_context": {
+                "company_size": "small",
+                "industry": "gaming",
+                "use_case": "high_performance_gaming"
+            },
+            "expected_stage": "solution_presentation"
+        },
+        {
+            "question": "Can you tell me more about your company and what you offer?",
+            "ground_truth": "We are a leading provider of enterprise technology solutions, specializing in high-performance computing systems, data center infrastructure, and business workstations. Our product portfolio includes custom-built workstations, enterprise servers, and specialized solutions for various industries including creative services, technology, and gaming.",
+            "customer_context": {
+                "company_size": "medium",
+                "industry": "technology",
+                "use_case": "initial_inquiry"
+            },
+            "expected_stage": "initial_discovery"
+        },
+        {
+            "question": "What kind of support and maintenance do you offer with your solutions?",
+            "ground_truth": "We offer comprehensive support and maintenance packages with all our solutions. This includes 24/7 technical support, regular maintenance checks, remote monitoring, and on-site service when needed. Our enterprise customers also get dedicated account managers and priority response times.",
+            "customer_context": {
+                "company_size": "enterprise",
+                "industry": "technology",
+                "use_case": "support_inquiry"
+            },
+            "expected_stage": "deep_discovery"
+        },
+        {
+            "question": "Yes, I'm interested in the Professional Workstation Pro X1. Can you provide a quote?",
+            "ground_truth": "I'll prepare a detailed quote for the Professional Workstation Pro X1. Based on your requirements for 3D rendering and video editing, I'll include the recommended configuration with high-end GPU, powerful CPU, and ample RAM. I'll also add our premium support package to ensure optimal performance.",
+            "customer_context": {
+                "company_size": "medium",
+                "industry": "creative_services",
+                "use_case": "content_creation"
+            },
+            "expected_stage": "quote_ready"
+        }
+    ]
+} 
