@@ -7,6 +7,12 @@ jobs:
       - checkout
       - setup_remote_docker
       - run:
+          name: Create .env file if missing
+          command: |
+            if [ ! -f .env ]; then
+              echo "# Auto-generated .env file for CI" > .env
+            fi
+      - run:
           name: Docker Compose Build and Up (Debug)
           command: DOCKER_BUILDKIT=1 docker-compose --log-level DEBUG up --build
       - run:
