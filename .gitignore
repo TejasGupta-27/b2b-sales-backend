@@ -36,10 +36,6 @@ ENV/
 logs/
 *.log
 
-# Local data
-Data/json/*
-!Data/json/.gitkeep
-
 # Coverage
 .coverage
 coverage/
