@@ -125,6 +125,14 @@ class LeadResponse(BaseModel):
     created_at: str
     last_contact: Optional[str] = None
 
+class ChatSearchRequest(BaseModel):
+    query: str
+    lead_id: Optional[str] = None
+    limit: Optional[int] = 10
+    offset: Optional[int] = 0
+    use_fuzzy: Optional[bool] = False
+    similarity_threshold: Optional[float] = 0.3
+
 # Add ChromaDB service initialization
 chroma_service = None
 
@@ -372,7 +380,7 @@ async def generate_quote(quote_request: Dict[str, Any]):
     return {"quote": quote}
 
 @app.post("/api/chat/send")
-async def send_message(request: ChatRequest):
+async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # Get speech service
         speech_service = SpeechService(model_name="medium")
@@ -390,7 +398,6 @@ async def send_message(request: ChatRequest):
                     status=LeadStatus.NEW,
                     created_at=datetime.now()
                 )
-                db = next(get_db())
                 db.add(lead)
                 db.commit()
                 logger.info(f"Created new lead: {lead_id}")
@@ -461,6 +468,7 @@ async def send_message(request: ChatRequest):
             
     except Exception as e:
         logger.error(f"Error in send_message endpoint: {str(e)}")
+        db.rollback()  # Add rollback on error
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
 
 # Add new Elasticsearch endpoints
@@ -879,6 +887,84 @@ async def get_chroma_status():
             "status": "error",
             "error": str(e)
         }
+
+@app.post("/api/chat/search")
+async def search_chat_messages(request: ChatSearchRequest, db: Session = Depends(get_db)):
+    """Search chat messages by content with optional fuzzy search"""
+    try:
+        # Build the base query
+        query = db.query(DBChatMessage)
+        
+        # Add lead_id filter if provided
+        if request.lead_id:
+            query = query.filter(DBChatMessage.lead_id == request.lead_id)
+        
+        if request.use_fuzzy:
+            # Use trigram similarity for fuzzy search
+            similarity_query = text("""
+                content % :search_query AND 
+                similarity(content, :search_query) > :similarity_threshold
+            """)
+            query = query.filter(similarity_query).params(
+                search_query=request.query,
+                similarity_threshold=request.similarity_threshold
+            )
+            # Order by similarity score
+            query = query.order_by(text("similarity(content, :search_query) DESC"))
+        else:
+            # Use full-text search
+            search_query = f"to_tsquery('english', :search_query)"
+            query = query.filter(text(f"to_tsvector('english', content) @@ {search_query}"))
+            query = query.params(search_query=request.query.replace(' ', ' & '))
+            # Order by creation time
+            query = query.order_by(DBChatMessage.created_at.desc())
+        
+        # Get total count
+        total_count = query.count()
+        
+        # Add pagination
+        query = query.offset(request.offset).limit(request.limit)
+        
+        # Execute query
+        messages = query.all()
+        
+        # Format results
+        results = []
+        for msg in messages:
+            result = {
+                "id": msg.id,
+                "lead_id": msg.lead_id,
+                "role": msg.message_type.value.lower(),
+                "content": msg.content,
+                "timestamp": msg.created_at.isoformat(),
+                "stage": msg.stage,
+                "metadata": msg.message_metadata
+            }
+       
+            if request.use_fuzzy:
+                similarity_score = db.execute(
+                    text("SELECT similarity(content, :query) FROM chat_messages WHERE id = :id"),
+                    {"query": request.query, "id": msg.id}
+                ).scalar()
+                result["similarity_score"] = round(similarity_score, 3)
+            
+            results.append(result)
+        
+        return {
+            "results": results,
+            "total": total_count,
+            "offset": request.offset,
+            "limit": request.limit,
+            "search_type": "fuzzy" if request.use_fuzzy else "exact"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching chat messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching messages: {str(e)}")
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
