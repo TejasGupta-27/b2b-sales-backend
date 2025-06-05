@@ -11,6 +11,10 @@ from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
 from config import settings
 
+from services.ppt_generator import extract_ppt_structure, generate_ppt
+import os
+
+
 class EnhancedB2BSalesAgent(AIProvider):
     """Enhanced B2B Sales Agent with hybrid retrieval capabilities"""
     
@@ -454,6 +458,24 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 print(f"✅ Quote Agent provided enhanced quote with ID: {quote.get('id')}")
                 print(f"📄 PDF URL: {quote.get('pdf_url', 'Not generated')}")
                 
+                # === Generate PPT Deck ===
+                try:
+                    print("📊 Generating PowerPoint pitch deck from quote...")
+                    ppt_structure = extract_ppt_structure(quote["text"])  # or quote["content"]
+                    
+                    ppt_dir = "ppt"
+                    os.makedirs(ppt_dir, exist_ok=True)
+                    ppt_path = os.path.join(ppt_dir, f"quote_{quote.get('id', 'anon')}_deck.pptx")
+                    
+                    generate_ppt(ppt_structure, output_path=ppt_path)
+                    
+                    print(f"✅ PPT generated: {ppt_path}")
+                    response.metadata["ppt_path"] = ppt_path  # Optional: link for download
+                except Exception as ppt_error:
+                    print(f"❌ PPT generation failed: {ppt_error}")
+                    response.metadata["ppt_error"] = str(ppt_error)
+
+                
                 # Add quote to response metadata
                 response.metadata['quote'] = quote
                 response.metadata['quote_generated'] = True
@@ -461,6 +483,7 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 
                 # Enhance sales response to incorporate the quote
                 response = self._enhance_response_with_dynamic_quote(response, quote)
+
             else:
                 print("❌ Quote agent couldn't generate quote from enhanced conversation")
                 response.metadata['quote_generation_failed'] = True
@@ -705,6 +728,14 @@ APPROACH:
             
             response.content += f"\n\nThis quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
             
+            # Add optional PowerPoint download line
+            ppt_path = response.metadata.get("ppt_path")
+            if ppt_path:
+                ppt_url = f"/download/{os.path.basename(ppt_path)}"  # Or adjust for your hosting method
+                response.content += f"\n\n📊 **[Download Sales Pitch Deck]({ppt_url})**"
+
+
+
         return response
     
     def _enhanced_quote_readiness_check(self, messages: List[AIMessage], flow_analysis: Dict[str, Any]) -> bool:

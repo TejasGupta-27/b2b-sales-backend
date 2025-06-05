@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -462,6 +463,19 @@ async def send_message(request: ChatRequest):
     except Exception as e:
         logger.error(f"Error in send_message endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
+
+# Add new ppt downloads endpoints
+@app.get("/download/{filename}", tags=["presentation"])
+async def download_ppt(filename: str):
+    """Serve the generated PowerPoint presentation"""
+    ppt_dir = "ppt"
+    file_path = os.path.join(ppt_dir, filename)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Presentation file not found.")
+
+    return FileResponse(file_path, media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation', filename=filename)
+
 
 # Add new Elasticsearch endpoints
 @app.get("/api/admin/reindex")
