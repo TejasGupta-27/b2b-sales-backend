@@ -207,151 +207,147 @@ async def root():
 @app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     """Enhanced sales chat endpoint with hybrid retrieval"""
-    
     try:
-        logger.info(f"🚀 Enhanced Sales Chat Request: {request.message}")
+        # Get speech service
+        speech_service = SpeechService(model_name="medium")
+        await speech_service.initialize()
         
-        # Handle lead management - fix enum usage
-        lead_id = request.lead_id
-        if not lead_id:
-            lead_id = str(uuid.uuid4())
-            lead = DBLead(
-                id=lead_id,
-                company_name="Unknown",
-                contact_name="Unknown", 
-                email="unknown@example.com",
-                status=LeadStatus.NEW,  # Use enum directly
-                created_at=datetime.now()
-            )
-            db.add(lead)
-            db.commit()  # Commit the lead first
-            logger.info(f"Created new lead: {lead_id}")
-        else:
-            # Check if lead exists
-            existing_lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
-            if not existing_lead:
-                # Create lead if it doesn't exist
+        try:
+            # Handle lead management
+            lead_id = request.lead_id or str(uuid.uuid4())
+            if not request.lead_id:
                 lead = DBLead(
                     id=lead_id,
                     company_name="Unknown",
-                    contact_name="Unknown", 
+                    contact_name="Unknown",
                     email="unknown@example.com",
                     status=LeadStatus.NEW,
                     created_at=datetime.now()
                 )
                 db.add(lead)
                 db.commit()
-                logger.info(f"Created missing lead: {lead_id}")
-        
-        # Save user message - now the lead definitely exists
-        user_message = DBChatMessage(
-            id=str(uuid.uuid4()),
-            lead_id=lead_id,
-            message_type=MessageType.USER.value,  # Use .value to get the string
-            content=request.message,
-            stage=request.conversation_stage or "discovery"
-        )
-        db.add(user_message)
-        db.commit()  # Commit the user message
-        
-        # Prepare conversation history
-        messages = []
-        existing_messages = db.query(DBChatMessage).filter(
-            DBChatMessage.lead_id == lead_id
-        ).order_by(DBChatMessage.created_at).all()
-        
-        for msg in existing_messages:
-            role = "user" if msg.message_type == MessageType.USER.value else "assistant"
-            messages.append(AIMessage(role=role, content=msg.content))
-        
-        # Get customer context from the lead
-        customer_context = None
-        lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
-        if lead_record:
-            customer_context = {
-                "company_name": lead_record.company_name,
-                "contact_name": lead_record.contact_name,
-                "email": lead_record.email,
-                "company_size": getattr(lead_record, 'company_size', None),
-                "industry": getattr(lead_record, 'industry', None),
-                "budget_range": getattr(lead_record, 'budget_range', None),
-                "timeline": getattr(lead_record, 'decision_timeline', None)
-            }
-        
-        # Create Enhanced B2B Sales Agent with better error handling
-        try:
-            base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-            enhanced_agent = EnhancedB2BSalesAgent(
-                base_provider=base_provider,
-                use_hybrid_retriever=settings.use_hybrid_retriever
+                logger.info(f"Created new lead: {lead_id}")
+            
+            # Save user message
+            user_message = DBChatMessage(
+                id=str(uuid.uuid4()),
+                lead_id=lead_id,
+                message_type=MessageType.USER.value,
+                content=request.message,
+                stage=request.conversation_stage or "discovery"
+            )
+            db.add(user_message)
+            db.commit()
+            
+            # Get conversation history
+            messages = []
+            existing_messages = db.query(DBChatMessage).filter(
+                DBChatMessage.lead_id == lead_id
+            ).order_by(DBChatMessage.created_at).all()
+            
+            for msg in existing_messages:
+                role = "user" if msg.message_type == MessageType.USER.value else "assistant"
+                messages.append(AIMessage(role=role, content=msg.content))
+            
+            # Get customer context from the lead
+            customer_context = None
+            lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
+            if lead_record:
+                customer_context = {
+                    "company_name": lead_record.company_name,
+                    "contact_name": lead_record.contact_name,
+                    "email": lead_record.email,
+                    "company_size": getattr(lead_record, 'company_size', None),
+                    "industry": getattr(lead_record, 'industry', None),
+                    "budget_range": getattr(lead_record, 'budget_range', None),
+                    "timeline": getattr(lead_record, 'decision_timeline', None)
+                }
+            
+            # Create Enhanced B2B Sales Agent with better error handling
+            try:
+                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+                enhanced_agent = EnhancedB2BSalesAgent(
+                    base_provider=base_provider,
+                    use_hybrid_retriever=settings.use_hybrid_retriever
+                )
+                
+                # Initialize if needed
+                await enhanced_agent.initialize()
+                
+                # Generate response with error handling
+                response = await enhanced_agent.generate_response(
+                    messages, 
+                    customer_context=customer_context
+                )
+                
+            except Exception as agent_error:
+                logger.error(f"Agent error: {agent_error}")
+                # Fallback to basic response
+                base_provider = AIServiceFactory.create_provider(request.provider)
+                response = await base_provider.generate_response(messages)
+                
+                # Add error metadata
+                if not response.metadata:
+                    response.metadata = {}
+                response.metadata['agent_error'] = str(agent_error)
+                response.metadata['fallback_used'] = True
+            
+            # Generate speech for the response
+            speech_result = await speech_service.text_to_speech(
+                text=response.content,
+                language="en"  # Default to English for now
             )
             
-            # Initialize if needed
-            await enhanced_agent.initialize()
-            
-            # Generate response with error handling
-            response = await enhanced_agent.generate_response(
-                messages, 
-                customer_context=customer_context
-            )
-            
-        except Exception as agent_error:
-            logger.error(f"Agent error: {agent_error}")
-            # Fallback to basic response
-            base_provider = AIServiceFactory.create_provider(request.provider)
-            response = await base_provider.generate_response(messages)
-            
-            # Add error metadata
-            if not response.metadata:
-                response.metadata = {}
-            response.metadata['agent_error'] = str(agent_error)
-            response.metadata['fallback_used'] = True
-        
-        # Save assistant response with enhanced metadata
-        response_metadata = {
-            "model": response.model,
-            "provider": response.provider,
-            "usage": response.usage,
-            "enhanced_sales_agent": True
-        }
-        
-        # Add product intelligence if available
-        if hasattr(enhanced_agent, 'product_recommendations'):
-            response_metadata['product_recommendations'] = enhanced_agent.product_recommendations
-        
-        # Add quote information if generated
-        if response.metadata and 'quote' in response.metadata:
-            response_metadata['quote'] = response.metadata['quote']
-        
-        assistant_message = DBChatMessage(
-            id=str(uuid.uuid4()),
-            lead_id=lead_id,
-            message_type=MessageType.ASSISTANT.value,  # Use .value to get the string
-            content=response.content,
-            stage=request.conversation_stage or "discovery",
-            message_metadata=response_metadata
-        )
-        db.add(assistant_message)
-        db.commit()
-        
-        # Prepare enhanced response
-        chat_response = ChatResponse(
-            message=response.content,
-            lead_id=lead_id,
-            conversation_stage=request.conversation_stage or "discovery",
-            metadata={
-                "enhanced_sales_agent": True,
-                "provider": response.provider,
+            # Save assistant response with enhanced metadata
+            response_metadata = {
                 "model": response.model,
+                "provider": response.provider,
                 "usage": response.usage,
-                "product_intelligence": getattr(enhanced_agent, 'product_recommendations', {}),
-                "timestamp": datetime.now().isoformat()
+                "enhanced_sales_agent": True,
+                "speech_data": speech_result
             }
-        )
-        
-        logger.info(f"✅ Enhanced Sales Chat Response generated for lead: {lead_id}")
-        return chat_response
-        
+            
+            # Add product intelligence if available
+            if hasattr(enhanced_agent, 'product_recommendations'):
+                response_metadata['product_recommendations'] = enhanced_agent.product_recommendations
+            
+            # Add quote information if generated
+            if response.metadata and 'quote' in response.metadata:
+                response_metadata['quote'] = response.metadata['quote']
+            
+            assistant_message = DBChatMessage(
+                id=str(uuid.uuid4()),
+                lead_id=lead_id,
+                message_type=MessageType.ASSISTANT.value,
+                content=response.content,
+                stage=request.conversation_stage or "discovery",
+                message_metadata=response_metadata
+            )
+            db.add(assistant_message)
+            db.commit()
+            
+            # Prepare enhanced response
+            chat_response = ChatResponse(
+                message=response.content,
+                lead_id=lead_id,
+                conversation_stage=request.conversation_stage or "discovery",
+                metadata={
+                    "enhanced_sales_agent": True,
+                    "provider": response.provider,
+                    "model": response.model,
+                    "usage": response.usage,
+                    "product_intelligence": getattr(enhanced_agent, 'product_recommendations', {}),
+                    "timestamp": datetime.now().isoformat(),
+                    "speech_data": speech_result
+                }
+            )
+            
+            logger.info(f"✅ Enhanced Sales Chat Response generated for lead: {lead_id}")
+            return chat_response
+            
+        finally:
+            await speech_service.close()
+            
     except Exception as e:
         logger.exception("Error in sales chat endpoint")
         db.rollback()  # Add rollback on error
@@ -378,34 +374,28 @@ async def generate_quote(quote_request: Dict[str, Any]):
 @app.post("/api/chat/send")
 async def send_message(request: ChatRequest):
     try:
-        logger.info(f"Received chat request: {request}")
-        
-        # Generate or use existing lead ID
-        lead_id = request.lead_id
-        if not lead_id:
-            lead_id = f"temp_{uuid.uuid4().hex[:8]}"
-            logger.info(f"Generated temporary lead ID: {lead_id}")
-        
-        # Get database session
-        db = next(get_db())
+        # Get speech service
+        speech_service = SpeechService(model_name="medium")
+        await speech_service.initialize()
         
         try:
-            # Check if lead exists, create if not
-            lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
-            if not lead:
-                # Create new lead with basic info
+            # Handle lead management
+            lead_id = request.lead_id or str(uuid.uuid4())
+            if not request.lead_id:
                 lead = DBLead(
                     id=lead_id,
                     company_name="Unknown",
                     contact_name="Unknown",
                     email="unknown@example.com",
-                    status=LeadStatus.NEW  # Use the enum directly
+                    status=LeadStatus.NEW,
+                    created_at=datetime.now()
                 )
+                db = next(get_db())
                 db.add(lead)
-                db.commit()  # Commit the lead first
+                db.commit()
                 logger.info(f"Created new lead: {lead_id}")
             
-            # Save user message to database
+            # Save user message
             user_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
@@ -414,13 +404,10 @@ async def send_message(request: ChatRequest):
                 stage=request.conversation_stage or "discovery"
             )
             db.add(user_message)
-            db.commit()  # Commit the user message
-            logger.info(f"Saved user message to database: {user_message.id}")
+            db.commit()
             
-            # Prepare messages for AI (include conversation history)
+            # Get conversation history
             messages = []
-            
-            # Add conversation history from database
             existing_messages = db.query(DBChatMessage).filter(
                 DBChatMessage.lead_id == lead_id
             ).order_by(DBChatMessage.created_at).all()
@@ -433,6 +420,12 @@ async def send_message(request: ChatRequest):
             ai_provider = AIServiceFactory.create_provider()
             response = await ai_provider.generate_response(messages)
             
+            # Generate speech for the response
+            speech_result = await speech_service.text_to_speech(
+                text=response.content,
+                language="en"  # Default to English for now
+            )
+            
             # Save assistant response to database
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
@@ -443,7 +436,8 @@ async def send_message(request: ChatRequest):
                 message_metadata={
                     "model": response.model,
                     "provider": response.provider,
-                    "usage": response.usage
+                    "usage": response.usage,
+                    "speech_data": speech_result
                 }
             )
             db.add(assistant_message)
@@ -457,42 +451,17 @@ async def send_message(request: ChatRequest):
                 metadata={
                     "model": response.model,
                     "provider": response.provider,
-                    "usage": response.usage
-                }
-            )
-            
-        except SQLAlchemyError as db_error:
-            db.rollback()
-            logger.error(f"Database error: {str(db_error)}")
-            # Fallback to AI response without database
-            ai_provider = AIServiceFactory.create_provider()
-            messages = [AIMessage(role="user", content=request.message)]
-            response = await ai_provider.generate_response(messages)
-            
-            return ChatResponse(
-                message=response.content,
-                lead_id=lead_id,
-                conversation_stage=request.conversation_stage or "discovery",
-                metadata={
-                    "model": response.model,
-                    "provider": response.provider,
                     "usage": response.usage,
-                    "warning": "Database unavailable - conversation not saved"
+                    "speech_data": speech_result
                 }
             )
-        except Exception as general_error:
-            db.rollback()
-            logger.error(f"General error: {str(general_error)}")
-            raise
+            
         finally:
-            db.close()
+            await speech_service.close()
             
     except Exception as e:
-        logger.exception("Error in chat message")
-        logger.error(f"Error in chat message: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
+        logger.error(f"Error in send_message endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
 
 # Add new Elasticsearch endpoints
 @app.get("/api/admin/reindex")

@@ -44,3 +44,6 @@ librosa==0.10.1
 
 # Testing dependencies
 requests
+
+# Added from the code block
+gTTS==2.5.1

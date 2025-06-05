@@ -23,6 +23,10 @@ class AudioData(BaseModel):
     audio_bytes: str  # base64 encoded audio data
     language: Optional[str] = None
 
+class TextToSpeechRequest(BaseModel):
+    text: str
+    language: Optional[str] = "en"
+
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(None),
@@ -116,6 +120,7 @@ async def handle_voice_message(
     """
     Handle voice input just like text input, with an extra transcription step.
     The transcribed text is processed through the enhanced sales chat pipeline.
+    Also includes text-to-speech for the response.
     """
     try:
         # Validate audio file
@@ -226,6 +231,12 @@ async def handle_voice_message(
             response.metadata['agent_error'] = str(agent_error)
             response.metadata['fallback_used'] = True
         
+        # Generate speech for the response
+        speech_result = await speech_service.text_to_speech(
+            text=response.content,
+            language=language or "en"
+        )
+        
         # Save assistant response
         response_metadata = {
             "model": response.model,
@@ -233,7 +244,8 @@ async def handle_voice_message(
             "usage": response.usage,
             "enhanced_sales_agent": True,
             "is_voice_message": True,
-            "transcription_metadata": transcription_result
+            "transcription_metadata": transcription_result,
+            "speech_metadata": speech_result
         }
         
         # Add product intelligence if available
@@ -255,7 +267,7 @@ async def handle_voice_message(
         db.add(assistant_message)
         db.commit()
         
-        # Return enhanced response
+        # Return enhanced response with speech
         return ChatResponse(
             message=response.content,
             lead_id=lead_id,
@@ -268,7 +280,8 @@ async def handle_voice_message(
                 "product_intelligence": getattr(enhanced_agent, 'product_recommendations', {}),
                 "timestamp": datetime.now().isoformat(),
                 "is_voice_message": True,
-                "transcription_metadata": transcription_result
+                "transcription_metadata": transcription_result,
+                "speech_data": speech_result
             }
         )
         
@@ -279,4 +292,35 @@ async def handle_voice_message(
         raise HTTPException(
             status_code=500,
             detail=f"Error processing voice message: {str(e)}"
+        )
+
+@router.post("/text-to-speech")
+async def text_to_speech(
+    request: TextToSpeechRequest,
+    speech_service: SpeechService = Depends(get_speech_service)
+):
+    """
+    Convert text to speech using gTTS.
+    
+    Args:
+        request: TextToSpeechRequest containing text and optional language
+        speech_service: Initialized speech service instance
+        
+    Returns:
+        dict: Contains base64 encoded audio data and metadata
+    """
+    try:
+        result = await speech_service.text_to_speech(
+            text=request.text,
+            language=request.language
+        )
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in text-to-speech endpoint: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error converting text to speech: {str(e)}"
         ) 

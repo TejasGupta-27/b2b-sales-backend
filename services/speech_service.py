@@ -12,6 +12,8 @@ import librosa
 import aiohttp
 import asyncio
 from contextlib import asynccontextmanager
+from gtts import gTTS
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -201,4 +203,47 @@ class SpeechService:
             
         except Exception as e:
             logger.error(f"Error transcribing audio: {str(e)}")
-            raise 
+            raise
+
+    async def text_to_speech(self, text: str, language: str = "en") -> dict:
+        """
+        Convert text to speech using gTTS.
+        
+        Args:
+            text: The text to convert to speech
+            language: The language code (e.g., "en", "ja", "es")
+            
+        Returns:
+            dict: Contains base64 encoded audio data and metadata
+        """
+        try:
+            # Create a temporary file to store the audio
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+                # Generate speech using gTTS
+                tts = gTTS(text=text, lang=language, slow=False)
+                tts.save(temp_file.name)
+                
+                # Read the generated audio file
+                with open(temp_file.name, 'rb') as audio_file:
+                    audio_bytes = audio_file.read()
+                
+                # Convert to base64
+                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                
+                return {
+                    "audio_data": audio_base64,
+                    "format": "mp3",
+                    "language": language,
+                    "text_length": len(text)
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in text-to-speech conversion: {str(e)}")
+            raise
+        finally:
+            # Clean up temporary file
+            if 'temp_file' in locals():
+                try:
+                    os.unlink(temp_file.name)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temporary file: {str(e)}") 
