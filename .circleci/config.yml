@@ -16,6 +16,9 @@ jobs:
           command: |
             if [ -f .env ]; then cp .env $HOME/project/.env; fi
       - run:
+          name: List Environment Variables (for debug)
+          command: printenv
+      - run:
           name: Run Docker Compose (build and up)
           command: docker-compose up --build -d
 workflows:
