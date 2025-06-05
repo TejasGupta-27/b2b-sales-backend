@@ -34,7 +34,7 @@ from models.chat import MessageType, ChatRequest, ChatResponse
 from models.lead import Lead
 
 # Import services
-from services.elasticsearch_service import get_elasticsearch_service
+from services.elasticsearch_service import get_elasticsearch_service as elasticsearch_service
 from services.chroma_service import ChromaDBService
 
 # Import configuration
@@ -148,7 +148,6 @@ async def startup_event():
         
         # Initialize Elasticsearch (with error handling)
         try:
-            elasticsearch_service = get_elasticsearch_service()
             await elasticsearch_service.initialize()
             logger.info("✅ Elasticsearch initialized successfully")
         except Exception as e:
@@ -195,7 +194,6 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     try:
-        elasticsearch_service = get_elasticsearch_service()
         await elasticsearch_service.close()
         logger.info("✅ Elasticsearch connection closed")
     except Exception as e:
@@ -463,6 +461,29 @@ async def send_message(request: ChatRequest):
     except Exception as e:
         logger.error(f"Error in send_message endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
+
+# Add new data curling endpoints
+from services.realtime_ingestor import ingest_products_from_query, retrieve_chunks
+
+@app.post("/api/realtime/ingest")
+async def realtime_ingest(request: Dict[str, str]):
+    """Ingest real-time data from external sources like Newegg."""
+    query = request.get("query")
+    if not query:
+        return {"error": "Missing 'query' parameter."}
+    
+    count = ingest_products_from_query(query)
+    return {"message": f"Ingested {count} products for query: '{query}'"}
+
+@app.post("/api/realtime/search")
+async def realtime_search(request: Dict[str, str]):
+    """Search live-ingested product chunks."""
+    query = request.get("query")
+    if not query:
+        return {"error": "Missing 'query' parameter."}
+    
+    matches = retrieve_chunks(query)
+    return {"results": matches}
 
 # Add new ppt downloads endpoints
 @app.get("/download/{filename}", tags=["presentation"])
