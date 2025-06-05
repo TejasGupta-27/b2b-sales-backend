@@ -16,6 +16,12 @@ jobs:
           name: Docker Compose Build and Up (Debug)
           command: DOCKER_BUILDKIT=1 docker-compose --log-level DEBUG up --build
       - run:
+          name: Docker Compose Build and Up (Debug)
+          command: DOCKER_BUILDKIT=1 docker-compose down
+      - run:
+          name: Docker Compose Build and Up (Debug)
+          command: DOCKER_BUILDKIT=1 docker-compose up
+      - run:
           name: Show Docker Compose Container Logs
           command: docker-compose logs
 workflows:
