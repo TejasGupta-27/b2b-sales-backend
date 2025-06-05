@@ -12,6 +12,10 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y docker-compose
       - run:
+          name: Copy .env file
+          command: |
+            if [ -f .env ]; then cp .env $HOME/project/.env; fi
+      - run:
           name: Run Docker Compose (build and up)
           command: docker-compose up --build -d
 workflows:
