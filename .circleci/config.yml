@@ -12,13 +12,9 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y docker-compose
       - run:
-          name: Ensure .env file exists
-          command: |
-            if [ ! -f $HOME/project/.env ]; then touch $HOME/project/.env; fi
-      - run:
           name: Copy .env file
           command: |
-            if [ -f .env ]; then cp .env $HOME/project/.env; fi
+            if [ -f .env ]; then cp .env $HOME/project/.env; else touch $HOME/project/.env; fi
       - run:
           name: List Environment Variables (for debug)
           command: printenv
