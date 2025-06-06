@@ -27,15 +27,7 @@ export DATA_DIR="Data/json"
 # AI Service Configuration
 export DEFAULT_AI_PROVIDER="azure_openai"
 
-# Azure OpenAI
-export AZURE_OPENAI_API_VERSION="2024-02-15-preview"
-export AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4"
 
-# Azure Embeddings
-export AZURE_EMBEDDING_DEPLOYMENT_NAME="text-embedding-ada-002"
-
-# Hugging Face
-export HUGGINGFACE_MODEL="microsoft/DialoGPT-medium"
 
 # Data loading configuration
 export FORCE_RELOAD_DATA="false"

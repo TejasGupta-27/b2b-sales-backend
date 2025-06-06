@@ -78,9 +78,9 @@ services:
       - CHROMA_MAX_ITEMS_PER_FILE=50
       - DATA_DIR=Data/json
       - DEFAULT_AI_PROVIDER=azure_openai
-      - AZURE_OPENAI_API_VERSION=2024-02-15-preview
-      - AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
-      - AZURE_EMBEDDING_DEPLOYMENT_NAME=text-embedding-ada-002
+      - AZURE_OPENAI_API_VERSION=2025-01-01-preview
+      - AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4.1-mini
+      - AZURE_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-large
       - HUGGINGFACE_MODEL=microsoft/DialoGPT-medium
       - FORCE_RELOAD_DATA=false
       - SKIP_DATA_LOADING=false
