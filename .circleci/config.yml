@@ -9,11 +9,57 @@ executors:
 jobs:
   build:
     executor: python-executor
+    environment:
+      # API Configuration
+      API_HOST: "0.0.0.0"
+      API_PORT: "3001"
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:3000"
+      
+      # Database Configuration
+      POSTGRES_USER: "myuser"
+      POSTGRES_PASSWORD: "mypassword"
+      POSTGRES_DB: "chat_db"
+      DATABASE_URL: "postgresql://myuser:mypassword@db:5432/chat_db"
+      
+      # Elasticsearch Configuration
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      ELASTICSEARCH_INDEX_PRODUCTS: "products"
+      ELASTICSEARCH_INDEX_SOLUTIONS: "solutions"
+      
+      # ChromaDB Configuration
+      CHROMA_DB_PATH: "/app/chroma_db"
+      CHROMA_MAX_ITEMS_PER_FILE: "50"
+      
+      # Data directory
+      DATA_DIR: "Data/json"
+      
+      # AI Service Configuration
+      DEFAULT_AI_PROVIDER: "azure_openai"
+      
+      # Azure OpenAI
+      AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
+      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4"
+      
+      # Azure Embeddings
+      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-ada-002"
+      
+      # Hugging Face
+      HUGGINGFACE_MODEL: "microsoft/DialoGPT-medium"
+      
+      # Data loading configuration
+      FORCE_RELOAD_DATA: "false"
+      SKIP_DATA_LOADING: "false"
+      
+      # Hybrid search configuration
+      USE_HYBRID_RETRIEVER: "true"
+      ELASTICSEARCH_WEIGHT: "0.4"
+      SEMANTIC_WEIGHT: "0.6"
     steps:
       - checkout
       # Set up remote Docker to allow Docker operations within CircleCI
       - setup_remote_docker:
-          version: 28.2.0
+          version: 20.10.14
           docker_layer_caching: true
       # Install dependencies from requirements.txt
       - run:
@@ -41,6 +87,52 @@ jobs:
 
   deploy:
     executor: python-executor
+    environment:
+      # API Configuration
+      API_HOST: "0.0.0.0"
+      API_PORT: "3001"
+      DEBUG: "false"
+      CORS_ORIGINS: "http://localhost:3000"
+      
+      # Database Configuration
+      POSTGRES_USER: "myuser"
+      POSTGRES_PASSWORD: "mypassword"
+      POSTGRES_DB: "chat_db"
+      DATABASE_URL: "postgresql://myuser:mypassword@db:5432/chat_db"
+      
+      # Elasticsearch Configuration
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      ELASTICSEARCH_INDEX_PRODUCTS: "products"
+      ELASTICSEARCH_INDEX_SOLUTIONS: "solutions"
+      
+      # ChromaDB Configuration
+      CHROMA_DB_PATH: "/app/chroma_db"
+      CHROMA_MAX_ITEMS_PER_FILE: "50"
+      
+      # Data directory
+      DATA_DIR: "Data/json"
+      
+      # AI Service Configuration
+      DEFAULT_AI_PROVIDER: "azure_openai"
+      
+      # Azure OpenAI
+      AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
+      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4"
+      
+      # Azure Embeddings
+      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-ada-002"
+      
+      # Hugging Face
+      HUGGINGFACE_MODEL: "microsoft/DialoGPT-medium"
+      
+      # Data loading configuration
+      FORCE_RELOAD_DATA: "false"
+      SKIP_DATA_LOADING: "false"
+      
+      # Hybrid search configuration
+      USE_HYBRID_RETRIEVER: "true"
+      ELASTICSEARCH_WEIGHT: "0.4"
+      SEMANTIC_WEIGHT: "0.6"
     steps:
       - checkout
       # Ensure the image is built and deployed (depends on your deployment setup)
