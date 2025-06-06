@@ -1,0 +1,11 @@
+# Safe default dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+.env
+logs/
+test_outputs/
+.git

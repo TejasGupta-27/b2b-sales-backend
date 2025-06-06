@@ -26,7 +26,11 @@ COPY . .
 
 RUN mkdir -p /app/chroma_db && chmod 755 /app/chroma_db
 
+RUN echo "[DEBUG] Files in /app:" && ls -la /app
+
+
 EXPOSE 3001
 
 # Run the application
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload"]
+
