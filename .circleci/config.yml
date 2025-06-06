@@ -45,7 +45,7 @@ jobs:
       - run:
           name: List files in /app
           command: |
-            docker exec project-backend-1 ls -l /app
+            docker exec app-backend-1 ls -l /app
 
 
   deploy:
