@@ -85,7 +85,7 @@ jobs:
       - run:
           name: Deploy your app (customize as needed)
           command: |
-            docker-compose -f docker-compose.yml up -d
+            docker-compose -f docker-compose.yml up 
 
 workflows:
   version: 2
