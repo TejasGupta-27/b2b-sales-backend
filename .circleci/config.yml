@@ -1,24 +1,58 @@
 version: 2.1
-jobs:
-  docker-compose-build-up:
+
+executors:
+  python-executor:
     docker:
-      - image: cimg/base:stable
+      - image: circleci/python:3.11
+    working_directory: ~/project
+
+jobs:
+  build:
+    executor: python-executor
     steps:
       - checkout
-      - setup_remote_docker
+      # Set up remote Docker to allow Docker operations within CircleCI
+      - setup_remote_docker:
+          docker_layer_caching: true
+      # Install dependencies from requirements.txt
       - run:
-          name: Create .env file if missing
+          name: Install dependencies
           command: |
-            if [ ! -f .env ]; then
-              echo "# Auto-generated .env file for CI" > .env
-            fi
+            python -m venv venv
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+      # Build and start the Docker services (backend, db, elasticsearch)
       - run:
-          name: Docker Compose Build and Up (Debug)
-          command: DOCKER_BUILDKIT=1 docker-compose --log-level DEBUG up --build
+          name: Build and run docker-compose
+          command: |
+            docker-compose -f docker-compose.yml up --build -d
+      # Debug to list files in the /app directory (verify main.py presence)
       - run:
-          name: Show Docker Compose Container Logs
-          command: docker-compose logs
+          name: List files in /app
+          command: |
+            docker exec backend ls -l /app
+      # Run your tests or verify if the application works
+      - run:
+          name: Run tests
+          command: |
+            docker exec backend pytest
+
+  deploy:
+    executor: python-executor
+    steps:
+      - checkout
+      # Ensure the image is built and deployed (depends on your deployment setup)
+      - run:
+          name: Deploy your app (customize as needed)
+          command: |
+            docker-compose -f docker-compose.yml up -d
+
 workflows:
-  build_and_up:
+  version: 2
+  build_and_deploy:
     jobs:
-      - docker-compose-build-up
+      - build
+      - deploy:
+          requires:
+            - build
