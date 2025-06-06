@@ -46,6 +46,11 @@ jobs:
           name: List files in /app
           command: |
             docker exec app-backend-1 ls -l /app
+      - run:
+          name: Show files in CI context
+          command: |
+            ls -l
+            find . -name main.py
 
 
   deploy:
