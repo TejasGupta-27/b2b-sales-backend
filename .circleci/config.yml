@@ -41,7 +41,7 @@ jobs:
       - run:
           name: Build and run docker-compose
           command: |
-            docker-compose -f docker-compose.yml up --build -d
+            docker-compose -f docker-compose.yml up --build 
       - run:
           name: List files in /app
           command: |
@@ -85,7 +85,7 @@ jobs:
       - run:
           name: Deploy your app (customize as needed)
           command: |
-            docker-compose -f docker-compose.yml up 
+            docker-compose -f docker-compose.yml up -d
 
 workflows:
   version: 2
