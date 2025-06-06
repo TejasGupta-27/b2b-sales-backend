@@ -3,7 +3,7 @@ version: 2.1
 executors:
   python-executor:
     docker:
-      - image: circleci/python:3.11
+      - image: cimg/python:3.11
     working_directory: ~/project
 
 jobs:
@@ -11,10 +11,8 @@ jobs:
     executor: python-executor
     steps:
       - checkout
-      # Set up remote Docker to allow Docker operations within CircleCI
       - setup_remote_docker:
           docker_layer_caching: true
-      # Install dependencies from requirements.txt
       - run:
           name: Install dependencies
           command: |
@@ -22,17 +20,14 @@ jobs:
             . venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
-      # Build and start the Docker services (backend, db, elasticsearch)
       - run:
           name: Build and run docker-compose
           command: |
             docker-compose -f docker-compose.yml up --build -d
-      # Debug to list files in the /app directory (verify main.py presence)
       - run:
           name: List files in /app
           command: |
             docker exec backend ls -l /app
-      # Run your tests or verify if the application works
       - run:
           name: Run tests
           command: |
@@ -42,7 +37,6 @@ jobs:
     executor: python-executor
     steps:
       - checkout
-      # Ensure the image is built and deployed (depends on your deployment setup)
       - run:
           name: Deploy your app (customize as needed)
           command: |
