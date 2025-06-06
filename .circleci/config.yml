@@ -45,7 +45,7 @@ jobs:
       - run:
           name: List files in /app
           command: |
-            docker exec backend ls -l /app
+            docker exec project-backend-1 ls -l /app
       - run:
           name: Run tests
           command: |
