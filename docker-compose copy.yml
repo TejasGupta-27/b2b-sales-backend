@@ -58,6 +58,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
+      - .:/app
       - ./Data:/app/Data
       - chroma_data:/app/chroma_db
     environment:
