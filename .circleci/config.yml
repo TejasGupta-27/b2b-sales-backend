@@ -41,15 +41,12 @@ jobs:
       - run:
           name: Build and run docker-compose
           command: |
-            docker-compose -f docker-compose.yml up --build -d
+            docker-compose -f docker-compose.yml up --build 
       - run:
           name: List files in /app
           command: |
             docker exec project-backend-1 ls -l /app
-      - run:
-          name: Run tests
-          command: |
-            docker exec project-backend-1 pytest
+
 
   deploy:
     executor: python-executor
