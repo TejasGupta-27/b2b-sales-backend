@@ -160,6 +160,22 @@ async def handle_voice_message(
             db.add(lead)
             db.commit()
             logger.info(f"Created new lead: {lead_id}")
+        else:
+            # Check if lead exists
+            lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
+            if not lead:
+                # Create new lead with the provided ID
+                lead = DBLead(
+                    id=lead_id,
+                    company_name="Unknown",
+                    contact_name="Unknown",
+                    email="unknown@example.com",
+                    status=LeadStatus.NEW,
+                    created_at=datetime.now()
+                )
+                db.add(lead)
+                db.commit()
+                logger.info(f"Created new lead with provided ID: {lead_id}")
         
         # Save user message
         user_message = DBChatMessage(

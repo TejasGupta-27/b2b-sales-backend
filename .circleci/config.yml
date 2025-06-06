@@ -4,7 +4,7 @@ executors:
   python-executor:
     docker:
       - image: cimg/python:3.11
-    working_directory: ~/project
+    working_directory: ~/app
 
 jobs:
   build:

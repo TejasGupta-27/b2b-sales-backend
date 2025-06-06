@@ -80,13 +80,20 @@ services:
       - DEFAULT_AI_PROVIDER=azure_openai
       - AZURE_OPENAI_API_VERSION=2025-01-01-preview
       - AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4.1-mini
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-large
+      - AZURE_EMBEDDING_ENDPOINT=https://internship2025-teama.openai.azure.com/
+      - AZURE_EMBEDDING_API_KEY=${AZURE_EMBEDDING_API_KEY}
       - HUGGINGFACE_MODEL=microsoft/DialoGPT-medium
       - FORCE_RELOAD_DATA=false
       - SKIP_DATA_LOADING=false
       - USE_HYBRID_RETRIEVER=true
       - ELASTICSEARCH_WEIGHT=0.4
       - SEMANTIC_WEIGHT=0.6
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - NO_PROXY=${NO_PROXY}
     ulimits:
       memlock:
         soft: -1

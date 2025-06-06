@@ -38,13 +38,13 @@ class Settings(BaseSettings):
     # Azure OpenAI
     azure_openai_api_key: Optional[str] = os.getenv("AZURE_OPENAI_API_KEY")
     azure_openai_endpoint: Optional[str] = os.getenv("AZURE_OPENAI_ENDPOINT")
-    azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
-    azure_openai_deployment_name: str = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4")
+    azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION")
+    azure_openai_deployment_name: str = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini")
     
     # Azure Embeddings (separate deployment)
     azure_embedding_endpoint: Optional[str] = os.getenv("AZURE_EMBEDDING_ENDPOINT")
     azure_embedding_api_key: Optional[str] = os.getenv("AZURE_EMBEDDING_API_KEY")
-    azure_embedding_deployment_name: str = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
+    azure_embedding_deployment_name: str = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME")
     
     # Hugging Face
     huggingface_api_key: Optional[str] = os.getenv("HUGGINGFACE_API_KEY")
