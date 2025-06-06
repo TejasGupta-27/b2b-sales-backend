@@ -41,7 +41,7 @@ jobs:
       - run:
           name: Build and run docker-compose
           command: |
-            docker-compose -f docker-compose.yml up --build 
+            docker-compose -f docker-compose.yml up --build -d
       - run:
           name: List files in /app
           command: |
