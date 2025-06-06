@@ -9,6 +9,7 @@ from datetime import datetime
 import uuid
 from pathlib import Path
 import logging
+from services import elasticsearch_service
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text

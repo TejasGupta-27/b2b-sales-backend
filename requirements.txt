@@ -10,7 +10,6 @@ alembic
 python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
-python-dotenv
 
 # ML and additional dependencies that might change
 httpx

@@ -4,6 +4,10 @@ from pathlib import Path
 import os
 
 class Settings(BaseSettings):
+    # Disable .env file loading
+    class Config:
+        env_file = None
+    
     # API Configuration
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
     api_port: int = int(os.getenv("API_PORT", "3001"))
