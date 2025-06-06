@@ -3,23 +3,41 @@ version: 2.1
 executors:
   python-executor:
     docker:
-      - image: cimg/python:3.11
+      - image: circleci/python:3.11
     working_directory: ~/project
 
 jobs:
   build:
     executor: python-executor
+    environment:
+      API_HOST: "0.0.0.0"
+      API_PORT: "3001"
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:3000"
+      POSTGRES_USER: "myuser"
+      POSTGRES_PASSWORD: "mypassword"
+      POSTGRES_DB: "chat_db"
+      DATABASE_URL: "postgresql://myuser:mypassword@db:5432/chat_db"
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      ELASTICSEARCH_INDEX_PRODUCTS: "products"
+      ELASTICSEARCH_INDEX_SOLUTIONS: "solutions"
+      CHROMA_DB_PATH: "/app/chroma_db"
+      CHROMA_MAX_ITEMS_PER_FILE: "50"
+      DATA_DIR: "Data/json"
+      DEFAULT_AI_PROVIDER: "azure_openai"
+      AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
+      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4"
+      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-ada-002"
+      HUGGINGFACE_MODEL: "microsoft/DialoGPT-medium"
+      FORCE_RELOAD_DATA: "false"
+      SKIP_DATA_LOADING: "false"
+      USE_HYBRID_RETRIEVER: "true"
+      ELASTICSEARCH_WEIGHT: "0.4"
+      SEMANTIC_WEIGHT: "0.6"
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - run:
-          name: Install dependencies
-          command: |
-            python -m venv venv
-            . venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
       - run:
           name: Build and run docker-compose
           command: |
@@ -35,6 +53,31 @@ jobs:
 
   deploy:
     executor: python-executor
+    environment:
+      API_HOST: "0.0.0.0"
+      API_PORT: "3001"
+      DEBUG: "false"
+      CORS_ORIGINS: "http://localhost:3000"
+      POSTGRES_USER: "myuser"
+      POSTGRES_PASSWORD: "mypassword"
+      POSTGRES_DB: "chat_db"
+      DATABASE_URL: "postgresql://myuser:mypassword@db:5432/chat_db"
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      ELASTICSEARCH_INDEX_PRODUCTS: "products"
+      ELASTICSEARCH_INDEX_SOLUTIONS: "solutions"
+      CHROMA_DB_PATH: "/app/chroma_db"
+      CHROMA_MAX_ITEMS_PER_FILE: "50"
+      DATA_DIR: "Data/json"
+      DEFAULT_AI_PROVIDER: "azure_openai"
+      AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
+      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4"
+      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-ada-002"
+      HUGGINGFACE_MODEL: "microsoft/DialoGPT-medium"
+      FORCE_RELOAD_DATA: "false"
+      SKIP_DATA_LOADING: "false"
+      USE_HYBRID_RETRIEVER: "true"
+      ELASTICSEARCH_WEIGHT: "0.4"
+      SEMANTIC_WEIGHT: "0.6"
     steps:
       - checkout
       - run:
