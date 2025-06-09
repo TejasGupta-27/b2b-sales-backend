@@ -1,19 +1,20 @@
-import os
 import json
 from openai import AzureOpenAI
 from pptx import Presentation
 from pptx.util import Pt, Inches
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches
-from PIL import Image  # For image size adjustment (optional but helpful)
+from pptx.enum.chart import XL_CHART_TYPE
+from pptx.chart.data import CategoryChartData
 
-# Initialize paths
-PRODUCT_IMAGE_PATH = os.path.join("Data", "assets", "workstation.jpg")
-LOGO_PATH = os.path.join("Data", "assets", "logo.png")
-OUTPUT_PATH = os.path.join("Data", "presentations", "Sales_Pitch_Deck.pptx")
-TEMPLATE_PATH = os.path.join("Data", "assets", "template.pptx")
+# initialize directories
+import os
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ASSETS_DIR = os.path.join(BASE_DIR, "Data", "assets")
+OUTPUT_DIR = os.path.join(BASE_DIR, "Data", "presentations")
+LOGO_PATH = os.path.join(ASSETS_DIR, "logo.png")
+
 
 # Initialize Azure OpenAI client
 client = AzureOpenAI(
@@ -81,16 +82,15 @@ def clear_slide_content_safely(slide):
             except:
                 pass
 
-def add_logo(slide,prs):
-    if os.path.exists(LOGO_PATH):
-        slide_width = prs.slide_width
-        logo_img = Image.open(LOGO_PATH)
-        logo_width_inches = Inches(1.2)  # Slightly larger if needed
-        logo_height_inches = Inches(0.6)
-        left = slide_width - logo_width_inches - Inches(0.3)  # Right-aligned with some margin
-        slide.shapes.add_picture(LOGO_PATH, left, Inches(0.2), width=logo_width_inches, height=logo_height_inches)
-    else:
-        print("Logo not found. Skipping...")
+def clear_slide_completely(slide):
+    """Remove all shapes from a slide, including titles, placeholders, etc."""
+    for shape in list(slide.shapes):
+        try:
+            sp = shape._element
+            sp.getparent().remove(sp)
+        except Exception as e:
+            print(f"⚠️ Could not remove shape: {e}")
+
 
 
 def extract_ppt_structure(quotation: str) -> dict:
@@ -176,15 +176,15 @@ Return your response as valid JSON:
         raise
 
 
-def add_comparison_table(slide, table_data,prs):
+def add_comparison_table(slide, table_data):
     rows = len(table_data["rows"]) + 1  # +1 for header
     cols = len(table_data["columns"])
-    top = Inches(2)
+    left = Inches(0.5)
+    top = Inches(1.5)
     width = Inches(9)
     height = Inches(5)
-    left = int((prs.slide_width - width) / 2)
 
-    table_shape = slide.shapes.add_table(rows, cols, left, top, width, height).table   
+    table_shape = slide.shapes.add_table(rows, cols, left, top, width, height).table
 
     # Header row
     for col, header in enumerate(table_data["columns"]):
@@ -201,127 +201,127 @@ def add_comparison_table(slide, table_data,prs):
             cell.text_frame.paragraphs[0].font.size = Pt(12)
 
 
-def generate_ppt(data: dict):
-    # Load template if it exists, otherwise create new presentation
-    if os.path.exists(TEMPLATE_PATH):
-        print("📋 Using template.pptx")
-        prs = Presentation(TEMPLATE_PATH)
+TEMPLATE_PATH = os.path.join(ASSETS_DIR, "template.pptx")
+prs = Presentation(TEMPLATE_PATH)
+
+
+def add_logo(slide):
+    try:
+        slide.shapes.add_picture(LOGO_PATH, Inches(8.5), Inches(0.2), width=Inches(1.2))
+    except Exception as e:
+        print("⚠️ Logo not added:", e)
+
+def add_price_chart(slide, product_name, price):
+    chart_data = CategoryChartData()
+    chart_data.categories = [product_name, "Competitor A", "Competitor B"]
+    chart_data.add_series('Price ($)', [price, price * 1.2, price * 1.1])
+
+    x, y, cx, cy = Inches(0.5), Inches(2), Inches(8), Inches(4)
+    slide.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, x, y, cx, cy, chart_data)
+
+def detect_product_type(product_name: str) -> str:
+    """Infer product type from product name using keywords"""
+    name = product_name.lower()
+    if "workstation" in name:
+        return "workstation"
+    elif "server" in name:
+        return "server"
+    elif "storage" in name or "nas" in name or "ssd" in name:
+        return "storage"
+    elif "laptop" in name or "notebook" in name:
+        return "laptop"
+    elif "router" in name or "switch" in name or "network" in name:
+        return "network"
     else:
-        print("📋 Creating new presentation (no template found)")
-        prs = Presentation()
-    
-    TITLE_FONT = "Segoe UI Semibold"
-    BODY_FONT = "Segoe UI"
-    TITLE_COLOR = RGBColor(84, 62, 40)
-    ACCENT_COLOR = RGBColor(152, 102, 60)
+        return "general"
 
-    # Create cover slide
-    cover_slide = prs.slides.add_slide(prs.slide_layouts[0])
-    hide_placeholders(cover_slide)  # Hide template placeholders
-    add_logo(cover_slide,prs)
-    
-    # Add cover slide content
-    title_box = cover_slide.shapes.add_textbox(Inches(2.5), Inches(1), Inches(7), Inches(2))
-    title_box.left = int((prs.slide_width - title_box.width) / 2)
 
-    tf = title_box.text_frame
-    tf.text = "Why this product?"
-    tf.paragraphs[0].font.size = Pt(44)
-    tf.paragraphs[0].font.bold = True
-    tf.paragraphs[0].font.name = TITLE_FONT
-    tf.paragraphs[0].font.color.rgb = TITLE_COLOR
-    tf.paragraphs[0].alignment = PP_ALIGN.CENTER
-    
-    subtitle = tf.add_paragraph()
-    subtitle.text = "Generated from Quotation"
-    subtitle.font.size = Pt(24)
-    subtitle.font.name = BODY_FONT
-    subtitle.font.color.rgb = TITLE_COLOR
-    subtitle.alignment = PP_ALIGN.CENTER
+def add_contextual_image(slide, product_type):
+    name = product_type.lower()
+    filename = None
 
-    # Add product image to cover slide
-    if os.path.exists(PRODUCT_IMAGE_PATH):
-        img = Image.open(PRODUCT_IMAGE_PATH)
-        img_width, img_height = img.size
-        img_ratio = img_width / img_height
-        img_height_in = Inches(4)  # Increase size
-        img_width_in = Inches(4 * img_ratio)
-        left = int((prs.slide_width - img_width_in) / 2)
-        cover_slide.shapes.add_picture(PRODUCT_IMAGE_PATH, left, Inches(3), width=img_width_in, height=img_height_in)
-    else:
-        print("📝 No product image found, skipping...")
+    if "workstation" in name:
+        filename = "workstation.jpg"
+    elif "server" in name:
+        filename = "server.png"
+    elif "storage" in name or "nas" in name:
+        filename = "storage.png"
+    elif "laptop" in name:
+        filename = "laptop.png"
+    elif "network" in name:
+        filename = "network.png"
 
-    # Create content slides
-    for slide_data in data.get("slides", []):
-        slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
-        hide_placeholders(slide)  # Hide template placeholders
-        add_logo(slide,prs)
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(2.5), Inches(1), Inches(7), Inches(2))
-        title_box.left = int((prs.slide_width - title_box.width) / 2)
+    if filename:
+        image_path = os.path.join(ASSETS_DIR, filename)
+        try:
+            slide.shapes.add_picture(image_path, Inches(0.2), Inches(1.5), width=Inches(1.0))
+        except Exception as e:
+            print(f"⚠️ Image not added ({filename}):", e)
 
-        tf = title_box.text_frame
-        tf.text = slide_data["title"]
-        tf.paragraphs[0].font.size = Pt(32)
-        tf.paragraphs[0].font.bold = True
-        tf.paragraphs[0].font.name = TITLE_FONT
-        tf.paragraphs[0].font.color.rgb = TITLE_COLOR
 
-        # Add accent line
-        line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(1.5), Inches(2), Inches(0.1), Inches(4))
-        line.fill.solid()
-        line.fill.fore_color.rgb = ACCENT_COLOR
-        line.line.fill.background()
 
-        # Add content
-        # Content box (centered horizontally)
-        content_box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(9), Inches(5))
-        content_box.left = int((prs.slide_width - content_box.width) / 2)
+def set_background_color(slide, rgb_color):
+    fill = slide.background.fill
+    fill.solid()
+    fill.fore_color.rgb = rgb_color
 
-        tf = content_box.text_frame
+def add_timeline_shape(slide):
+    for i in range(3):
+        left = Inches(1 + i * 2.5)
+        top = Inches(2)
+        box = slide.shapes.add_shape(MSO_SHAPE.OVAL, left, top, Inches(1), Inches(1))
+        box.text = f"Step {i+1}"
+
+def generate_ppt(presentation_structure, product_name, product_price):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    output_path = os.path.join(OUTPUT_DIR, "enhanced_presentation.pptx")
+    product_type = detect_product_type(product_name)
+    contextual_image_slide_indices = {0, 2}  # Only add image to slides 0 and 2
+
+    for idx, slide_data in enumerate(presentation_structure):
+        slide_layout = prs.slide_layouts[0]  # Title Only
+        #clear_slide_completely(slide_layout)
+        slide = prs.slides.add_slide(slide_layout)
+
+        title = slide.shapes.title
+        title.text = slide_data["title"]
+
+        left = Inches(0.5)
+        top = Inches(1.5)
+        width = Inches(9)
+        height = Inches(5.5)
+        text_box = slide.shapes.add_textbox(left, top, width, height)
+        tf = text_box.text_frame
         tf.word_wrap = True
+        tf.clear()  # Clear any default text
 
-        for i, line_text in enumerate(slide_data["content"]):
-            if i == 0:
-                # First paragraph already exists
-                p = tf.paragraphs[0]
-            else:
-                p = tf.add_paragraph()
-            
-            p.text = f"• {line_text}"
-            p.font.size = Pt(20)
-            p.font.name = BODY_FONT
-            p.font.color.rgb = RGBColor(80, 80, 80)
-            p.space_after = Pt(12)
+        for bullet in slide_data["content"]:
+            p = tf.add_paragraph()
+            p.text = str(bullet)
+            p.level = 0
+            p.font.size = Pt(18)
 
-    # Create table slides
-    for table_data in data.get("tables", []):
-        slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
-        hide_placeholders(slide)  # Hide template placeholders
-        add_logo(slide,prs)
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(1.5), Inches(1), Inches(7), Inches(2))
-        title_box.left = int((prs.slide_width - title_box.width) / 2)
 
-        tf = title_box.text_frame
-        tf.text = table_data["title"]
-        tf.paragraphs[0].font.size = Pt(32)
-        tf.paragraphs[0].font.bold = True
-        tf.paragraphs[0].font.name = TITLE_FONT
-        tf.paragraphs[0].font.color.rgb = TITLE_COLOR
-        
-        # Add table
-        add_comparison_table(slide, table_data,prs)
+        # Enhancements
+        add_logo(slide)
+        set_background_color(slide, RGBColor(245, 245, 245))
+
+        if idx in contextual_image_slide_indices:
+            add_contextual_image(slide, product_type)
+
+        if "price" in slide_data["title"].lower():
+            add_price_chart(slide, product_name, product_price)
+        elif "timeline" in slide_data["title"].lower():
+            add_timeline_shape(slide)
 
     # Save presentation
     try:
-        prs.save(OUTPUT_PATH)
-        print(f"✅ Presentation saved successfully to: {OUTPUT_PATH}")
+        prs.save(output_path)
+        print(f"✅ Presentation saved successfully to: {output_path}")
     except Exception as e:
         print(f"❌ Error saving presentation: {e}")
         raise
+
 
 
 if __name__ == "__main__":
@@ -346,7 +346,7 @@ if __name__ == "__main__":
         structured_data = extract_ppt_structure(quotation_input)
 
         print("🖼️ Creating PowerPoint presentation...")
-        generate_ppt(structured_data)
+        generate_ppt(structured_data["slides"], "Workstation Pro Professional", 3499.99)
 
     except Exception as e:
         print("❌ Error:", e)
