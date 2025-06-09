@@ -2,6 +2,8 @@ import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import asyncio
+import os
+import uuid
 
 from .base import AIProvider, AIMessage, AIResponse
 from .quote_generation_agent import QuoteGenerationAgent
@@ -10,6 +12,7 @@ from .conversation_flow_manager import ConversationFlowAgent
 from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
 from config import settings
+from .quick_response_generator import QuickResponseGenerator
 
 class EnhancedB2BSalesAgent(AIProvider):
     """Enhanced B2B Sales Agent with hybrid retrieval capabilities"""
@@ -24,6 +27,37 @@ class EnhancedB2BSalesAgent(AIProvider):
         self.base_provider = base_provider
         self.conversation_analyzer = ConversationFlowAgent(base_provider)
         self.quote_agent = QuoteGenerationAgent(base_provider)
+        self.quick_response_generator = QuickResponseGenerator(base_provider)
+        
+        # Track asked questions to prevent duplicates
+        self.asked_questions = set()
+        
+        # Cache for product recommendations
+        self.product_cache = {
+            'products': [],
+            'solutions': [],
+            'requirements': {},
+            'last_retrieval_time': None,
+            'retrieval_stage': None,
+            'cache_valid': False
+        }
+        
+        # Quick start templates for lazy users
+        self.quick_start_templates = {
+            "basic": "I need a quote for {product_type}",
+            "detailed": "I need a quote for {product_type} with {features}",
+            "budget": "I have a budget of {budget} for {product_type}",
+            "comparison": "Compare {product1} vs {product2}",
+            "specific": "I want to buy {product_name}",
+            "help": "Help me choose the right product"
+        }
+        
+        # Lazy user detection
+        self.lazy_user_indicators = {
+            "short_messages": 0,
+            "template_usage": 0,
+            "help_requests": 0
+        }
         
         # Choose retriever based on configuration
         if use_hybrid_retriever and settings.azure_embedding_endpoint and settings.azure_embedding_api_key:
@@ -72,49 +106,107 @@ class EnhancedB2BSalesAgent(AIProvider):
         # Store conversation for agent collaboration
         self.conversation_context = messages
         
+        # Check for lazy user patterns
+        self._detect_lazy_user_patterns(messages)
+        
+        # Update asked questions from recent messages
+        self._update_asked_questions(messages)
+        
+        # Check for explicit quote request
+        last_message = messages[-1].content.lower() if messages else ""
+        is_explicit_quote_request = any(phrase in last_message for phrase in [
+            "prepare a detailed quote", "could you please prepare", "generate a quote",
+            "send me a quote", "i need a quote", "quote me", "quotation please",
+            "detailed proposal", "pricing proposal", "can you quote"
+        ])
+        
+        # If lazy user detected, provide more guided assistance
+        if self._is_lazy_user():
+            return await self._handle_lazy_user_interaction(messages, customer_context)
+        
         print("🤝 Enhanced Sales Agent: Starting intelligent conversation flow analysis...")
         
         # Step 1: Use AI-powered flow analysis
         flow_analysis = await self.conversation_analyzer.analyze_conversation_state(messages, customer_context)
+        
+        # Force quote generation if explicitly requested
+        if is_explicit_quote_request:
+            flow_analysis['quote_ready'] = True
+            flow_analysis['should_generate_quote'] = True
+            flow_analysis['recommendation_selected'] = True
+            flow_analysis['current_stage'] = 'quote_ready'
+        
+        # Generate quick responses based on current context
+        quick_responses = await self.quick_response_generator.generate_quick_responses(
+            messages=messages,
+            customer_context=customer_context,
+            num_responses=3
+        )
         
         print(f"🧠 AI Flow Analysis:")
         print(f"   📊 Business Context: {flow_analysis.get('business_context_score', 0)}%")
         print(f"   📊 Technical Requirements: {flow_analysis.get('technical_requirements_score', 0)}%")
         print(f"   📊 Decision Readiness: {flow_analysis.get('decision_readiness_score', 0)}%")
         print(f"   📈 Current Stage: {flow_analysis.get('current_stage', 'unknown')}")
-        print(f"   🎯 Quote Ready: {flow_analysis.get('quote_ready', False)}")
+        print(f"   Quote Ready: {flow_analysis.get('quote_ready', False)}")
         print(f"   🤖 AI Reasoning: {flow_analysis.get('reasoning', 'N/A')}")
         
         # Step 2: Enhanced quote readiness check
         enhanced_quote_ready = self._enhanced_quote_readiness_check(messages, flow_analysis)
-        
-        # Override flow analysis if enhanced check indicates readiness
-        if enhanced_quote_ready:
-            flow_analysis['should_generate_quote'] = True
-            flow_analysis['quote_ready'] = True
-            flow_analysis['current_stage'] = 'quote_generation'
-            print("✅ Enhanced quote readiness check overrode flow analysis - customer is ready for quote!")
         
         # Step 3: Get AI-powered action suggestions
         action_guidance = await self.conversation_analyzer.suggest_next_actions(flow_analysis, messages)
         
         print(f"💡 AI Action Guidance: {action_guidance.get('primary_action', 'continue')}")
         
-        # Step 4: Execute based on AI recommendations
-        if flow_analysis.get('should_generate_quote', False):
+        # Step 4: Execute based on AI recommendations and conversation stage
+        current_stage = flow_analysis.get('current_stage', 'initial_discovery')
+        
+        if current_stage == 'solution_presentation' and not flow_analysis.get('recommendations_presented', False):
+            # Handle recommendation stage
+            response = await self._handle_recommendation_stage(messages, customer_context, flow_analysis)
+            flow_analysis['recommendations_presented'] = True
+        elif (flow_analysis.get('should_generate_quote', False) and flow_analysis.get('recommendation_selected', False)) or is_explicit_quote_request:
+            # Handle quote generation
             response = await self._handle_quote_ready_conversation(messages, customer_context, flow_analysis)
         else:
+            # Handle discovery or other stages
             response = await self._handle_discovery_conversation(messages, customer_context, flow_analysis)
         
         # Step 5: Add intelligent flow analysis to metadata
         if not hasattr(response, 'metadata') or response.metadata is None:
             response.metadata = {}
         
+        # Add quick responses to the response content if they exist
+        if quick_responses:
+            response.content += "\n\n💡 Quick Response Options:\n"
+            for i, resp in enumerate(quick_responses, 1):
+                response.content += f"{i}. {resp['text']}\n"
+                if resp.get('template'):
+                    template = resp['template']
+                    response.content += f"   Template: {template['template']}\n"
+                    response.content += "   Fill in the blanks:\n"
+                    for placeholder, desc in template['placeholders'].items():
+                        example = template['example_values'].get(placeholder, '')
+                        response.content += f"   - {placeholder}: {desc} (e.g., {example})\n"
+                response.content += "\n"
+        
         response.metadata.update({
             'ai_flow_analysis': flow_analysis,
             'action_guidance': action_guidance,
             'intelligent_flow_managed': True,
-            'enhanced_quote_check': enhanced_quote_ready
+            'enhanced_quote_check': enhanced_quote_ready,
+            'current_stage': current_stage,
+            'quick_responses': quick_responses,
+            'quick_response_templates': [
+                {
+                    'text': resp['text'],
+                    'template': resp.get('template'),
+                    'intent': resp['intent'],
+                    'confidence': resp['confidence']
+                }
+                for resp in quick_responses
+            ] if quick_responses else []
         })
         
         return response
@@ -158,25 +250,22 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
         
         print("✅ Conversation ready for quote generation")
         
-        # Step 1: Collaborate with retriever agent
-        retrieval_result = await self._collaborate_with_retriever_agent(messages, customer_context)
-        
-        # Step 2: Generate sales response
-        enhanced_messages = self._add_enhanced_sales_context(messages, customer_context, retrieval_result)
+        # Generate sales response
+        enhanced_messages = self._add_enhanced_sales_context(messages, customer_context, self.product_recommendations)
         response = await self.base_provider.generate_response(enhanced_messages)
         
-        # Step 3: Generate quote
+        # Generate quote
         response = await self._collaborate_with_quote_agent(response, customer_context, flow_analysis)
         
-        # Step 4: Add retrieval metadata
+        # Add retrieval metadata
         if not hasattr(response, 'metadata') or response.metadata is None:
             response.metadata = {}
         
         response.metadata.update({
-            'product_recommendations': retrieval_result.get('products', []),
-            'solution_recommendations': retrieval_result.get('solutions', []),
-            'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0),
-            'customer_requirements': retrieval_result.get('requirements', {})
+            'product_recommendations': self.product_recommendations.get('products', []),
+            'solution_recommendations': self.product_recommendations.get('solutions', []),
+            'retrieval_confidence': self.product_recommendations.get('retrieval_confidence', 0),
+            'customer_requirements': self.product_recommendations.get('requirements', {})
         })
         
         return response
@@ -191,8 +280,14 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
         
         print(f"🔍 Handling discovery conversation - stage: {flow_analysis['current_stage']}")
         
-        # Get product recommendations to inform conversation
-        retrieval_result = await self._collaborate_with_retriever_agent(messages, customer_context)
+        # Only retrieve products if we're in deep discovery or solution presentation
+        if flow_analysis['current_stage'] in ['deep_discovery', 'solution_presentation']:
+            retrieval_result = await self._collaborate_with_retriever_agent(
+                messages=messages,
+                customer_context=customer_context
+            )
+        else:
+            retrieval_result = {}
         
         # Build discovery-focused context
         discovery_context = self._build_discovery_context(flow_analysis, retrieval_result)
@@ -209,8 +304,7 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
                 'next_questions': flow_analysis.get('next_questions', []),
                 'missing_info': flow_analysis.get('missing_info', []),
                 'current_stage': flow_analysis['current_stage']
-            },
-            'product_intelligence': retrieval_result
+            }
         })
         
         return response
@@ -222,6 +316,19 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
         missing_info = flow_analysis.get('missing_info', [])
         next_questions = flow_analysis.get('next_questions', [])
         completion_scores = flow_analysis.get('completion_scores', {})
+        
+        # Filter out already asked questions
+        next_questions = [q for q in next_questions if q not in self.asked_questions]
+        
+        # Add quick options for lazy users
+        quick_options = """
+QUICK OPTIONS:
+1. "Tell me about your products"
+2. "What's your best seller?"
+3. "Show me pricing"
+4. "Compare options"
+5. "Help me choose"
+"""
         
         context = f"""
 CONVERSATION GUIDANCE FOR DISCOVERY STAGE: {current_stage.upper()}
@@ -236,6 +343,8 @@ STILL NEEDED: {', '.join(missing_info) if missing_info else 'Information gatheri
 
 SUGGESTED NEXT QUESTIONS TO ASK:
 {chr(10).join(f'• {q}' for q in next_questions) if next_questions else '• Continue natural conversation flow'}
+
+{quick_options if self._is_lazy_user() else ''}
 
 DISCOVERY PRIORITIES FOR THIS STAGE:
 """
@@ -264,9 +373,12 @@ DISCOVERY PRIORITIES FOR THIS STAGE:
         
         context += """
 
-IMPORTANT: Do NOT offer quotes or detailed pricing until you have sufficient information. 
-Focus on being consultative and asking insightful questions that demonstrate expertise.
-If they ask for pricing early, politely redirect to gather more information first.
+IMPORTANT: 
+1. Do NOT offer quotes or detailed pricing until you have sufficient information
+2. Do NOT suggest scheduling a meeting
+3. Focus on being consultative and asking insightful questions that demonstrate expertise
+4. If they ask for pricing early, politely redirect to gather more information first
+5. Avoid asking questions that have already been answered
 """
         
         return context
@@ -338,14 +450,55 @@ COMMUNICATION STYLE:
 
 Remember: Your goal is to thoroughly understand their needs so you can recommend the perfect solution. Quality discovery leads to better solutions and higher close rates."""
 
+    async def _should_retrieve_products(self, flow_analysis: Dict[str, Any]) -> bool:
+        """Determine if products should be retrieved based on conversation stage and cache status"""
+        
+        current_stage = flow_analysis.get('current_stage', 'initial_discovery')
+        
+        # Never retrieve in initial discovery
+        if current_stage == 'initial_discovery':
+            return False
+            
+        # Only retrieve in solution presentation if we don't have cached products
+        if current_stage == 'solution_presentation':
+            return not self.product_cache['cache_valid'] or not self.product_cache['products']
+            
+        # For deep discovery, only retrieve if we don't have cached products
+        if current_stage == 'deep_discovery':
+            return not self.product_cache['cache_valid'] or not self.product_cache['products']
+                
+        # For quote_ready stage, only retrieve if we don't have cached products
+        if current_stage == 'quote_ready':
+            return not self.product_cache['cache_valid'] or not self.product_cache['products']
+        
+        # Default to not retrieving
+        return False
+
     async def _collaborate_with_retriever_agent(
         self, 
         messages: List[AIMessage], 
-        customer_context: Optional[Dict[str, Any]]
+        customer_context: Optional[Dict[str, Any]],
+        force_retrieval: bool = False
     ) -> Dict[str, Any]:
-        """Collaborate with hybrid product retriever agent"""
+        """Collaborate with hybrid product retriever agent with caching"""
         
         try:
+            # Get flow analysis to determine if we should retrieve
+            flow_analysis = await self.conversation_analyzer.analyze_conversation_state(messages, customer_context)
+            
+            # Check if we should retrieve products
+            if not force_retrieval and not await self._should_retrieve_products(flow_analysis):
+                print("🔄 Using cached product recommendations")
+                return {
+                    'products': self.product_cache['products'],
+                    'solutions': self.product_cache['solutions'],
+                    'requirements': self.product_cache['requirements'],
+                    'search_methods': self.product_cache.get('search_methods', {}),
+                    'retrieval_success': True,
+                    'retrieval_method': 'cache',
+                    'retrieval_confidence': self.product_cache.get('retrieval_confidence', 0.5)
+                }
+            
             print(f"🤝 Enhanced Sales Agent: Collaborating with {'Hybrid' if isinstance(self.retriever_agent, HybridProductRetrieverAgent) else 'Standard'} Product Retriever...")
             
             # Get product recommendations
@@ -375,14 +528,18 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
             if search_methods:
                 print(f"🔍 Search method breakdown: {search_methods}")
             
-            # Store for later use in quote generation
-            self.product_recommendations = {
-                'products': products,
-                'solutions': solutions,
-                'requirements': requirements,
-                'search_methods': search_methods,
-                'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0.5)
-            }
+            # Update cache only if we got valid results
+            if products or solutions:
+                self.product_cache = {
+                    'products': products,
+                    'solutions': solutions,
+                    'requirements': requirements,
+                    'search_methods': search_methods,
+                    'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0.5),
+                    'last_retrieval_time': datetime.now(),
+                    'retrieval_stage': flow_analysis.get('current_stage'),
+                    'cache_valid': True
+                }
             
             return {
                 'products': products,
@@ -398,6 +555,19 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
             print(f"⚠️ Retriever collaboration failed: {str(e)}")
             import traceback
             print(traceback.format_exc())
+            
+            # Return cached results if available
+            if self.product_cache['products']:
+                print("🔄 Falling back to cached product recommendations")
+                return {
+                    'products': self.product_cache['products'],
+                    'solutions': self.product_cache['solutions'],
+                    'requirements': self.product_cache['requirements'],
+                    'search_methods': self.product_cache.get('search_methods', {}),
+                    'retrieval_success': True,
+                    'retrieval_method': 'cache_fallback',
+                    'retrieval_confidence': self.product_cache.get('retrieval_confidence', 0.5)
+                }
             
             # Return safe fallback structure
             return {
@@ -454,13 +624,35 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 print(f"✅ Quote Agent provided enhanced quote with ID: {quote.get('id')}")
                 print(f"📄 PDF URL: {quote.get('pdf_url', 'Not generated')}")
                 
-                # Add quote to response metadata
+                # Generate pitch deck
+                from services.pitch_deck_service import PitchDeckService
+                pitch_deck_service = PitchDeckService()
+                
+                # Extract pitch deck structure from quote
+                deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
+                
+                # Generate unique deck ID
+                deck_id = str(uuid.uuid4())
+                
+                # Generate the pitch deck
+                deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+                os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+                
+                # Generate the PowerPoint file
+                await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+                
+                # Add quote and pitch deck to response metadata
                 response.metadata['quote'] = quote
                 response.metadata['quote_generated'] = True
                 response.metadata['quote_id'] = quote.get('id')
+                response.metadata['pitch_deck'] = {
+                    'id': deck_id,
+                    'path': deck_path,
+                    'download_url': f"/api/quotes/download-pitch-deck/{deck_id}"
+                }
                 
-                # Enhance sales response to incorporate the quote
-                response = self._enhance_response_with_dynamic_quote(response, quote)
+                # Enhance sales response to incorporate the quote and pitch deck
+                response = self._enhance_response_with_dynamic_quote(response, quote, deck_id)
             else:
                 print("❌ Quote agent couldn't generate quote from enhanced conversation")
                 response.metadata['quote_generation_failed'] = True
@@ -669,8 +861,8 @@ APPROACH:
             "avoid": ["Rushing the process"]
         })
     
-    def _enhance_response_with_dynamic_quote(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
-        """Enhanced response with dynamic quote information"""
+    def _enhance_response_with_dynamic_quote(self, response: AIResponse, quote: Dict[str, Any], deck_id: str) -> AIResponse:
+        """Enhanced response with dynamic quote and pitch deck information"""
         
         if 'pdf_url' in quote:
             # Add professional quote presentation with dynamic context
@@ -696,14 +888,18 @@ APPROACH:
             # Add PDF download link
             response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
             
+            # Add pitch deck download link
+            response.content += f"\n\n📊 **[Download Pitch Deck](/api/quotes/download-pitch-deck/{deck_id})**"
+            
             # Enhanced next steps
             response.content += f"\n\n**Next Steps:**"
             response.content += f"\n1. Review the detailed quote with all selected products and solutions"
-            response.content += f"\n2. Let me know if you'd like to discuss any aspects in more detail"
-            response.content += f"\n3. I can arrange product demos or technical consultations if helpful"
-            response.content += f"\n4. We can finalize implementation timeline and support arrangements"
+            response.content += f"\n2. Check out the pitch deck for a visual overview of the solution"
+            response.content += f"\n3. Let me know if you'd like to discuss any aspects in more detail"
+            response.content += f"\n4. I can arrange product demos or technical consultations if helpful"
+            response.content += f"\n5. We can finalize implementation timeline and support arrangements"
             
-            response.content += f"\n\nThis quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
+            response.content += f"\n\nThis quote and pitch deck reflect our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
             
         return response
     
@@ -728,6 +924,11 @@ APPROACH:
         
         # Check for explicit quote requests
         explicit_quote_request = any(phrase in recent_text for phrase in strong_quote_indicators)
+        
+        # If there's an explicit quote request, be more lenient with requirements
+        if explicit_quote_request:
+            print("✅ Explicit quote request detected - proceeding with quote generation")
+            return True
         
         # Technical completeness indicators
         tech_completeness_indicators = [
@@ -776,12 +977,348 @@ APPROACH:
         
         # Decision threshold - much more aggressive for explicit requests
         if explicit_quote_request:
-            is_ready = overall_readiness >= 50  # Lower threshold for explicit requests
-            print(f"✅ Explicit quote request detected - readiness threshold: 50%")
+            is_ready = overall_readiness >= 30  # Even lower threshold for explicit requests
+            print(f"✅ Explicit quote request detected - readiness threshold: 30%")
         else:
             is_ready = overall_readiness >= 80  # Higher threshold for implicit readiness
             print(f"📋 Implicit readiness check - threshold: 80%")
         
         print(f"🎯 Final Decision: {'READY FOR QUOTE' if is_ready else 'CONTINUE DISCOVERY'}")
         
-        return is_ready 
+        return is_ready
+
+    async def generate_recommendations(self, request: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate product recommendations based on customer requirements"""
+        try:
+            print("🎯 Enhanced Sales Agent: Generating recommendations...")
+            
+            # Get product recommendations using hybrid retriever
+            retrieval_result = await self._collaborate_with_retriever_agent(
+                messages=[AIMessage(role="user", content=json.dumps(request))],
+                customer_context=request.get('customer_context', {})
+            )
+            
+            # Extract and format recommendations
+            products = retrieval_result.get('products', [])
+            solutions = retrieval_result.get('solutions', [])
+            
+            # Combine and format recommendations
+            recommendations = []
+            
+            # Add product recommendations
+            for product in products:
+                try:
+                    # Safely handle price conversion
+                    price = product.get('price')
+                    if price is not None:
+                        try:
+                            price = float(price)
+                        except (ValueError, TypeError):
+                            price = 0.0
+                    else:
+                        price = 0.0
+
+                    # Safely handle hybrid score
+                    hybrid_score = product.get('hybrid_score')
+                    if hybrid_score is not None:
+                        try:
+                            hybrid_score = float(hybrid_score)
+                        except (ValueError, TypeError):
+                            hybrid_score = 0.0
+                    else:
+                        hybrid_score = 0.0
+
+                    recommendation = {
+                        'product_id': product.get('id', ''),
+                        'name': product.get('name', ''),
+                        'description': product.get('description', ''),
+                        'price': price,
+                        'features': product.get('features', []),
+                        'benefits': product.get('benefits', []),
+                        'suitability_score': hybrid_score,
+                        'customization_options': product.get('customization_options', {}),
+                        'search_source': product.get('search_source', 'hybrid'),
+                        'confidence': hybrid_score
+                    }
+                    recommendations.append(recommendation)
+                except Exception as e:
+                    print(f"⚠️ Error processing product {product.get('id', 'unknown')}: {str(e)}")
+                    continue
+            
+            # Add solution recommendations
+            for solution in solutions:
+                try:
+                    # Safely handle price conversion
+                    price = solution.get('price')
+                    if price is not None:
+                        try:
+                            price = float(price)
+                        except (ValueError, TypeError):
+                            price = 0.0
+                    else:
+                        price = 0.0
+
+                    # Safely handle semantic score
+                    semantic_score = solution.get('semantic_score')
+                    if semantic_score is not None:
+                        try:
+                            semantic_score = float(semantic_score)
+                        except (ValueError, TypeError):
+                            semantic_score = 0.0
+                    else:
+                        semantic_score = 0.0
+
+                    recommendation = {
+                        'product_id': solution.get('id', ''),
+                        'name': solution.get('name', ''),
+                        'description': solution.get('description', ''),
+                        'price': price,
+                        'features': solution.get('features', []),
+                        'benefits': solution.get('benefits', []),
+                        'suitability_score': semantic_score,
+                        'customization_options': solution.get('customization_options', {}),
+                        'search_source': 'semantic',
+                        'confidence': semantic_score
+                    }
+                    recommendations.append(recommendation)
+                except Exception as e:
+                    print(f"⚠️ Error processing solution {solution.get('id', 'unknown')}: {str(e)}")
+                    continue
+            
+            # Sort by suitability score
+            recommendations.sort(key=lambda x: x['suitability_score'], reverse=True)
+            
+            print(f"✅ Generated {len(recommendations)} recommendations")
+            return recommendations
+            
+        except Exception as e:
+            print(f"❌ Recommendation generation failed: {str(e)}")
+            return []
+    
+    async def _handle_recommendation_stage(
+        self,
+        messages: List[AIMessage],
+        customer_context: Optional[Dict[str, Any]],
+        flow_analysis: Dict[str, Any]
+    ) -> AIResponse:
+        """Handle the recommendation stage of the conversation"""
+        
+        print("🎯 Handling recommendation stage...")
+        
+        # Get product recommendations using hybrid retriever with force retrieval
+        retrieval_result = await self._collaborate_with_retriever_agent(
+            messages=messages,
+            customer_context=customer_context,
+            force_retrieval=True  # Force retrieval in recommendation stage
+        )
+        
+        # Store recommendations for later use in quote generation
+        self.product_recommendations = {
+            'products': retrieval_result.get('products', []),
+            'solutions': retrieval_result.get('solutions', []),
+            'requirements': retrieval_result.get('requirements', {}),
+            'search_methods': retrieval_result.get('search_methods', {}),
+            'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0.5)
+        }
+        
+        # Build recommendation context
+        recommendation_context = self._build_recommendation_context(self.product_recommendations.get('products', []))
+        
+        # Enhance messages with recommendation context
+        enhanced_messages = self._add_recommendation_context(messages, customer_context, recommendation_context)
+        
+        # Generate response
+        response = await self.base_provider.generate_response(enhanced_messages)
+        
+        # Add recommendation metadata
+        if not hasattr(response, 'metadata') or response.metadata is None:
+            response.metadata = {}
+        
+        response.metadata.update({
+            'recommendations': self.product_recommendations.get('products', []),
+            'recommendation_stage': True,
+            'top_recommendation': self.product_recommendations.get('products', [])[0] if self.product_recommendations.get('products') else None
+        })
+        
+        return response
+    
+    def _build_recommendation_context(self, recommendations: List[Dict[str, Any]]) -> str:
+        """Build context for recommendation presentation"""
+        
+        context = "🎯 RECOMMENDATION ANALYSIS:\n\n"
+        
+        if not recommendations:
+            context += "No specific recommendations available at this time.\n"
+            return context
+        
+        # Add top recommendations
+        context += "=== TOP RECOMMENDATIONS ===\n"
+        for i, rec in enumerate(recommendations[:3], 1):
+            context += f"\n{i}. {rec['name']}\n"
+            context += f"   Description: {rec['description']}\n"
+            context += f"   Price: ${rec['price']:,.2f}\n"
+            context += f"   Suitability: {rec['suitability_score']:.1%}\n"
+            
+            if rec['features']:
+                context += "   Key Features:\n"
+                for feature in rec['features'][:3]:
+                    context += f"   • {feature}\n"
+            
+            if rec['benefits']:
+                context += "   Business Benefits:\n"
+                for benefit in rec['benefits'][:3]:
+                    context += f"   • {benefit}\n"
+        
+        # Add recommendation strategy
+        context += "\n=== RECOMMENDATION STRATEGY ===\n"
+        context += "1. Present top 2-3 recommendations with clear business value\n"
+        context += "2. Focus on benefits and ROI, not just features\n"
+        context += "3. Be ready to explain why these solutions are the best fit\n"
+        context += "4. Prepare for potential objections and questions\n"
+        context += "5. Guide toward selection and quote generation\n"
+        
+        return context
+    
+    def _add_recommendation_context(
+        self, 
+        messages: List[AIMessage], 
+        customer_context: Optional[Dict[str, Any]],
+        recommendation_context: str
+    ) -> List[AIMessage]:
+        """Add recommendation-focused context to messages"""
+        
+        system_prompt = """You are an expert B2B technology sales consultant presenting personalized recommendations. Your goal is to guide the customer toward selecting the best solution for their needs.
+
+KEY OBJECTIVES:
+1. Present recommendations in order of suitability
+2. Focus on business value and ROI
+3. Address potential concerns proactively
+4. Guide toward selection and next steps
+5. Maintain consultative approach
+
+PRESENTATION APPROACH:
+• Start with the most suitable recommendation
+• Explain why it's the best fit for their needs
+• Highlight key benefits and value
+• Be ready to discuss alternatives
+• Guide toward selection and quote generation"""
+        
+        enhanced_messages = [
+            AIMessage(role="system", content=system_prompt),
+            AIMessage(role="system", content=recommendation_context),
+        ]
+        
+        # Add customer context if available
+        if customer_context:
+            customer_info = self._build_customer_context(customer_context)
+            enhanced_messages.append(AIMessage(role="system", content=customer_info))
+        
+        # Add conversation history
+        enhanced_messages.extend(messages)
+        
+        return enhanced_messages
+    
+    def _detect_lazy_user_patterns(self, messages: List[AIMessage]):
+        """Detect patterns that indicate a lazy user"""
+        if not messages:
+            return
+            
+        # Check for short messages
+        recent_messages = messages[-3:] if len(messages) > 3 else messages
+        short_messages = sum(1 for msg in recent_messages if len(msg.content.split()) < 3)
+        self.lazy_user_indicators["short_messages"] = short_messages
+        
+        # Check for template usage
+        template_usage = sum(1 for msg in recent_messages 
+                           if any(template in msg.content.lower() 
+                                 for template in self.quick_start_templates.values()))
+        self.lazy_user_indicators["template_usage"] = template_usage
+        
+        # Check for help requests
+        help_requests = sum(1 for msg in recent_messages 
+                          if "help" in msg.content.lower() or 
+                             "what" in msg.content.lower() or
+                             "how" in msg.content.lower())
+        self.lazy_user_indicators["help_requests"] = help_requests
+
+    def _is_lazy_user(self) -> bool:
+        """Determine if the user is exhibiting lazy user patterns"""
+        return (
+            self.lazy_user_indicators["short_messages"] >= 2 or
+            self.lazy_user_indicators["template_usage"] >= 1 or
+            self.lazy_user_indicators["help_requests"] >= 2
+        )
+
+    async def _handle_lazy_user_interaction(
+        self,
+        messages: List[AIMessage],
+        customer_context: Optional[Dict[str, Any]]
+    ) -> AIResponse:
+        """Handle interaction with lazy users by providing more guided assistance"""
+        
+        # Get the last message
+        last_message = messages[-1].content if messages else ""
+        
+        # Build lazy user assistance context
+        assistance_context = f"""You are helping a user who prefers quick, guided interactions. 
+        Provide clear, concise responses with specific options and next steps.
+        
+        QUICK OPTIONS:
+        1. "I need a quote" - Start quote process
+        2. "Compare products" - Compare different options
+        3. "Show me options" - View available products
+        4. "Help me choose" - Get personalized recommendations
+        5. "Tell me more" - Get detailed information
+        
+        USER'S LAST MESSAGE: {last_message}
+        
+        Provide a helpful response that:
+        1. Acknowledges their message
+        2. Offers 2-3 specific next steps
+        3. Uses simple, clear language
+        4. Includes clickable options if possible
+        5. Keeps the response brief and actionable"""
+        
+        enhanced_messages = [
+            AIMessage(role="system", content=assistance_context),
+            *messages
+        ]
+        
+        response = await self.base_provider.generate_response(enhanced_messages)
+        
+        # Add lazy user assistance metadata
+        if not hasattr(response, 'metadata') or response.metadata is None:
+            response.metadata = {}
+            
+        response.metadata.update({
+            'lazy_user_assistance': True,
+            'quick_options': [
+                "Get a quote",
+                "Compare products",
+                "View options",
+                "Get recommendations",
+                "Learn more"
+            ],
+            'user_patterns': self.lazy_user_indicators
+        })
+        
+        return response 
+
+    def _update_asked_questions(self, messages: List[AIMessage]):
+        """Update the set of asked questions from recent messages"""
+        if not messages:
+            return
+            
+        # Look at the last few messages
+        recent_messages = messages[-3:] if len(messages) > 3 else messages
+        
+        # Extract questions from assistant messages
+        for msg in recent_messages:
+            if msg.role == "assistant":
+                # Simple question detection
+                questions = [q.strip() for q in msg.content.split('?') if q.strip()]
+                self.asked_questions.update(questions)
+                
+                # Also track questions with question marks
+                question_mark_questions = [q.strip() for q in msg.content.split('?') if '?' in q]
+                self.asked_questions.update(question_mark_questions) 

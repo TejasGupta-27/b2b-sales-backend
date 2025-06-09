@@ -46,3 +46,6 @@ requests
 
 # Added from the code block
 gTTS==2.5.1
+
+# PowerPoint generation
+python-pptx>=0.6.21

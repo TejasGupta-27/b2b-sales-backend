@@ -40,6 +40,14 @@ IMPORTANT: For current_stage, you MUST use one of these exact values:
 - "quote_ready" - Customer is ready for pricing
 - "closing" - Final negotiation and closing
 
+IMPORTANT GUIDELINES:
+1. Do NOT suggest scheduling a meeting unless the customer explicitly requests one
+2. Focus on gathering information through the chat interface
+3. Only suggest meetings for complex technical discussions or final negotiations
+4. Prefer providing information and quotes through the chat interface
+5. Use meetings as a last resort, not a default next step
+6. Only recommend product retrieval in solution_presentation or quote_ready stages
+
 Analyze the conversation comprehensively to understand:
 1. What stage of the sales process we're in (use exact values above)
 2. How much business context we understand (0-100)
@@ -47,7 +55,8 @@ Analyze the conversation comprehensively to understand:
 4. How ready the customer is to make a decision (0-100)
 5. Whether they're ready for a quote
 6. What information is still missing
-7. What questions should be asked next"""
+7. What questions should be asked next
+8. Whether product retrieval is needed at this stage"""
 
         try:
             # Use structured response with Pydantic
@@ -66,6 +75,9 @@ Analyze the conversation comprehensively to understand:
                 'operational_requirements': analysis.decision_readiness_score / 100,
                 'pain_points': len([msg for msg in messages if 'problem' in msg.content.lower() or 'issue' in msg.content.lower()]) / 10
             }
+            
+            # Add product retrieval flag
+            analysis_dict['should_retrieve_products'] = analysis_dict['current_stage'] in ['solution_presentation', 'quote_ready']
             
             return analysis_dict
             
@@ -244,6 +256,10 @@ Keep your response conversational and helpful."""
         # Simple heuristic analysis
         tech_mentions = sum(1 for term in ['cpu', 'gpu', 'ram', 'storage', 'specs'] if term in conversation_text)
         quote_requests = sum(1 for term in ['quote', 'price', 'cost', 'pdf'] if term in conversation_text)
+        meeting_requests = sum(1 for term in ['meeting', 'call', 'schedule', 'demo'] if term in conversation_text)
+        
+        # Only suggest meeting if explicitly requested
+        should_suggest_meeting = meeting_requests > 0
         
         return {
             'business_context_score': 60 if customer_context else 30,
@@ -251,6 +267,7 @@ Keep your response conversational and helpful."""
             'decision_readiness_score': min(100, quote_requests * 30),
             'quote_ready': quote_requests > 0 and tech_mentions > 2,
             'should_generate_quote': quote_requests > 0,
+            'should_suggest_meeting': should_suggest_meeting,
             'confidence_level': 'low',
             'current_stage': 'deep_discovery',
             'reasoning': 'Fallback heuristic analysis',

@@ -22,6 +22,7 @@ from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 from routes.leads import router as leads_router
 from routes.quotes import router as quotes_router
 from routes.speech import router as speech_router
+from routes.recommendations import router as recommendations_router
 
 # Import AI services
 from ai_services.factory import AIServiceFactory
@@ -43,6 +44,12 @@ from config import settings
 # Import speech service
 from services.speech_service import SpeechService
 from dependencies import get_speech_service
+
+# Import PDF generator
+from services.pdf_generator import PDFGenerator
+
+# Import pitch deck service
+from services.pitch_deck_service import PitchDeckService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -78,6 +85,7 @@ async def get_speech_service():
 app.include_router(leads_router)
 app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
+app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
 
 # Keep your working models
 class SalesChatMessage(BaseModel):
@@ -373,12 +381,55 @@ async def get_products():
 
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
-    """Generate a detailed quotation (legacy endpoint)"""
-    base_provider = AIServiceFactory.create_provider("azure_openai")
-    sales_agent = EnhancedB2BSalesAgent(base_provider)
-    
-    quote = await sales_agent.generate_quote(quote_request)
-    return {"quote": quote}
+    """Generate a detailed quotation and pitch deck"""
+    try:
+        # Check if recommendation selection is provided
+        if not quote_request.get("recommendation_id"):
+            raise HTTPException(
+                status_code=400,
+                detail="A recommendation selection is required before generating a quote"
+            )
+        
+        base_provider = AIServiceFactory.create_provider("azure_openai")
+        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        
+        # Generate the quote
+        quote = await sales_agent.generate_quote(quote_request)
+        
+        # Generate unique IDs
+        quote_id = str(uuid.uuid4())
+        deck_id = str(uuid.uuid4())
+        
+        # Save the quote to a file
+        quote_path = f"Data/quotes/quote_{quote_id}.pdf"
+        os.makedirs(os.path.dirname(quote_path), exist_ok=True)
+        
+        # Generate PDF for the quote
+        pdf_generator = PDFGenerator()
+        pdf_buffer = pdf_generator.generate_quote_pdf(quote)
+        with open(quote_path, 'wb') as f:
+            f.write(pdf_buffer.getvalue())
+        
+        # Generate pitch deck
+        pitch_deck_service = PitchDeckService()
+        deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
+        
+        # Generate the pitch deck
+        deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+        os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+        
+        # Generate the PowerPoint file
+        await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+        
+        return {
+            "quote": quote,
+            "quote_id": quote_id,
+            "quote_link": f"/api/quotes/download-pdf/{quote_id}",
+            "pitch_deck_id": deck_id,
+            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/send")
 async def send_message(request: ChatRequest, db: Session = Depends(get_db)):

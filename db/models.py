@@ -92,4 +92,39 @@ class Quote(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     # Relationship with lead
-    lead = relationship("Lead") 
+    lead = relationship("Lead")
+
+class ProductRecommendation(Base):
+    __tablename__ = "product_recommendations"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    recommendation_set_id = Column(String, ForeignKey("recommendation_sets.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    price = Column(Float, nullable=False)
+    features = Column(JSON, nullable=False)  # List of features
+    benefits = Column(JSON, nullable=False)  # List of benefits
+    suitability_score = Column(Float, nullable=False)
+    customization_options = Column(JSON)  # Optional customization options
+    
+    # Relationship with recommendation set
+    recommendation_set = relationship("RecommendationSet", back_populates="product_recommendations")
+
+class RecommendationSet(Base):
+    __tablename__ = "recommendation_sets"
+    
+    id = Column(String, primary_key=True)
+    lead_id = Column(String, ForeignKey("leads.id"), nullable=False)
+    recommendations = Column(JSON, nullable=False)  # List of ProductRecommendation objects
+    created_at = Column(DateTime, server_default=func.now())
+    selected_recommendation = Column(String)
+    selection_timestamp = Column(DateTime)
+    reasoning = Column(Text)
+    next_steps = Column(JSON)  # List of next steps
+    
+    # Relationship with lead
+    lead = relationship("Lead")
+    
+    # Relationship with product recommendations
+    product_recommendations = relationship("ProductRecommendation", back_populates="recommendation_set", cascade="all, delete-orphan") 
