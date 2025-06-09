@@ -216,34 +216,43 @@ class SpeechService:
         Returns:
             dict: Contains base64 encoded audio data and metadata
         """
-        try:
-            # Create a temporary file to store the audio
-            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
-                # Generate speech using gTTS
-                tts = gTTS(text=text, lang=language, slow=False)
-                tts.save(temp_file.name)
-                
-                # Read the generated audio file
-                with open(temp_file.name, 'rb') as audio_file:
-                    audio_bytes = audio_file.read()
-                
-                # Convert to base64
-                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-                
-                return {
-                    "audio_data": audio_base64,
-                    "format": "mp3",
-                    "language": language,
-                    "text_length": len(text)
-                }
-                
-        except Exception as e:
-            logger.error(f"Error in text-to-speech conversion: {str(e)}")
-            raise
-        finally:
-            # Clean up temporary file
-            if 'temp_file' in locals():
-                try:
-                    os.unlink(temp_file.name)
-                except Exception as e:
-                    logger.warning(f"Failed to delete temporary file: {str(e)}") 
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Create a temporary file to store the audio
+                with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+                    # Generate speech using gTTS with timeout
+                    tts = gTTS(text=text, lang=language, slow=False)
+                    tts.save(temp_file.name)
+                    
+                    # Read the generated audio file
+                    with open(temp_file.name, 'rb') as audio_file:
+                        audio_bytes = audio_file.read()
+                    
+                    # Convert to base64
+                    audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                    
+                    return {
+                        "audio_data": audio_base64,
+                        "format": "mp3",
+                        "language": language,
+                        "text_length": len(text)
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error in text-to-speech conversion (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    raise Exception(f"Failed to convert text to speech after {max_retries} attempts: {str(e)}")
+            finally:
+                # Clean up temporary file
+                if 'temp_file' in locals():
+                    try:
+                        os.unlink(temp_file.name)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete temporary file: {str(e)}") 

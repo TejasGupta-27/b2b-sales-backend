@@ -1,11 +1,11 @@
+# Safe default dockerignore
 __pycache__/
 *.pyc
 *.pyo
-*.db
-*.csv
-.env
+*.pyd
 *.log
-Data/
-.idea/
-.vscode/
-.git/
+*.sqlite3
+.env
+logs/
+test_outputs/
+.git
