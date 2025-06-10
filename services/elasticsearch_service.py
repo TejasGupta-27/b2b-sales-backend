@@ -1250,6 +1250,40 @@ class ElasticsearchService:
             print(f"❌ Broader fallback search failed: {e}")
             return []
 
+    async def get_product_by_id(self, product_id: str) -> Optional[Dict]:
+        """Get a product by its ID"""
+        try:
+            response = await self.client.get(
+                index=self.products_index,
+                id=product_id,
+                ignore=[404]
+            )
+            
+            if response.get('found'):
+                return response['_source']
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error getting product by ID {product_id}: {str(e)}")
+            return None
+
+    async def get_solution_by_id(self, solution_id: str) -> Optional[Dict]:
+        """Get a solution by its ID"""
+        try:
+            response = await self.client.get(
+                index=self.solutions_index,
+                id=solution_id,
+                ignore=[404]
+            )
+            
+            if response.get('found'):
+                return response['_source']
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error getting solution by ID {solution_id}: {str(e)}")
+            return None
+
 # Create a function to get the service instance instead of creating it at module level
 def get_elasticsearch_service() -> ElasticsearchService:
     """Get Elasticsearch service instance"""

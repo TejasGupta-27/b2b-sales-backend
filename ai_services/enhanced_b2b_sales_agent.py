@@ -177,20 +177,6 @@ class EnhancedB2BSalesAgent(AIProvider):
         if not hasattr(response, 'metadata') or response.metadata is None:
             response.metadata = {}
         
-        # Add quick responses to the response content if they exist
-        if quick_responses:
-            response.content += "\n\n💡 Quick Response Options:\n"
-            for i, resp in enumerate(quick_responses, 1):
-                response.content += f"{i}. {resp['text']}\n"
-                if resp.get('template'):
-                    template = resp['template']
-                    response.content += f"   Template: {template['template']}\n"
-                    response.content += "   Fill in the blanks:\n"
-                    for placeholder, desc in template['placeholders'].items():
-                        example = template['example_values'].get(placeholder, '')
-                        response.content += f"   - {placeholder}: {desc} (e.g., {example})\n"
-                response.content += "\n"
-        
         response.metadata.update({
             'ai_flow_analysis': flow_analysis,
             'action_guidance': action_guidance,
@@ -1045,48 +1031,26 @@ APPROACH:
                     print(f"⚠️ Error processing product {product.get('id', 'unknown')}: {str(e)}")
                     continue
             
-            # Add solution recommendations
-            for solution in solutions:
-                try:
-                    # Safely handle price conversion
-                    price = solution.get('price')
-                    if price is not None:
-                        try:
-                            price = float(price)
-                        except (ValueError, TypeError):
-                            price = 0.0
-                    else:
-                        price = 0.0
-
-                    # Safely handle semantic score
-                    semantic_score = solution.get('semantic_score')
-                    if semantic_score is not None:
-                        try:
-                            semantic_score = float(semantic_score)
-                        except (ValueError, TypeError):
-                            semantic_score = 0.0
-                    else:
-                        semantic_score = 0.0
-
-                    recommendation = {
-                        'product_id': solution.get('id', ''),
-                        'name': solution.get('name', ''),
-                        'description': solution.get('description', ''),
-                        'price': price,
-                        'features': solution.get('features', []),
-                        'benefits': solution.get('benefits', []),
-                        'suitability_score': semantic_score,
-                        'customization_options': solution.get('customization_options', {}),
-                        'search_source': 'semantic',
-                        'confidence': semantic_score
-                    }
-                    recommendations.append(recommendation)
-                except Exception as e:
-                    print(f"⚠️ Error processing solution {solution.get('id', 'unknown')}: {str(e)}")
-                    continue
-            
-            # Sort by suitability score
-            recommendations.sort(key=lambda x: x['suitability_score'], reverse=True)
+            # Add solution recommendations if available
+            if solutions:
+                for solution in solutions:
+                    try:
+                        recommendation = {
+                            'product_id': solution.get('id', ''),
+                            'name': solution.get('name', ''),
+                            'description': solution.get('description', ''),
+                            'price': float(solution.get('price', 0.0)),
+                            'features': solution.get('features', []),
+                            'benefits': solution.get('benefits', []),
+                            'suitability_score': float(solution.get('match_score', 0.0)),
+                            'customization_options': solution.get('customization_options', {}),
+                            'search_source': 'solution',
+                            'confidence': float(solution.get('match_score', 0.0))
+                        }
+                        recommendations.append(recommendation)
+                    except Exception as e:
+                        print(f"⚠️ Error processing solution {solution.get('id', 'unknown')}: {str(e)}")
+                        continue
             
             print(f"✅ Generated {len(recommendations)} recommendations")
             return recommendations
@@ -1094,54 +1058,7 @@ APPROACH:
         except Exception as e:
             print(f"❌ Recommendation generation failed: {str(e)}")
             return []
-    
-    async def _handle_recommendation_stage(
-        self,
-        messages: List[AIMessage],
-        customer_context: Optional[Dict[str, Any]],
-        flow_analysis: Dict[str, Any]
-    ) -> AIResponse:
-        """Handle the recommendation stage of the conversation"""
-        
-        print("🎯 Handling recommendation stage...")
-        
-        # Get product recommendations using hybrid retriever with force retrieval
-        retrieval_result = await self._collaborate_with_retriever_agent(
-            messages=messages,
-            customer_context=customer_context,
-            force_retrieval=True  # Force retrieval in recommendation stage
-        )
-        
-        # Store recommendations for later use in quote generation
-        self.product_recommendations = {
-            'products': retrieval_result.get('products', []),
-            'solutions': retrieval_result.get('solutions', []),
-            'requirements': retrieval_result.get('requirements', {}),
-            'search_methods': retrieval_result.get('search_methods', {}),
-            'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0.5)
-        }
-        
-        # Build recommendation context
-        recommendation_context = self._build_recommendation_context(self.product_recommendations.get('products', []))
-        
-        # Enhance messages with recommendation context
-        enhanced_messages = self._add_recommendation_context(messages, customer_context, recommendation_context)
-        
-        # Generate response
-        response = await self.base_provider.generate_response(enhanced_messages)
-        
-        # Add recommendation metadata
-        if not hasattr(response, 'metadata') or response.metadata is None:
-            response.metadata = {}
-        
-        response.metadata.update({
-            'recommendations': self.product_recommendations.get('products', []),
-            'recommendation_stage': True,
-            'top_recommendation': self.product_recommendations.get('products', [])[0] if self.product_recommendations.get('products') else None
-        })
-        
-        return response
-    
+
     def _build_recommendation_context(self, recommendations: List[Dict[str, Any]]) -> str:
         """Build context for recommendation presentation"""
         
@@ -1171,10 +1088,10 @@ APPROACH:
         
         # Add recommendation strategy
         context += "\n=== RECOMMENDATION STRATEGY ===\n"
-        context += "1. Present top 2-3 recommendations with clear business value\n"
-        context += "2. Focus on benefits and ROI, not just features\n"
-        context += "3. Be ready to explain why these solutions are the best fit\n"
-        context += "4. Prepare for potential objections and questions\n"
+        context += "1. ONLY present products that have been successfully retrieved and validated from the database\n"
+        context += "2. Each recommendation MUST have a valid product ID and exist in the database\n"
+        context += "3. Focus on benefits and ROI, not just features\n"
+        context += "4. Be ready to explain why these solutions are the best fit\n"
         context += "5. Guide toward selection and quote generation\n"
         
         return context
