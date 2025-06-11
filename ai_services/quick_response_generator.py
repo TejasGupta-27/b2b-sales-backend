@@ -403,13 +403,17 @@ class QuickResponseGenerator:
         text_words = set(text.lower().split())
         
         for intent, keywords in self.intent_keywords.items():
+            # Ensure keywords is a set
+            if not isinstance(keywords, set):
+                keywords = set(keywords) if keywords else set()
+            
             # Check for keyword matches
             if keywords & text_words:
                 detected_intents.add(intent)
             
-            # Check for phrase matches
+            # Check for phrase matches (for multi-word keywords)
             for keyword in keywords:
-                if len(keyword.split()) > 1 and keyword in text:
+                if isinstance(keyword, str) and len(keyword.split()) > 1 and keyword in text:
                     detected_intents.add(intent)
         
         return detected_intents
@@ -732,9 +736,9 @@ class QuickResponseGenerator:
     
     def _detect_urgency_indicators(self, text: str) -> List[str]:
         """Detect urgency indicators in conversation"""
-        urgent_phrases = [
+        urgent_phrases = {
             "asap", "urgent", "immediately", "critical", "emergency", "quickly", "fast", "now"
-        ]
+        }
         
         words = set(text.lower().split())
         urgent_words = list(words & urgent_phrases)
@@ -764,6 +768,10 @@ class QuickResponseGenerator:
     
     def _determine_conversation_stage(self, messages: List[AIMessage], detected_intents: Set[ResponseIntent]) -> str:
         """Determine the current stage of the conversation"""
+        # Ensure detected_intents is a set
+        if not isinstance(detected_intents, set):
+            detected_intents = set(detected_intents)
+            
         # Count message types
         message_count = len(messages)
         customer_messages = sum(1 for msg in messages if msg.role.lower() in ['user', 'customer', 'human'])

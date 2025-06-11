@@ -20,4 +20,6 @@ class RecommendationSet(BaseModel):
     selected_recommendation: Optional[str] = None
     selection_timestamp: Optional[datetime] = None
     reasoning: str
-    next_steps: List[str] 
+    next_steps: List[str]
+    conversation_state: Optional[Dict[str, Any]] = None
+    current_stage: str = "solution_presentation" 

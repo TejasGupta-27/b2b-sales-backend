@@ -57,54 +57,76 @@ class QuoteGenerationAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
-        """Generate completely dynamic quote from conversation using Pydantic"""
+        """Generate quote from the selected recommendation"""
         
-        print(f"🔍 Quote Agent: Starting Pydantic-based dynamic analysis...")
+        print(f"🔍 Quote Agent: Starting quote generation from selected recommendation...")
         
         try:
-            # Extract everything dynamically using Pydantic
-            extracted_data = await self.data_extractor.extract_data(
-                conversation_messages, 
-                customer_context
-            )
+            # Get the selected recommendation from customer context
+            selected_recommendation = customer_context.get('selected_recommendation')
+            if not selected_recommendation:
+                raise ValueError("No recommendation has been selected for quote generation")
             
-            # If no line items were extracted but we have customer context, create a basic quote
-            if not extracted_data or not extracted_data.get('line_items'):
-                print("⚠️ No line items extracted, creating basic quote from context")
-                extracted_data = {
-                    'customer_info': customer_context or {},
-                    'line_items': [
-                        {
-                            'name': 'Synology DS1821+ NAS Solution',
-                            'description': 'High-performance 8-bay NAS with enterprise features',
-                            'quantity': 1,
-                            'unit_price': 999.99,
-                            'total_price': 999.99
-                        },
-                        {
-                            'name': 'QNAP TVS-872XT NAS Solution',
-                            'description': 'Professional 8-bay NAS with Thunderbolt 3',
-                            'quantity': 1,
-                            'unit_price': 1299.99,
-                            'total_price': 1299.99
-                        }
-                    ],
-                    'subtotal': 2299.98,
-                    'tax_rate': 0.08,
-                    'tax_amount': 183.99,
-                    'total': 2483.97,
-                    'currency': 'USD',
-                    'business_context': customer_context or {}
+            # Create line item from the selected recommendation with safe field access
+            try:
+                # Safely get price with default
+                price = 0.0
+                try:
+                    price = float(selected_recommendation.get('price', 0))
+                except (ValueError, TypeError):
+                    print("⚠️ Invalid price format, using default of 0.0")
+                
+                # Safely get other fields with defaults
+                line_item = {
+                    'name': selected_recommendation.get('name', 'Technology Solution'),
+                    'description': selected_recommendation.get('description', 'Professional technology solution'),
+                    'quantity': 1,
+                    'unit_price': price,
+                    'total_price': price,
+                    'specifications': selected_recommendation.get('specifications', {}),
+                    'features': selected_recommendation.get('features', []),
+                    'benefits': selected_recommendation.get('benefits', [])
                 }
+                
+                # Validate required fields
+                if not line_item['name']:
+                    raise ValueError("Product name is required")
+                
+            except Exception as e:
+                print(f"⚠️ Error processing selected recommendation: {str(e)}")
+                raise ValueError(f"Invalid recommendation data: {str(e)}")
             
-            # Generate quote using extracted data
-            quote = await self._generate_fully_dynamic_quote(extracted_data)
+            # Calculate totals
+            subtotal = line_item['total_price']
+            tax_rate = 0.08  # Default tax rate
+            tax_amount = subtotal * tax_rate
+            total = subtotal + tax_amount
+            
+            # Prepare quote data
+            quote_data = {
+                'customer_info': customer_context or {},
+                'line_items': [line_item],  # Only include the selected recommendation
+                'subtotal': subtotal,
+                'tax_rate': tax_rate,
+                'tax_amount': tax_amount,
+                'total': total,
+                'currency': 'USD',
+                'business_context': customer_context or {},
+                'extraction_confidence': 'high'
+            }
+            
+            # Generate quote using the data
+            quote = await self._generate_fully_dynamic_quote(quote_data)
             
             # Generate PDF
             quote = await self._generate_quote_pdf(quote)
             
-            print(f"📄 Quote Agent: Dynamic quote generated with PDF")
+            print(f"📄 Quote Agent: Quote generated with PDF for selected recommendation")
             return quote
+            
+        except ValueError as ve:
+            print(f"❌ Quote Agent: Validation error - {str(ve)}")
+            raise
             
         except Exception as e:
             print(f"❌ Quote Agent: Error - {str(e)}")

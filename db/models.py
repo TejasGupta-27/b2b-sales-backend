@@ -122,6 +122,8 @@ class RecommendationSet(Base):
     selection_timestamp = Column(DateTime)
     reasoning = Column(Text)
     next_steps = Column(JSON)  # List of next steps
+    conversation_state = Column(JSON)  # Store conversation state and flow analysis
+    current_stage = Column(String, default="solution_presentation")  # Current conversation stage
     
     # Relationship with lead
     lead = relationship("Lead")

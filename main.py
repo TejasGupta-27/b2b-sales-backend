@@ -383,13 +383,6 @@ async def get_products():
 async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation and pitch deck"""
     try:
-        # Check if recommendation selection is provided
-        if not quote_request.get("recommendation_id"):
-            raise HTTPException(
-                status_code=400,
-                detail="A recommendation selection is required before generating a quote"
-            )
-        
         base_provider = AIServiceFactory.create_provider("azure_openai")
         sales_agent = EnhancedB2BSalesAgent(base_provider)
         

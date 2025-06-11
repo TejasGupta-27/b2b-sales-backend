@@ -154,6 +154,14 @@ class EnhancedB2BSalesAgent(AIProvider):
         # Step 2: Enhanced quote readiness check
         enhanced_quote_ready = self._enhanced_quote_readiness_check(messages, flow_analysis)
         
+        # Debug logging for flow control
+        print(f"🔍 Flow Control Debug:")
+        print(f"   is_explicit_quote_request: {is_explicit_quote_request}")
+        print(f"   enhanced_quote_ready: {enhanced_quote_ready}")
+        print(f"   flow_analysis['should_generate_quote']: {flow_analysis.get('should_generate_quote', False)}")
+        print(f"   flow_analysis['quote_ready']: {flow_analysis.get('quote_ready', False)}")
+        print(f"   flow_analysis['recommendation_selected']: {flow_analysis.get('recommendation_selected', False)}")
+        
         # Step 3: Get AI-powered action suggestions
         action_guidance = await self.conversation_analyzer.suggest_next_actions(flow_analysis, messages)
         
@@ -162,15 +170,24 @@ class EnhancedB2BSalesAgent(AIProvider):
         # Step 4: Execute based on AI recommendations and conversation stage
         current_stage = flow_analysis.get('current_stage', 'initial_discovery')
         
-        if current_stage == 'solution_presentation' and not flow_analysis.get('recommendations_presented', False):
-            # Handle recommendation stage
-            response = await self._handle_recommendation_stage(messages, customer_context, flow_analysis)
-            flow_analysis['recommendations_presented'] = True
-        elif (flow_analysis.get('should_generate_quote', False) and flow_analysis.get('recommendation_selected', False)) or is_explicit_quote_request:
-            # Handle quote generation
+        # Check if we have an explicit quote request or enhanced readiness (from the enhanced quote check)
+        explicit_or_enhanced_ready = (
+            is_explicit_quote_request or 
+            enhanced_quote_ready or 
+            flow_analysis.get('should_generate_quote', False)
+        )
+        
+        # Priority 1: Handle explicit quote requests or enhanced readiness (regardless of stage)
+        if explicit_or_enhanced_ready:
+            print(f"🎯 Routing to quote generation due to explicit request ({is_explicit_quote_request}) or enhanced readiness ({enhanced_quote_ready})")
             response = await self._handle_quote_ready_conversation(messages, customer_context, flow_analysis)
+        # Priority 2: Handle recommendation stage when in solution presentation but not quote ready
+        elif current_stage == 'solution_presentation' and not flow_analysis.get('recommendations_presented', False):
+            print("🎯 Routing to recommendation stage")
+            response = await self._handle_recommendation_stage(messages, customer_context, flow_analysis)
+        # Priority 3: Handle discovery or other stages
         else:
-            # Handle discovery or other stages
+            print(f"🎯 Routing to discovery stage: {current_stage}")
             response = await self._handle_discovery_conversation(messages, customer_context, flow_analysis)
         
         # Step 5: Add intelligent flow analysis to metadata
@@ -235,6 +252,37 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
         """Handle conversation when ready for quote generation"""
         
         print("✅ Conversation ready for quote generation")
+        
+        # Check if we have recommendations available
+        if not self.product_recommendations or not self.product_recommendations.get('products'):
+            print("⚠️ No recommendations available - retrieving products for quote")
+            # Get product recommendations for quote generation
+            retrieval_result = await self._collaborate_with_retriever_agent(
+                messages=messages,
+                customer_context=customer_context,
+                force_retrieval=True
+            )
+            self.product_recommendations = retrieval_result
+        
+        # If we still don't have products after retrieval, fall back to recommendation stage
+        if not self.product_recommendations.get('products'):
+            print("❌ No products available after retrieval - falling back to recommendation stage")
+            return await self._handle_recommendation_stage(messages, customer_context, flow_analysis)
+        
+        # For explicit quote requests, automatically select the best recommendation if none is explicitly selected
+        if not flow_analysis.get('recommendation_selected', False):
+            print("🎯 Auto-selecting top recommendation for quote generation")
+            # Select the top product for quote generation
+            top_product = self.product_recommendations.get('products', [])[0] if self.product_recommendations.get('products') else None
+            if top_product:
+                flow_analysis['recommendation_selected'] = True
+                if customer_context is None:
+                    customer_context = {}
+                customer_context['selected_recommendation'] = top_product
+                print(f"✅ Auto-selected: {top_product.get('name', 'Unknown Product')}")
+            else:
+                print("❌ No products available for auto-selection")
+                return await self._handle_recommendation_stage(messages, customer_context, flow_analysis)
         
         # Generate sales response
         enhanced_messages = self._add_enhanced_sales_context(messages, customer_context, self.product_recommendations)
@@ -509,6 +557,10 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
             requirements = retrieval_result.get('requirements', {})
             search_methods = retrieval_result.get('search_methods', {})
             
+            # Normalize product and solution data to ensure all required fields exist
+            products = self._normalize_product_data(products)
+            solutions = self._normalize_solution_data(solutions)
+            
             print(f"📦 Enhanced Sales Agent: Retrieved {len(products)} products, {len(solutions)} solutions")
             
             if search_methods:
@@ -585,22 +637,61 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
         # Enhanced conversation context with retriever findings and flow analysis
         enhanced_conversation = self._enhance_conversation_for_quote_generation(flow_analysis)
         
-        # Prepare enhanced customer context
+        # Prepare enhanced customer context with all necessary information
         enhanced_customer_context = {
             **(customer_context or {}),
             'product_recommendations': self.product_recommendations.get('products', []),
             'solution_recommendations': self.product_recommendations.get('solutions', []),
-            'extracted_requirements': self.customer_requirements,
+            'extracted_requirements': self.product_recommendations.get('requirements', {}),
             'conversation_analysis': flow_analysis,
             'flow_confidence': flow_analysis.get('confidence_level', 'medium'),
             'business_context_score': flow_analysis.get('business_context_score', 50),
-            'technical_requirements_score': flow_analysis.get('technical_requirements_score', 50)
+            'technical_requirements_score': flow_analysis.get('technical_requirements_score', 50),
+            'completion_scores': flow_analysis.get('completion_scores', {}),
+            'quote_ready': flow_analysis.get('quote_ready', False),
+            'should_generate_quote': flow_analysis.get('should_generate_quote', False),
+            'current_stage': flow_analysis.get('current_stage', 'deep_discovery'),
+            'recommendation_selected': flow_analysis.get('recommendation_selected', False)
         }
+        
+        # Debug logging for customer context
+        print(f"🔍 Customer Context Debug:")
+        print(f"   Original customer_context has selected_recommendation: {'selected_recommendation' in (customer_context or {})}")
+        print(f"   Enhanced context has selected_recommendation: {'selected_recommendation' in enhanced_customer_context}")
+        if 'selected_recommendation' in enhanced_customer_context:
+            selected = enhanced_customer_context['selected_recommendation']
+            print(f"   Selected recommendation: {selected.get('name', 'Unknown')} (ID: {selected.get('id', 'Unknown')})")
+        
+        # Ensure selected_recommendation is available if auto-selected
+        if flow_analysis.get('recommendation_selected', False) and 'selected_recommendation' not in enhanced_customer_context:
+            # Auto-select the first product if none was explicitly selected
+            top_product = self.product_recommendations.get('products', [])[0] if self.product_recommendations.get('products') else None
+            if top_product:
+                enhanced_customer_context['selected_recommendation'] = top_product
+                print(f"🎯 Quote Agent: Auto-selecting recommendation for quote: {top_product.get('name', 'Unknown Product')}")
+            else:
+                print("❌ Quote Agent: No products available for auto-selection")
         
         print(f"📝 Enhanced context prepared with {len(enhanced_conversation)} messages")
         
+        # Debug logging for quote generation
+        extracted_requirements = enhanced_customer_context.get('extracted_requirements', {})
+        print(f"🔍 Quote Generation Debug:")
+        print(f"   Product recommendations: {len(enhanced_customer_context.get('product_recommendations', []))}")
+        print(f"   Extracted requirements keys: {list(extracted_requirements.keys()) if extracted_requirements else 'None'}")
+        print(f"   Technical requirements: {len(extracted_requirements.get('technical_requirements', [])) if extracted_requirements else 0}")
+        print(f"   Business requirements: {len(extracted_requirements.get('business_requirements', [])) if extracted_requirements else 0}")
+        
         # Let quote agent generate quote with enhanced context
         try:
+            # First verify we have the necessary data
+            if not enhanced_customer_context.get('product_recommendations'):
+                raise ValueError("No product recommendations available for quote generation")
+            
+            if not enhanced_customer_context.get('extracted_requirements'):
+                raise ValueError("No customer requirements available for quote generation")
+            
+            # Generate quote with enhanced context
             quote = await self.quote_agent.generate_quote_from_conversation(
                 enhanced_conversation,
                 enhanced_customer_context
@@ -614,31 +705,36 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 from services.pitch_deck_service import PitchDeckService
                 pitch_deck_service = PitchDeckService()
                 
-                # Extract pitch deck structure from quote
-                deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
-                
-                # Generate unique deck ID
-                deck_id = str(uuid.uuid4())
-                
-                # Generate the pitch deck
-                deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
-                os.makedirs(os.path.dirname(deck_path), exist_ok=True)
-                
-                # Generate the PowerPoint file
-                await pitch_deck_service.generate_ppt(deck_structure, deck_path)
-                
-                # Add quote and pitch deck to response metadata
-                response.metadata['quote'] = quote
-                response.metadata['quote_generated'] = True
-                response.metadata['quote_id'] = quote.get('id')
-                response.metadata['pitch_deck'] = {
-                    'id': deck_id,
-                    'path': deck_path,
-                    'download_url': f"/api/quotes/download-pitch-deck/{deck_id}"
-                }
-                
-                # Enhance sales response to incorporate the quote and pitch deck
-                response = self._enhance_response_with_dynamic_quote(response, quote, deck_id)
+                try:
+                    # Extract pitch deck structure from quote
+                    deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
+                    
+                    # Generate unique deck ID
+                    deck_id = str(uuid.uuid4())
+                    
+                    # Generate the pitch deck
+                    deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+                    os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+                    
+                    # Generate the PowerPoint file
+                    await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+                    
+                    # Add quote and pitch deck to response metadata
+                    response.metadata['quote'] = quote
+                    response.metadata['quote_generated'] = True
+                    response.metadata['quote_id'] = quote.get('id')
+                    response.metadata['pitch_deck'] = {
+                        'id': deck_id,
+                        'path': deck_path,
+                        'download_url': f"/api/quotes/download-pitch-deck/{deck_id}"
+                    }
+                    
+                    # Enhance sales response to incorporate the quote and pitch deck
+                    response = self._enhance_response_with_dynamic_quote(response, quote, deck_id)
+                except Exception as deck_error:
+                    print(f"⚠️ Pitch deck generation failed: {str(deck_error)}")
+                    # Continue without pitch deck
+                    response.metadata['pitch_deck_error'] = str(deck_error)
             else:
                 print("❌ Quote agent couldn't generate quote from enhanced conversation")
                 response.metadata['quote_generation_failed'] = True
@@ -646,6 +742,11 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 # Add fallback message
                 response.content += "\n\n💡 I'd be happy to prepare a detailed quote for you! Let me gather a bit more information to ensure I provide the most accurate recommendations."
                 
+        except ValueError as ve:
+            print(f"❌ Validation error in quote generation: {str(ve)}")
+            response.metadata['quote_error'] = str(ve)
+            response.content += f"\n\n💡 I need a bit more information to prepare your quote. {str(ve)}"
+            
         except Exception as e:
             print(f"❌ Error in quote generation: {str(e)}")
             response.metadata['quote_error'] = str(e)
@@ -905,71 +1006,57 @@ APPROACH:
         strong_quote_indicators = [
             "prepare a detailed quote", "could you please prepare", "generate a quote",
             "send me a quote", "i need a quote", "quote me", "quotation please",
-            "detailed proposal", "pricing proposal", "can you quote"
+            "detailed proposal", "pricing proposal", "can you quote", "give me a quote",
+            "receive the quote", "yes send detailed quote", "how much", "what's the price",
+            "pricing information", "cost estimate", "budget estimate", "price quote",
+            "send me pricing", "what would it cost", "total cost", "final price",
+            "i'll prepare", "i will send", "send it over", "quote shortly",
+            "formal quote", "detailed quote", "pricing quote"
         ]
         
         # Check for explicit quote requests
         explicit_quote_request = any(phrase in recent_text for phrase in strong_quote_indicators)
         
-        # If there's an explicit quote request, be more lenient with requirements
+        # If there's an explicit quote request, proceed with quote generation
         if explicit_quote_request:
             print("✅ Explicit quote request detected - proceeding with quote generation")
+            flow_analysis['quote_ready'] = True
+            flow_analysis['should_generate_quote'] = True
+            flow_analysis['recommendation_selected'] = True
             return True
-        
-        # Technical completeness indicators
-        tech_completeness_indicators = [
-            # Quantities
-            r'\d+\s*(servers?|units?|systems?)',
-            r'\d+×?\s*nvidia',
-            r'\d+\s*gpu',
             
-            # Specific products/specs
-            'nvidia a100', 'supermicro', 'asus', 'chassis',
-            'installation', 'kubernetes', 'k8s', 'maintenance',
-            
-            # Timeline indicators
-            r'\d+[-–]\d+\s*weeks?',
-            'timeline', 'deployment', 'procurement'
-        ]
-        
-        import re
-        tech_mentions = sum(1 for pattern in tech_completeness_indicators 
-                           if re.search(pattern, recent_text))
-        
-        # Business context indicators
-        business_context_indicators = [
-            'training', 'inference', 'llm', 'machine learning',
-            'deployment', 'production', 'enterprise', 'business'
-        ]
-        
-        business_mentions = sum(1 for indicator in business_context_indicators 
-                               if indicator in recent_text)
-        
         # Calculate readiness scores
         explicit_request_score = 100 if explicit_quote_request else 0
-        tech_completeness_score = min(100, tech_mentions * 15)
-        business_context_score = min(100, business_mentions * 20)
+        business_context_score = flow_analysis.get('business_context_score', 0)
+        technical_score = flow_analysis.get('technical_requirements_score', 0)
         
-        # Overall readiness calculation
-        overall_readiness = (explicit_request_score * 0.5 + 
-                            tech_completeness_score * 0.3 + 
-                            business_context_score * 0.2)
+        # Overall readiness calculation with adjusted weights
+        overall_readiness = (
+            explicit_request_score * 0.5 +     # Explicit requests are weighted more heavily
+            business_context_score * 0.25 +    # Business context is important
+            technical_score * 0.25             # Technical requirements are important
+        )
         
         print(f"🎯 Enhanced Readiness Scores:")
         print(f"   📝 Explicit Request: {explicit_request_score}%")
-        print(f"   🔧 Tech Completeness: {tech_completeness_score}%")
-        print(f"   🏢 Business Context: {business_context_score}%")
+        print(f"   💼 Business Context: {business_context_score}%")
+        print(f"   🔧 Technical Requirements: {technical_score}%")
         print(f"   📊 Overall Readiness: {overall_readiness:.1f}%")
         
-        # Decision threshold - much more aggressive for explicit requests
+        # Decision threshold - lowered from 70% to 50%
         if explicit_quote_request:
-            is_ready = overall_readiness >= 30  # Even lower threshold for explicit requests
-            print(f"✅ Explicit quote request detected - readiness threshold: 30%")
+            is_ready = True  # Always ready for explicit requests
+            print(f"✅ Explicit quote request detected - proceeding with quote")
         else:
-            is_ready = overall_readiness >= 80  # Higher threshold for implicit readiness
-            print(f"📋 Implicit readiness check - threshold: 80%")
+            is_ready = overall_readiness >= 50  # Lower threshold for implicit readiness
+            print(f"📋 Implicit readiness check - threshold: 50%")
         
         print(f"🎯 Final Decision: {'READY FOR QUOTE' if is_ready else 'CONTINUE DISCOVERY'}")
+        
+        # Update flow analysis
+        flow_analysis['quote_ready'] = is_ready
+        flow_analysis['should_generate_quote'] = is_ready
+        flow_analysis['recommendation_selected'] = is_ready
         
         return is_ready
 
@@ -987,6 +1074,10 @@ APPROACH:
             # Extract and format recommendations
             products = retrieval_result.get('products', [])
             solutions = retrieval_result.get('solutions', [])
+            
+            # Normalize products to ensure all required fields exist
+            products = self._normalize_product_data(products)
+            solutions = self._normalize_solution_data(solutions)
             
             # Combine and format recommendations
             recommendations = []
@@ -1014,13 +1105,22 @@ APPROACH:
                     else:
                         hybrid_score = 0.0
 
+                    # Safely handle features and benefits
+                    features = product.get('features', [])
+                    if not isinstance(features, list):
+                        features = []
+                    
+                    benefits = product.get('benefits', [])
+                    if not isinstance(benefits, list):
+                        benefits = []
+
                     recommendation = {
                         'product_id': product.get('id', ''),
                         'name': product.get('name', ''),
                         'description': product.get('description', ''),
                         'price': price,
-                        'features': product.get('features', []),
-                        'benefits': product.get('benefits', []),
+                        'features': features,
+                        'benefits': benefits,
                         'suitability_score': hybrid_score,
                         'customization_options': product.get('customization_options', {}),
                         'search_source': product.get('search_source', 'hybrid'),
@@ -1035,17 +1135,46 @@ APPROACH:
             if solutions:
                 for solution in solutions:
                     try:
+                        # Safely handle price conversion
+                        price = solution.get('price')
+                        if price is not None:
+                            try:
+                                price = float(price)
+                            except (ValueError, TypeError):
+                                price = 0.0
+                        else:
+                            price = 0.0
+
+                        # Safely handle match score
+                        match_score = solution.get('match_score')
+                        if match_score is not None:
+                            try:
+                                match_score = float(match_score)
+                            except (ValueError, TypeError):
+                                match_score = 0.0
+                        else:
+                            match_score = 0.0
+
+                        # Safely handle features and benefits
+                        features = solution.get('features', [])
+                        if not isinstance(features, list):
+                            features = []
+                        
+                        benefits = solution.get('benefits', [])
+                        if not isinstance(benefits, list):
+                            benefits = []
+
                         recommendation = {
                             'product_id': solution.get('id', ''),
                             'name': solution.get('name', ''),
                             'description': solution.get('description', ''),
-                            'price': float(solution.get('price', 0.0)),
-                            'features': solution.get('features', []),
-                            'benefits': solution.get('benefits', []),
-                            'suitability_score': float(solution.get('match_score', 0.0)),
+                            'price': price,
+                            'features': features,
+                            'benefits': benefits,
+                            'suitability_score': match_score,
                             'customization_options': solution.get('customization_options', {}),
                             'search_source': 'solution',
-                            'confidence': float(solution.get('match_score', 0.0))
+                            'confidence': match_score
                         }
                         recommendations.append(recommendation)
                     except Exception as e:
@@ -1059,6 +1188,110 @@ APPROACH:
             print(f"❌ Recommendation generation failed: {str(e)}")
             return []
 
+    def _normalize_product_data(self, products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Normalize product data to ensure all required fields exist"""
+        normalized_products = []
+        
+        for product in products:
+            try:
+                # Create a copy to avoid modifying the original
+                normalized_product = dict(product)
+                
+                # Ensure description field exists
+                if 'description' not in normalized_product or not normalized_product['description']:
+                    # Generate description from available fields
+                    description_parts = []
+                    
+                    # Add product name
+                    if normalized_product.get('name'):
+                        description_parts.append(normalized_product['name'])
+                    
+                    # Add category if available
+                    if normalized_product.get('category'):
+                        description_parts.append(f"({normalized_product['category']})")
+                    
+                    # Add core specifications for hardware
+                    if normalized_product.get('core_count'):
+                        description_parts.append(f"{normalized_product['core_count']}-core")
+                    
+                    if normalized_product.get('core_clock'):
+                        description_parts.append(f"{normalized_product['core_clock']}GHz")
+                    
+                    if normalized_product.get('tdp'):
+                        description_parts.append(f"{normalized_product['tdp']}W TDP")
+                    
+                    # Create description or use fallback
+                    if description_parts:
+                        normalized_product['description'] = ' '.join(description_parts)
+                    else:
+                        normalized_product['description'] = f"Professional {normalized_product.get('name', 'technology product')}"
+                
+                # Ensure other required fields exist
+                if 'features' not in normalized_product:
+                    normalized_product['features'] = []
+                
+                if 'benefits' not in normalized_product:
+                    normalized_product['benefits'] = []
+                
+                if 'id' not in normalized_product or not normalized_product['id']:
+                    # Generate ID from name
+                    normalized_product['id'] = f"product_{hash(normalized_product.get('name', 'unknown'))}"
+                
+                normalized_products.append(normalized_product)
+                
+            except Exception as e:
+                print(f"⚠️ Error normalizing product {product.get('name', 'unknown')}: {str(e)}")
+                # Add a minimal safe product
+                normalized_products.append({
+                    'id': f"product_{hash(str(product))}",
+                    'name': product.get('name', 'Unknown Product'),
+                    'description': f"Professional {product.get('name', 'technology product')}",
+                    'price': product.get('price', 0),
+                    'features': [],
+                    'benefits': []
+                })
+        
+        return normalized_products
+
+    def _normalize_solution_data(self, solutions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Normalize solution data to ensure all required fields exist"""
+        normalized_solutions = []
+        
+        for solution in solutions:
+            try:
+                # Create a copy to avoid modifying the original
+                normalized_solution = dict(solution)
+                
+                # Ensure description field exists
+                if 'description' not in normalized_solution or not normalized_solution['description']:
+                    normalized_solution['description'] = f"Complete {normalized_solution.get('name', 'technology solution')}"
+                
+                # Ensure other required fields exist
+                if 'features' not in normalized_solution:
+                    normalized_solution['features'] = []
+                
+                if 'benefits' not in normalized_solution:
+                    normalized_solution['benefits'] = []
+                
+                if 'id' not in normalized_solution or not normalized_solution['id']:
+                    normalized_solution['id'] = f"solution_{hash(normalized_solution.get('name', 'unknown'))}"
+                
+                normalized_solutions.append(normalized_solution)
+                
+            except Exception as e:
+                print(f"⚠️ Error normalizing solution {solution.get('name', 'unknown')}: {str(e)}")
+                # Add a minimal safe solution
+                normalized_solutions.append({
+                    'id': f"solution_{hash(str(solution))}",
+                    'name': solution.get('name', 'Unknown Solution'),
+                    'description': f"Complete {solution.get('name', 'technology solution')}",
+                    'price': solution.get('price', 0),
+                    'features': [],
+                    'benefits': []
+                })
+        
+        return normalized_solutions
+
     def _build_recommendation_context(self, recommendations: List[Dict[str, Any]]) -> str:
         """Build context for recommendation presentation"""
         
@@ -1071,19 +1304,19 @@ APPROACH:
         # Add top recommendations
         context += "=== TOP RECOMMENDATIONS ===\n"
         for i, rec in enumerate(recommendations[:3], 1):
-            context += f"\n{i}. {rec['name']}\n"
-            context += f"   Description: {rec['description']}\n"
-            context += f"   Price: ${rec['price']:,.2f}\n"
-            context += f"   Suitability: {rec['suitability_score']:.1%}\n"
+            context += f"\n{i}. {rec.get('name', 'Unknown Product')}\n"
+            context += f"   Description: {rec.get('description', 'No description available')}\n"
+            context += f"   Price: ${rec.get('price', 0):,.2f}\n"
+            context += f"   Suitability: {rec.get('suitability_score', 0):.1%}\n"
             
-            if rec['features']:
+            if rec.get('features'):
                 context += "   Key Features:\n"
-                for feature in rec['features'][:3]:
+                for feature in rec.get('features', [])[:3]:
                     context += f"   • {feature}\n"
             
-            if rec['benefits']:
+            if rec.get('benefits'):
                 context += "   Business Benefits:\n"
-                for benefit in rec['benefits'][:3]:
+                for benefit in rec.get('benefits', [])[:3]:
                     context += f"   • {benefit}\n"
         
         # Add recommendation strategy
@@ -1238,4 +1471,178 @@ PRESENTATION APPROACH:
                 
                 # Also track questions with question marks
                 question_mark_questions = [q.strip() for q in msg.content.split('?') if '?' in q]
-                self.asked_questions.update(question_mark_questions) 
+                self.asked_questions.update(question_mark_questions)
+
+    async def _handle_recommendation_stage(
+        self,
+        messages: List[AIMessage],
+        customer_context: Optional[Dict[str, Any]],
+        flow_analysis: Dict[str, Any]
+    ) -> AIResponse:
+        """Handle the solution presentation and recommendation stage"""
+        
+        print("🎯 Handling recommendation stage...")
+        
+        try:
+            # Get product recommendations
+            retrieval_result = await self._collaborate_with_retriever_agent(
+                messages=messages,
+                customer_context=customer_context,
+                force_retrieval=True  # Force retrieval to ensure fresh recommendations
+            )
+            
+            # Store recommendations for later use
+            self.product_recommendations = retrieval_result
+            
+            # Check if user has selected a recommendation
+            last_message = messages[-1].content.lower() if messages else ""
+            selected_recommendation = None
+            info_requested = False
+            
+            # Enhanced product selection detection
+            for product in retrieval_result.get('products', []):
+                try:
+                    product_name = product.get('name', '').lower()
+                    product_model = product.get('model', '').lower()
+                    product_specs = product.get('specifications', {})
+                    
+                    # Check for exact product name or model match
+                    if product_name in last_message or product_model in last_message:
+                        selected_recommendation = product
+                        flow_analysis['recommendation_selected'] = True
+                        flow_analysis['should_generate_quote'] = True
+                        flow_analysis['quote_ready'] = True
+                        break
+                        
+                    # Check for partial matches in product specifications
+                    for spec_key, spec_value in product_specs.items():
+                        if isinstance(spec_value, str):
+                            spec_value = spec_value.lower()
+                            if spec_value in last_message:
+                                selected_recommendation = product
+                                flow_analysis['recommendation_selected'] = True
+                                flow_analysis['should_generate_quote'] = True
+                                flow_analysis['quote_ready'] = True
+                                break
+                                
+                    # Check for RAID configuration mentions
+                    if 'raid' in last_message and 'raid' in str(product_specs).lower():
+                        selected_recommendation = product
+                        flow_analysis['recommendation_selected'] = True
+                        flow_analysis['should_generate_quote'] = True
+                        flow_analysis['quote_ready'] = True
+                        break
+                        
+                except Exception as e:
+                    print(f"⚠️ Error processing product: {str(e)}")
+                    continue
+            
+            # Check for explicit quote requests
+            explicit_quote_request = any(phrase in last_message for phrase in [
+                "give me quote", "prepare quote", "generate quote", "send quote",
+                "quote please", "need quote", "want quote", "quote for"
+            ])
+            
+            # Update flow analysis based on selection or quote request
+            if explicit_quote_request and not info_requested:
+                flow_analysis['recommendation_selected'] = True
+                flow_analysis['should_generate_quote'] = True
+                flow_analysis['quote_ready'] = True
+                # Store the selected recommendation in customer context
+                if customer_context is None:
+                    customer_context = {}
+                if selected_recommendation:
+                    customer_context['selected_recommendation'] = selected_recommendation
+                else:
+                    # If no specific selection but quote requested, use the first recommendation
+                    first_product = retrieval_result.get('products', [])[0] if retrieval_result.get('products') else None
+                    if first_product:
+                        customer_context['selected_recommendation'] = first_product
+                    else:
+                        raise ValueError("No recommendations available for quote generation")
+            
+            # Build recommendation context
+            recommendation_context = self._build_recommendation_context(
+                retrieval_result.get('products', []) + retrieval_result.get('solutions', [])
+            )
+            
+            # Add recommendation context to messages
+            enhanced_messages = self._add_recommendation_context(
+                messages=messages,
+                customer_context=customer_context,
+                recommendation_context=recommendation_context
+            )
+            
+            # If info was requested, add specific product details
+            if info_requested and selected_recommendation:
+                try:
+                    product_details = f"""
+DETAILED PRODUCT INFORMATION FOR {selected_recommendation.get('name', 'Selected Product')}:
+
+SPECIFICATIONS:
+{json.dumps(selected_recommendation.get('specifications', {}), indent=2)}
+
+FEATURES:
+{chr(10).join(f'• {feature}' for feature in selected_recommendation.get('features', []))}
+
+BENEFITS:
+{chr(10).join(f'• {benefit}' for benefit in selected_recommendation.get('benefits', []))}
+
+PRICING:
+• Base Price: ${float(selected_recommendation.get('price', 0)):,.2f}
+• Additional options available
+
+Please provide more specific information about what aspects of the product you'd like to know more about.
+"""
+                    enhanced_messages.append(AIMessage(role="system", content=product_details))
+                except Exception as e:
+                    print(f"⚠️ Error generating product details: {str(e)}")
+                    # Add basic product info if detailed info fails
+                    basic_info = f"""
+BASIC PRODUCT INFORMATION FOR {selected_recommendation.get('name', 'Selected Product')}:
+
+{selected_recommendation.get('description', 'No description available')}
+
+Please let me know what specific information you'd like to know about this product.
+"""
+                    enhanced_messages.append(AIMessage(role="system", content=basic_info))
+            
+            # Generate response with recommendations
+            response = await self.base_provider.generate_response(enhanced_messages)
+            
+            # Add recommendation metadata
+            if not hasattr(response, 'metadata') or response.metadata is None:
+                response.metadata = {}
+                
+            response.metadata.update({
+                'recommendations_presented': True,
+                'recommendation_selected': flow_analysis['recommendation_selected'],
+                'should_generate_quote': flow_analysis['should_generate_quote'],
+                'quote_ready': flow_analysis['quote_ready'],
+                'product_recommendations': retrieval_result.get('products', []),
+                'solution_recommendations': retrieval_result.get('solutions', []),
+                'retrieval_confidence': retrieval_result.get('retrieval_confidence', 0),
+                'search_methods': retrieval_result.get('search_methods', {}),
+                'selected_recommendation': selected_recommendation,
+                'info_requested': info_requested
+            })
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ Error in recommendation stage: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            # Return a safe response
+            return AIResponse(
+                content="I apologize, but I encountered an error while processing the recommendations. Could you please try asking about the products again?",
+                model="enhanced-sales-agent",
+                provider=self.provider_name,
+                metadata={
+                    'error': str(e),
+                    'recommendations_presented': False,
+                    'recommendation_selected': False,
+                    'should_generate_quote': False,
+                    'quote_ready': False
+                }
+            ) 
