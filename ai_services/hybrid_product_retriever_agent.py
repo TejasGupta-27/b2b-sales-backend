@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 from .base import AIProvider, AIMessage, AIResponse
 from services.elasticsearch_service import get_elasticsearch_service
 from services.chroma_service import ChromaDBService
+from services.realtime_ingestor import get_products # Adjust if path differs
 from .function_models import RequirementExtraction, ProductAnalysis
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,44 @@ class HybridProductRetrieverAgent(AIProvider):
             "retrieval_confidence": self._calculate_hybrid_confidence(hybrid_results, requirements)
         }
     
+    def _extract_search_query(requirements: dict) -> str:
+        """
+        Extract a concise search query string from the structured requirements dictionary.
+        Prioritizes 'SEARCH KEYWORDS' and 'PRODUCT CATEGORIES'.
+        Falls back to a generic term if none found.
+        """
+        if not isinstance(requirements, dict):
+            return "electronics"
+
+        # Helper to normalize values to string
+        def to_str(value):
+            if isinstance(value, list):
+                return " ".join(str(v) for v in value if v)
+            if isinstance(value, str):
+                return value
+            return ""
+
+        search_keywords = to_str(requirements.get('SEARCH KEYWORDS', ""))
+        product_categories = to_str(requirements.get('PRODUCT CATEGORIES', ""))
+
+        # Compose query giving priority to keywords then categories
+        query = search_keywords or product_categories
+
+        # If both empty, fallback to technical or business requirements
+        if not query:
+            technical_reqs = to_str(requirements.get('TECHNICAL REQUIREMENTS', ""))
+            business_reqs = to_str(requirements.get('BUSINESS REQUIREMENTS', ""))
+            query = technical_reqs or business_reqs
+
+        # Final fallback
+        if not query:
+            query = "electronics"
+
+        # Clean whitespace
+        query = " ".join(query.split())
+
+        return query
+
     async def _extract_requirements_from_conversation(
         self,
         messages: List[AIMessage],
@@ -164,6 +203,8 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
         
         return " ".join(query_parts)
     
+    KEYWORD_FALLBACK_TRIGGERS = ["latest", "new release", "compare", "review", "availability"]
+
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Perform hybrid search using both Elasticsearch and ChromaDB"""
         
@@ -212,6 +253,33 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             "merged_products": len(merged_products)
         }
         
+        # Use only products with decent hybrid scores
+        quality_products = [p for p in merged_products if p.get('hybrid_score', 0) >= 25]
+
+        # --- New: Keyword-based web fallback ---
+        semantic_query = requirements.get('semantic_query', '').lower()
+        if any(keyword in semantic_query for keyword in self.KEYWORD_FALLBACK_TRIGGERS):
+            print("🌐 Keyword trigger detected. Invoking web search fallback...")
+            quality_products = quality_products[:2]
+
+        # Fallback: Use realtime ingestion if products are too few
+        if len(quality_products) < 3:
+            print("🚨 Not enough products found. Invoking realtime fallback retrieval...")
+            try:
+                search_query = self._extract_search_query(requirements)
+                realtime_fallback_products = await get_products(search_query)
+                for product in realtime_fallback_products:
+                    product['search_source'] = 'fallback'
+                    product['keyword_score'] = 0
+                    product['semantic_score'] = product.get('_similarity_score', 0)
+                    product['hybrid_score'] = product['semantic_score']
+                
+                merged_products = self._merge_product_results(quality_products,realtime_fallback_products)
+                search_methods['realtime_fallback'] = len(realtime_fallback_products)
+                print(f"✅ Retrieved {len(realtime_fallback_products)} fallback products.")
+            except Exception as e:
+                print(f"❌ Realtime fallback retrieval failed: {e}")
+
         print(f"🎯 Hybrid search results: {search_methods}")
         
         return {

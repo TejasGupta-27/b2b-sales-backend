@@ -6,7 +6,7 @@ import os
 class Settings(BaseSettings):
     # Disable .env file loading
     class Config:
-        env_file = None
+        env_file = ".env"
     
     # API Configuration
     api_host: str = os.getenv("API_HOST", "0.0.0.0")

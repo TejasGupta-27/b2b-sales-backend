@@ -8,11 +8,13 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches
 from PIL import Image  # For image size adjustment (optional but helpful)
+from datetime import datetime # For unique datetime
 
 # Initialize paths
 PRODUCT_IMAGE_PATH = os.path.join("Data", "assets", "workstation.jpg")
 LOGO_PATH = os.path.join("Data", "assets", "logo.png")
-OUTPUT_PATH = os.path.join("Data", "presentations", "Sales_Pitch_Deck.pptx")
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_PATH = os.path.join("Data", "presentations", f"Sales_Pitch_Deck_{timestamp}.pptx")
 TEMPLATE_PATH = os.path.join("Data", "assets", "template.pptx")
 
 # Initialize Azure OpenAI client
@@ -161,7 +163,19 @@ Return your response as valid JSON:
         temperature=0.5
     )
 
-    raw_output = response.choices[0].message.content.strip()
+    # Debug structure
+    print("🔍 GPT response preview:", response)
+
+    # Try multiple access patterns depending on structure
+    try:
+        raw_output = response.choices[0].message.content.strip()
+    except AttributeError:
+        # Fallback for simpler structures (e.g., .text or plain string)
+        try:
+            raw_output = response.choices[0].text.strip()
+        except AttributeError:
+            raw_output = str(response.choices[0]).strip()
+
 
     try:
         parsed = json.loads(raw_output)
@@ -317,6 +331,7 @@ def generate_ppt(data: dict):
 
     # Save presentation
     try:
+        os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
         prs.save(OUTPUT_PATH)
         print(f"✅ Presentation saved successfully to: {OUTPUT_PATH}")
     except Exception as e:

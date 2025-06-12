@@ -29,6 +29,11 @@ aiofiles>=0.8.0
 aiohttp>=3.9.0
 reportlab
 jinja2
+python-pptx
+langchain
+langchain_community
+langchain_chroma
+beautifulsoup4
 
 # Speech recognition
 openai-whisper

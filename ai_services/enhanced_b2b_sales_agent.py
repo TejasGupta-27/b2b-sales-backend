@@ -1,10 +1,11 @@
 import json
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import asyncio
 
 from .base import AIProvider, AIMessage, AIResponse
 from .quote_generation_agent import QuoteGenerationAgent
+
 from .product_retriever_agent import ProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
 from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
@@ -413,7 +414,17 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 'error': str(e),
                 'retrieval_confidence': 0.0
             }
-    
+    def _quote_to_text(quote: Dict[str, Any]) -> str:
+        lines = []
+        lines.append(f"Quote Number: {quote.get('quote_number', '')}")
+        lines.append(f"Title: {quote.get('quote_title', '')}")
+        lines.append(f"Customer: {quote.get('customer_info', {}).get('name', 'N/A')}")
+        lines.append(f"Total: {quote.get('currency', '')} {quote.get('total', 0):,.2f}")
+        lines.append("Line Items:")
+        for item in quote.get("line_items", []):
+            lines.append(f"- {item.get('description', 'No desc')} x {item.get('quantity', 1)} @ {item.get('price', 0)}")
+        return "\n".join(lines)
+
     async def _collaborate_with_quote_agent(
         self, 
         response: AIResponse, 
@@ -453,6 +464,7 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 enhanced_conversation,
                 enhanced_customer_context
             )
+            print(type(quote),'\n',quote)
             
             if quote:
                 print(f"✅ Quote Agent provided enhanced quote with ID: {quote.get('id')}")
@@ -461,7 +473,7 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 # === Generate PPT Deck ===
                 try:
                     print("📊 Generating PowerPoint pitch deck from quote...")
-                    ppt_structure = extract_ppt_structure(quote["text"])  # or quote["content"]
+                    ppt_structure = extract_ppt_structure(self._quote_to_text(quote))
                     
                     ppt_dir = "ppt"
                     os.makedirs(ppt_dir, exist_ok=True)

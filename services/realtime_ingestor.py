@@ -4,7 +4,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings.azure_openai import AzureOpenAIEmbeddings
 from langchain_chroma import Chroma
 from pydantic import model_validator
-import web_scraper
+from . import web_scraper
 import re
 
 class FixedAzureOpenAIEmbeddings(AzureOpenAIEmbeddings):
@@ -133,10 +133,13 @@ def retrieve_relevant_chunks(query, top_k=5, filter_type=None):
 
 
 
-if __name__ == "__main__":
-    user_query = "best AM5 motherboard with Wi-Fi support"
+def get_products(user_query):
+    #user_query = "best AM5 motherboard with Wi-Fi support"
     main_flow(user_query)
-
-    # Then, query retrieval:
     matches = retrieve_relevant_chunks(user_query)
     print(f"[DEBUG] Retrieved matches:\n{matches}")
+    return matches
+
+if __name__ == "__main__":
+    user_query = "best AM5 motherboard with Wi-Fi support"
+    get_products(user_query)

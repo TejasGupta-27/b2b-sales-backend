@@ -199,7 +199,7 @@ Keep your response conversational and helpful."""
         if any(term in response_lower for term in ['ready to buy', 'quote ready', 'pricing request']):
             decision_score = 80
         
-        # Determine quote readiness
+        # Determine quote readiness  
         quote_ready = any(term in response_lower for term in [
             'quote ready', 'ready for quote', 'should generate quote', 'pricing request'
         ])
