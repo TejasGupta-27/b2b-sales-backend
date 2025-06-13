@@ -47,3 +47,5 @@ htmlcov/
 models/.locks
 models/models--guillaumekln--faster-whisper-base
 models/models--guillaumekln--faster-whisper-medium
+
+chroma_db/
