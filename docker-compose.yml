@@ -54,8 +54,7 @@ services:
       
     volumes:
       
-      # Mount application code for development
-      - .:/app
+
 
       # Persist logs
       - ./logs:/app/logs
