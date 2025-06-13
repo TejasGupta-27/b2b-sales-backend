@@ -2,267 +2,270 @@
 
 ```mermaid
 graph TB
-    %% External Clients
-    subgraph "External Clients"
+    %% Clients
+    subgraph "Clients"
         CLIENT[Frontend App]
         ADMIN[Admin Interface]
         API_CLIENT[API Clients]
     end
 
-    %% Load Balancer / Gateway
-    subgraph "API Gateway"
-        NGINX[Load Balancer/Nginx]
+    %% Gateway
+    subgraph "Gateway"
+        NGINX[Nginx Load Balancer]
     end
 
-    %% Main Application Layer
-    subgraph "FastAPI Application"
-        APP[B2B Sales Backend<br/>FastAPI App]
-        
-        subgraph "Route Handlers"
-            LEADS_ROUTE[Leads Router]
-            QUOTES_ROUTE[Quotes Router]
-            SPEECH_ROUTE[Speech Router]
-            RECOMMENDATIONS_ROUTE[Recommendations Router]
-            ADMIN_ROUTE[Admin Router]
-            CHAT_ROUTE[Chat Endpoints]
+    %% Application
+    subgraph "FastAPI Backend"
+        APP[FastAPI App]
+
+        subgraph "Routes"
+            LEADS[Leads API]
+            QUOTES[Quotes API]
+            CHAT[Chat API]
+            ADMIN_API[Admin API]
+            SPEECH[Speech API]
+            RECOMMENDATIONS[Recommendations API]
         end
-        
+
         subgraph "Middleware"
-            CORS[CORS Middleware]
+            CORS[CORS]
             AUTH[Authentication]
-            LOGGING[Logging Middleware]
+            LOG[Logging]
         end
     end
 
-    %% AI Services Layer
-    subgraph "AI Services"
-        subgraph "AI Service Factory"
-            AI_FACTORY[AI Service Factory]
-            AZURE_AI[Azure OpenAI Provider]
-            HF_AI[HuggingFace Provider]
-            TOKEN_TRACKER[Token Tracker]
-        end
+    %% Enhanced B2B Sales Agent (Main Orchestrator)
+    subgraph "Enhanced B2B Sales Agent"
+        ENHANCED_SALES[Enhanced B2B Sales Agent<br/>Main Orchestrator]
         
         subgraph "Specialized AI Agents"
-            SALES_AGENT[Enhanced B2B Sales Agent]
-            PRODUCT_RETRIEVER[Product Retriever Agent]
-            HYBRID_RETRIEVER[Hybrid Product Retriever Agent]
+            CONVERSATION_FLOW[Conversation Flow Manager]
             QUOTE_AGENT[Quote Generation Agent]
-            CONVERSATION_MANAGER[Conversation Flow Manager]
-            DYNAMIC_EXTRACTOR[Dynamic Extraction Agent]
             QUICK_RESPONSE[Quick Response Generator]
+            HYBRID_RETRIEVER[Hybrid Product Retriever]
+            STANDARD_RETRIEVER[Standard Product Retriever]
+            DYNAMIC_EXTRACTOR[Dynamic Extraction Agent]
         end
     end
 
-    %% Business Services Layer
-    subgraph "Business Services"
-        ELASTICSEARCH_SVC[Elasticsearch Service]
-        CHROMA_SVC[ChromaDB Service]
-        SPEECH_SVC[Speech Service]
-        PDF_SVC[PDF Generator]
-        PITCH_SVC[Pitch Deck Service]
-        PROMPT_MGR[Prompt Manager]
-    end
-
-    %% Data Layer
-    subgraph "Data Storage"
-        subgraph "Primary Database"
-            POSTGRES[(PostgreSQL)]
-            LEADS_TABLE[Leads Table]
-            CHAT_TABLE[Chat Messages Table]
-            QUOTES_TABLE[Quotes Table]
-            RECOMMENDATIONS_TABLE[Recommendations Table]
-        end
+    %% AI Service Factory
+    subgraph "AI Service Factory"
+        AI_FACTORY[AI Service Factory]
         
-        subgraph "Search & Vector Storage"
-            ELASTICSEARCH[(Elasticsearch)]
-            CHROMA[(ChromaDB)]
-            PRODUCTS_INDEX[Products Index]
-            SOLUTIONS_INDEX[Solutions Index]
-        end
-        
-        subgraph "File Storage"
-            JSON_DATA[JSON Data Files]
-            UPLOADS[Uploaded Files]
-            QUOTES_FILES[Generated Quotes]
-            PITCH_DECKS[Pitch Decks]
-            LOGS[Application Logs]
+        subgraph "AI Providers"
+            AZURE_PROVIDER[Azure OpenAI Provider]
+            HF_PROVIDER[HuggingFace Provider]
+            TOKEN_TRACKER[Token Tracker]
         end
     end
 
     %% External AI Services
     subgraph "External AI Services"
-        AZURE_OPENAI[Azure OpenAI]
-        AZURE_EMBEDDING[Azure Embeddings]
-        WHISPER[Whisper Models]
+        AZURE_OPENAI[Azure OpenAI GPT Models]
+        AZURE_EMBED[Azure Embeddings API]
+        WHISPER_MODELS[Whisper Models]
     end
 
-    %% Monitoring & Admin
-    subgraph "Monitoring & Admin"
+    %% Business Services
+    subgraph "Business Services"
+        ELASTICSEARCH_SVC[Elasticsearch Service]
+        CHROMA_SVC[ChromaDB Service]
+        PDF_SVC[PDF Generator]
+        PITCH_SVC[Pitch Deck Service]
+        SPEECH_SVC[Speech Service]
+        PROMPT_MGR[Prompt Manager]
+    end
+
+    %% Data Storage
+    subgraph "Storage"
+        POSTGRES[(PostgreSQL DB)]
+        ELASTICSEARCH[(Elasticsearch)]
+        CHROMA[(ChromaDB Vector Store)]
+        FILES[File Storage<br/>JSON/PDFs/Pitch Decks]
+    end
+
+    %% Monitoring
+    subgraph "Monitoring"
         KIBANA[Kibana Dashboard]
-        ADMINER[Database Admin]
-        HEALTH[Health Check]
+        ADMINER[Adminer DB Admin]
+        HEALTH[Health Checks]
     end
 
-    %% Data Models
-    subgraph "Data Models"
-        LEAD_MODEL[Lead Model]
-        CHAT_MODEL[Chat Model]
-        QUOTE_MODEL[Quote Model]
-        RECOMMENDATION_MODEL[Recommendation Model]
-        CATALOG_MODEL[Catalog Model]
-    end
-
-    %% Connection Flow
+    %% Client Connections
     CLIENT --> NGINX
     ADMIN --> NGINX
     API_CLIENT --> NGINX
-    
     NGINX --> APP
-    
+
+    %% Middleware Flow
     APP --> CORS
     APP --> AUTH
-    APP --> LOGGING
-    
-    APP --> LEADS_ROUTE
-    APP --> QUOTES_ROUTE
-    APP --> SPEECH_ROUTE
-    APP --> RECOMMENDATIONS_ROUTE
-    APP --> ADMIN_ROUTE
-    APP --> CHAT_ROUTE
-    
-    %% Route to Services
-    LEADS_ROUTE --> SALES_AGENT
-    QUOTES_ROUTE --> QUOTE_AGENT
-    SPEECH_ROUTE --> SPEECH_SVC
-    RECOMMENDATIONS_ROUTE --> PRODUCT_RETRIEVER
-    ADMIN_ROUTE --> ELASTICSEARCH_SVC
-    CHAT_ROUTE --> CONVERSATION_MANAGER
-    
-    %% AI Services Connections
-    AI_FACTORY --> AZURE_AI
-    AI_FACTORY --> HF_AI
-    AI_FACTORY --> TOKEN_TRACKER
-    
-    SALES_AGENT --> AI_FACTORY
-    PRODUCT_RETRIEVER --> AI_FACTORY
-    HYBRID_RETRIEVER --> AI_FACTORY
+    APP --> LOG
+
+    %% Route Connections
+    APP --> LEADS
+    APP --> QUOTES
+    APP --> CHAT
+    APP --> ADMIN_API
+    APP --> SPEECH
+    APP --> RECOMMENDATIONS
+
+    %% Main Route to Enhanced Sales Agent
+    LEADS --> ENHANCED_SALES
+    CHAT --> ENHANCED_SALES
+    RECOMMENDATIONS --> ENHANCED_SALES
+
+    %% Enhanced Sales Agent Internal Flow
+    ENHANCED_SALES --> CONVERSATION_FLOW
+    ENHANCED_SALES --> QUOTE_AGENT
+    ENHANCED_SALES --> QUICK_RESPONSE
+    ENHANCED_SALES --> HYBRID_RETRIEVER
+    ENHANCED_SALES --> STANDARD_RETRIEVER
+    ENHANCED_SALES --> DYNAMIC_EXTRACTOR
+
+    %% AI Agent to AI Factory
+    ENHANCED_SALES --> AI_FACTORY
+    CONVERSATION_FLOW --> AI_FACTORY
     QUOTE_AGENT --> AI_FACTORY
-    CONVERSATION_MANAGER --> AI_FACTORY
-    DYNAMIC_EXTRACTOR --> AI_FACTORY
     QUICK_RESPONSE --> AI_FACTORY
-    
-    %% Business Services to External AI
-    AZURE_AI --> AZURE_OPENAI
-    CHROMA_SVC --> AZURE_EMBEDDING
-    SPEECH_SVC --> WHISPER
-    
-    %% Business Services to Data
+    HYBRID_RETRIEVER --> AI_FACTORY
+    STANDARD_RETRIEVER --> AI_FACTORY
+    DYNAMIC_EXTRACTOR --> AI_FACTORY
+
+    %% AI Factory to Providers
+    AI_FACTORY --> AZURE_PROVIDER
+    AI_FACTORY --> HF_PROVIDER
+    AI_FACTORY --> TOKEN_TRACKER
+
+    %% Providers to External AI
+    AZURE_PROVIDER --> AZURE_OPENAI
+    CHROMA_SVC --> AZURE_EMBED
+    SPEECH_SVC --> WHISPER_MODELS
+
+    %% Business Service Integration
+    ENHANCED_SALES --> ELASTICSEARCH_SVC
+    ENHANCED_SALES --> CHROMA_SVC
+    HYBRID_RETRIEVER --> ELASTICSEARCH_SVC
+    HYBRID_RETRIEVER --> CHROMA_SVC
+    STANDARD_RETRIEVER --> ELASTICSEARCH_SVC
+    QUOTE_AGENT --> PDF_SVC
+    QUOTE_AGENT --> PITCH_SVC
+    SPEECH --> SPEECH_SVC
+    ENHANCED_SALES --> PROMPT_MGR
+
+    %% Direct API Routes
+    QUOTES --> QUOTE_AGENT
+    SPEECH --> SPEECH_SVC
+    ADMIN_API --> ELASTICSEARCH_SVC
+
+    %% Data Storage Connections
+    APP --> POSTGRES
     ELASTICSEARCH_SVC --> ELASTICSEARCH
     CHROMA_SVC --> CHROMA
-    PDF_SVC --> QUOTES_FILES
-    PITCH_SVC --> PITCH_DECKS
-    
-    %% Database Connections
-    APP --> POSTGRES
-    POSTGRES --> LEADS_TABLE
-    POSTGRES --> CHAT_TABLE
-    POSTGRES --> QUOTES_TABLE
-    POSTGRES --> RECOMMENDATIONS_TABLE
-    
-    %% Search Connections
-    ELASTICSEARCH --> PRODUCTS_INDEX
-    ELASTICSEARCH --> SOLUTIONS_INDEX
-    
-    %% File Storage
-    APP --> JSON_DATA
-    APP --> UPLOADS
-    APP --> LOGS
-    
-    %% Monitoring
+    PDF_SVC --> FILES
+    PITCH_SVC --> FILES
+    APP --> FILES
+
+    %% Monitoring Connections
     ELASTICSEARCH --> KIBANA
     POSTGRES --> ADMINER
     APP --> HEALTH
-    
-    %% Data Models
-    LEADS_TABLE --> LEAD_MODEL
-    CHAT_TABLE --> CHAT_MODEL
-    QUOTES_TABLE --> QUOTE_MODEL
-    RECOMMENDATIONS_TABLE --> RECOMMENDATION_MODEL
-    JSON_DATA --> CATALOG_MODEL
 
     %% Styling
-    classDef external fill:#e1f5fe
-    classDef app fill:#f3e5f5
-    classDef ai fill:#fff3e0
-    classDef service fill:#e8f5e8
-    classDef data fill:#fff8e1
-    classDef monitor fill:#fce4ec
-    
-    class CLIENT,ADMIN,API_CLIENT,AZURE_OPENAI,AZURE_EMBEDDING,WHISPER external
-    class APP,LEADS_ROUTE,QUOTES_ROUTE,SPEECH_ROUTE,RECOMMENDATIONS_ROUTE,ADMIN_ROUTE,CHAT_ROUTE,CORS,AUTH,LOGGING app
-    class AI_FACTORY,AZURE_AI,HF_AI,TOKEN_TRACKER,SALES_AGENT,PRODUCT_RETRIEVER,HYBRID_RETRIEVER,QUOTE_AGENT,CONVERSATION_MANAGER,DYNAMIC_EXTRACTOR,QUICK_RESPONSE ai
-    class ELASTICSEARCH_SVC,CHROMA_SVC,SPEECH_SVC,PDF_SVC,PITCH_SVC,PROMPT_MGR service
-    class POSTGRES,ELASTICSEARCH,CHROMA,LEADS_TABLE,CHAT_TABLE,QUOTES_TABLE,RECOMMENDATIONS_TABLE,PRODUCTS_INDEX,SOLUTIONS_INDEX,JSON_DATA,UPLOADS,QUOTES_FILES,PITCH_DECKS,LOGS data
+    classDef client fill:#e3f2fd
+    classDef gateway fill:#bbdefb
+    classDef app fill:#e1bee7
+    classDef enhanced_agent fill:#ffecb3
+    classDef ai_agent fill:#fff9c4
+    classDef ai_factory fill:#f0f4c3
+    classDef external_ai fill:#e8f5e8
+    classDef service fill:#c8e6c9
+    classDef storage fill:#d7ccc8
+    classDef monitor fill:#f8bbd0
+
+    class CLIENT,ADMIN,API_CLIENT client
+    class NGINX gateway
+    class APP,LEADS,QUOTES,CHAT,ADMIN_API,SPEECH,RECOMMENDATIONS,CORS,AUTH,LOG app
+    class ENHANCED_SALES enhanced_agent
+    class CONVERSATION_FLOW,QUOTE_AGENT,QUICK_RESPONSE,HYBRID_RETRIEVER,STANDARD_RETRIEVER,DYNAMIC_EXTRACTOR ai_agent
+    class AI_FACTORY,AZURE_PROVIDER,HF_PROVIDER,TOKEN_TRACKER ai_factory
+    class AZURE_OPENAI,AZURE_EMBED,WHISPER_MODELS external_ai
+    class ELASTICSEARCH_SVC,CHROMA_SVC,PDF_SVC,PITCH_SVC,SPEECH_SVC,PROMPT_MGR service
+    class POSTGRES,ELASTICSEARCH,CHROMA,FILES storage
     class KIBANA,ADMINER,HEALTH monitor
 ```
 
-## Architecture Overview
+## Enhanced Architecture Analysis
 
-### 1. **Client Layer**
-- **Frontend App**: Main web application interface
-- **Admin Interface**: Administrative dashboard
-- **API Clients**: Third-party integrations
+### Key Architectural Components from `enhanced_b2b_sales_agent.py`:
 
-### 2. **API Gateway**
-- **Load Balancer/Nginx**: Routes traffic and provides SSL termination
+#### 1. **Enhanced B2B Sales Agent (Main Orchestrator)**
+- **Central Intelligence Hub**: Manages entire conversation flow and decision-making
+- **Multi-Agent Coordinator**: Orchestrates specialized AI agents based on conversation stage
+- **Caching System**: Maintains product recommendations cache for efficiency
+- **Lazy User Detection**: Adapts conversation style based on user interaction patterns
 
-### 3. **Application Layer (FastAPI)**
-- **Route Handlers**: Specialized routers for different domains
-- **Middleware**: CORS, authentication, and logging
-- **Main App**: Central FastAPI application
+#### 2. **Specialized AI Agent Hierarchy**
+- **Conversation Flow Manager**: AI-powered conversation state analysis and flow control
+- **Quote Generation Agent**: Handles complex quote generation with PDF/pitch deck creation
+- **Quick Response Generator**: Provides fast contextual responses
+- **Hybrid Product Retriever**: Combines Elasticsearch (keyword) + ChromaDB (semantic) search
+- **Standard Product Retriever**: Fallback to Elasticsearch-only search
+- **Dynamic Extraction Agent**: Extracts requirements and context from conversations
 
-### 4. **AI Services Layer**
-- **AI Service Factory**: Manages different AI providers
-- **Specialized Agents**: Domain-specific AI agents for sales, products, quotes
-- **Token Tracking**: Monitors AI service usage
+#### 3. **AI Service Factory Pattern**
+- **Provider Abstraction**: Supports multiple AI providers (Azure OpenAI, HuggingFace)
+- **Token Tracking**: Monitors AI service usage and costs
+- **Configuration Management**: Handles API keys, endpoints, and model configurations
 
-### 5. **Business Services Layer**
-- **Search Services**: Elasticsearch and ChromaDB integration
-- **Document Services**: PDF generation and pitch deck creation
-- **Speech Services**: Voice-to-text processing
-- **Prompt Management**: Centralized prompt management
+#### 4. **Intelligent Flow Management**
+```mermaid
+flowchart LR
+    A[User Message] --> B[Enhanced Sales Agent]
+    B --> C[Conversation Flow Analysis]
+    C --> D{Stage Decision}
+    D -->|Discovery| E[Discovery Handler]
+    D -->|Recommendation| F[Product Retrieval]
+    D -->|Quote Ready| G[Quote Generation]
+    F --> H[Recommendation Presentation]
+    G --> I[PDF + Pitch Deck Generation]
+```
 
-### 6. **Data Layer**
-- **PostgreSQL**: Primary relational database
-- **Elasticsearch**: Product and solution search
-- **ChromaDB**: Vector database for semantic search
-- **File Storage**: JSON data, uploads, generated documents
+#### 5. **Hybrid Search Intelligence**
+- **Elasticsearch**: Fast keyword matching for exact product specifications
+- **ChromaDB**: Semantic similarity for understanding intent and context
+- **Intelligent Merging**: Combines results with weighted scoring
+- **Confidence Assessment**: Provides search confidence metrics
 
-### 7. **External Services**
-- **Azure OpenAI**: GPT models for conversation
-- **Azure Embeddings**: Text embeddings for semantic search
-- **Whisper Models**: Speech recognition
+#### 6. **Advanced Features**
+- **Multi-Modal Support**: Text and speech processing
+- **Conversation Caching**: Prevents redundant processing
+- **Progressive Discovery**: Stage-based information gathering
+- **Quote Readiness Detection**: AI-powered decision making for quote timing
+- **Pitch Deck Generation**: Automated presentation creation
 
-### 8. **Monitoring & Admin**
-- **Kibana**: Elasticsearch monitoring
-- **Adminer**: Database administration
-- **Health Checks**: System health monitoring
+## Data Flow Analysis
 
-## Key Features
+### 1. **Conversation Processing Flow**
+```
+User Input → Enhanced Sales Agent → Conversation Flow Analysis → Stage Routing → Specialized Agent → AI Provider → Response Generation
+```
 
-1. **Multi-Modal AI**: Supports text and speech interactions
-2. **Hybrid Search**: Combines keyword and semantic search
-3. **Lead Management**: Complete lead lifecycle tracking
-4. **Quote Generation**: Automated quote creation with PDF export
-5. **Conversation Flow**: AI-driven conversation management
-6. **Scalable Architecture**: Microservices-ready design
-7. **Admin Dashboard**: Real-time monitoring and configuration
+### 2. **Product Recommendation Flow**
+```
+Requirements Analysis → Hybrid Retriever → (Elasticsearch + ChromaDB) → Result Merging → Recommendation Ranking → Presentation
+```
 
-## Data Flow
+### 3. **Quote Generation Flow**
+```
+Quote Request → Enhanced Sales Agent → Quote Agent → PDF Generation → Pitch Deck Generation → Response Enhancement
+```
 
-1. Client requests → API Gateway → FastAPI Routes
-2. Routes → AI Services → External AI Providers
-3. AI Services → Business Services → Data Storage
-4. Search queries → Elasticsearch/ChromaDB → Ranked results
-5. Generated content → File Storage → Client delivery 
+### 4. **Intelligence Layers**
+- **L1**: FastAPI Routes (HTTP handling)
+- **L2**: Enhanced Sales Agent (orchestration)
+- **L3**: Specialized Agents (domain expertise)  
+- **L4**: AI Service Factory (provider abstraction)
+- **L5**: External AI Services (Azure OpenAI, embeddings)
+
+This architecture demonstrates a sophisticated multi-agent AI system with intelligent conversation flow management, hybrid search capabilities, and automated document generation - all orchestrated through the Enhanced B2B Sales Agent as the central intelligence hub. 

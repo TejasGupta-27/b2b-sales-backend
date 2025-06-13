@@ -1,13 +1,31 @@
 version: '3.8'
 
 services:
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - b2b-sales-backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Main B2B Sales Backend Application
   b2b-sales-backend:
     build: 
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     environment:
       # Database Configuration
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/b2b_sales
