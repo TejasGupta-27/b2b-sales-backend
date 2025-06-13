@@ -118,12 +118,14 @@ class RecommendationSet(Base):
     lead_id = Column(String, ForeignKey("leads.id"), nullable=False)
     recommendations = Column(JSON, nullable=False)  # List of ProductRecommendation objects
     created_at = Column(DateTime, server_default=func.now())
-    selected_recommendation = Column(String)
-    selection_timestamp = Column(DateTime)
+    selected_recommendations = Column(JSON, default=list)  # List of selected product IDs
+    selection_timestamps = Column(JSON, default=dict)  # Map of product_id to selection timestamp
     reasoning = Column(Text)
     next_steps = Column(JSON)  # List of next steps
     conversation_state = Column(JSON)  # Store conversation state and flow analysis
     current_stage = Column(String, default="solution_presentation")  # Current conversation stage
+    quote_data = Column(JSON)  # Store generated quote data
+    quote_generated_at = Column(DateTime)  # Timestamp when quote was generated
     
     # Relationship with lead
     lead = relationship("Lead")

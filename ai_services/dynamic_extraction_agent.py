@@ -19,6 +19,10 @@ class DynamicExtractionAgent(AIProvider):
         return self.base_provider.is_configured()
     
     async def generate_response(self, messages: List[AIMessage], **kwargs) -> AIResponse:
+        # Track token usage from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+            
         return AIResponse(
             content="Dynamic Extraction Agent - use extract_data method",
             model="dynamic-extraction-agent",

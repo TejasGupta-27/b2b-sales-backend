@@ -10,18 +10,28 @@ from elasticsearch.exceptions import ConnectionError, RequestError
 logger = logging.getLogger(__name__)
 
 class ElasticsearchService:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ElasticsearchService, cls).__new__(cls)
+            cls._instance.client = AsyncElasticsearch(
+                hosts=[settings.elasticsearch_url],
+                verify_certs=False,
+                ssl_show_warn=False,
+                request_timeout=30,
+                retry_on_timeout=True,
+                max_retries=3
+            )
+            cls._instance.products_index = settings.elasticsearch_index_products
+            cls._instance.solutions_index = settings.elasticsearch_index_solutions
+            cls._instance.health_checked = False
+        return cls._instance
+
     def __init__(self):
-        self.client = AsyncElasticsearch(
-            hosts=["http://elasticsearch:9200"],
-            verify_certs=False,
-            ssl_show_warn=False,
-            request_timeout=30,
-            retry_on_timeout=True,
-            max_retries=3
-        )
-        self.products_index = settings.elasticsearch_index_products
-        self.solutions_index = settings.elasticsearch_index_solutions
-        self.health_checked = False
+        # Initialize is called after __new__, so we need to check if we've already initialized
+        if not hasattr(self, 'initialized'):
+            self.initialized = True
     
     async def initialize(self):
         """Initialize Elasticsearch indices and load data"""
@@ -32,8 +42,10 @@ class ElasticsearchService:
             # Only load data based on configuration
             if not settings.skip_data_loading:
                 if settings.force_reload_data:
+                    logger.info("🔄 FORCE_RELOAD_DATA=true - performing complete data reload")
                     await self.reindex_all_data()
                 else:
+                    logger.info("🔍 Checking for existing data before loading...")
                     await self.load_initial_data()
                 
             logger.info("Elasticsearch initialized successfully")
@@ -123,55 +135,68 @@ class ElasticsearchService:
         """Load initial product and solution data from JSON files with better error handling"""
         try:
             # Wait for cluster to be ready before checking data
+            logger.info("⏳ Waiting for Elasticsearch cluster to be ready...")
             await self._wait_for_cluster_ready()
             
-            # Check if data already exists
-            products_count = await self._safe_count(self.products_index)
-            solutions_count = await self._safe_count(self.solutions_index)
+            # Check if data already exists with multiple attempts
+            logger.info("🔍 Checking for existing data...")
+            products_count = await self._safe_count_with_retries(self.products_index)
+            solutions_count = await self._safe_count_with_retries(self.solutions_index)
             
-            print(f"📊 Current data: {products_count} products, {solutions_count} solutions")
+            logger.info(f"📊 Current data: {products_count} products, {solutions_count} solutions")
             
             if products_count > 0 and solutions_count > 0:
-                logger.info(f"Data already exists: {products_count} products, {solutions_count} solutions. Skipping reload.")
+                logger.info(f"✅ Data already exists: {products_count} products, {solutions_count} solutions. Skipping reload to prevent duplicate data.")
                 return
+            elif products_count > 0 or solutions_count > 0:
+                logger.warning(f"⚠️ Partial data found: {products_count} products, {solutions_count} solutions. This might indicate incomplete previous loading.")
+                # Ask user if they want to continue or reload
+                logger.info("🔄 Continuing with partial data loading for missing indices...")
             
-            # Only load if no data exists
-            logger.info("No existing data found, loading initial data...")
+            # Only load if no data exists or partial data
+            logger.info("🔄 Loading initial data...")
             
             # Load products from JSON files
             data_dir = Path("Data/json")
             products_loaded = 0
             
             if data_dir.exists() and any(data_dir.glob("*.json")):
-                logger.info(f"Loading products from {data_dir}")
+                logger.info(f"📁 Loading products from {data_dir}")
                 products_loaded = await self._load_products_from_json(data_dir)
                 
                 if products_loaded == 0:
-                    logger.warning("No products loaded from JSON files, loading sample data")
+                    logger.warning("⚠️ No products loaded from JSON files, loading sample data")
                     await self._load_sample_products()
                     products_loaded = 3  # Sample products count
                 else:
-                    logger.info(f"Successfully loaded {products_loaded} products from JSON files")
+                    logger.info(f"✅ Successfully loaded {products_loaded} products from JSON files")
             else:
-                logger.warning(f"Data directory not found or empty: {data_dir}")
+                logger.warning(f"⚠️ Data directory not found or empty: {data_dir}")
                 await self._load_sample_products()
                 products_loaded = 3  # Sample products count
             
             # Load solutions only if none exist
-            solutions_response = await self._safe_count(self.solutions_index)
+            solutions_response = await self._safe_count_with_retries(self.solutions_index)
             if solutions_response == 0:
+                logger.info("🔄 Loading sample solutions...")
                 await self._load_sample_solutions()
+            else:
+                logger.info(f"✅ Solutions already exist: {solutions_response} solutions")
             
             # Refresh indices to make data immediately available
+            logger.info("🔄 Refreshing indices...")
             await self._safe_refresh_indices()
             
-            print(f"✅ Data loading complete: {products_loaded} products loaded")
+            # Final count verification
+            final_products = await self._safe_count_with_retries(self.products_index)
+            final_solutions = await self._safe_count_with_retries(self.solutions_index)
+            logger.info(f"✅ Data loading complete: {final_products} products, {final_solutions} solutions")
             
         except Exception as e:
             logger.warning(f"Could not load initial data: {e}")
             # Force load sample data as fallback
             try:
-                logger.info("Force loading sample data as fallback...")
+                logger.info("🔄 Force loading sample data as fallback...")
                 await self._force_load_sample_data()
             except Exception as fallback_error:
                 logger.error(f"Failed to load fallback data: {fallback_error}")
@@ -216,6 +241,40 @@ class ElasticsearchService:
                     await asyncio.sleep(1)
                 else:
                     logger.error(f"All count attempts failed for {index}")
+                    return 0
+    
+    async def _safe_count_with_retries(self, index: str, max_retries: int = 5) -> int:
+        """Enhanced safe count with more retries and better error handling for container restarts"""
+        logger.info(f"🔍 Counting documents in {index} (with enhanced retries)...")
+        
+        for attempt in range(max_retries):
+            try:
+                # First check if index exists
+                exists = await self.client.indices.exists(index=index)
+                if not exists:
+                    logger.info(f"📝 Index {index} does not exist yet")
+                    return 0
+                
+                # Try different counting methods
+                response = await self.client.count(
+                    index=index,
+                    request_timeout=10,
+                    ignore_unavailable=True
+                )
+                
+                count = response.get('count', 0)
+                logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
+                return count
+                
+            except Exception as e:
+                logger.warning(f"Count attempt {attempt + 1}/{max_retries} failed for {index}: {e}")
+                if attempt < max_retries - 1:
+                    # Progressive backoff
+                    wait_time = min(2 ** attempt, 10)
+                    logger.info(f"⏳ Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"❌ All {max_retries} count attempts failed for {index}")
                     return 0
     
     async def _safe_refresh_indices(self):
@@ -930,9 +989,22 @@ class ElasticsearchService:
             logger.error(f"Failed to get product stats: {e}")
             return {"total_products": 0, "categories": {}, "price_range": {}}
 
-    async def reindex_all_data(self):
-        """Delete and recreate indices with fresh data"""
+    async def reindex_all_data(self, force_replace: bool = False):
+        """Reindex Elasticsearch data - either update existing or replace completely"""
         try:
+            if not force_replace:
+                # Check if data exists
+                products_count = await self._safe_count_with_retries(self.products_index)
+                solutions_count = await self._safe_count_with_retries(self.solutions_index)
+                
+                if products_count > 0 or solutions_count > 0:
+                    logger.info(f"Found existing data: {products_count} products, {solutions_count} solutions")
+                    logger.info("Updating existing data instead of full replacement...")
+                    await self.update_existing_data()
+                    return
+            
+            logger.info("Performing full data replacement...")
+            
             # Delete existing indices
             await self.client.indices.delete(index=self.products_index, ignore=[404])
             await self.client.indices.delete(index=self.solutions_index, ignore=[404])
@@ -946,6 +1018,66 @@ class ElasticsearchService:
             logger.info("Successfully reindexed all data")
         except Exception as e:
             logger.error(f"Failed to reindex data: {e}")
+            raise
+
+    async def update_existing_data(self):
+        """Update existing Elasticsearch data without destroying it"""
+        try:
+            logger.info("Updating existing Elasticsearch data...")
+            
+            # Load data from JSON files
+            data_dir = Path("Data/json")
+            products_updated = 0
+            solutions_updated = 0
+            
+            if data_dir.exists():
+                # Process products
+                for json_file in data_dir.glob("*product*.json"):
+                    try:
+                        with open(json_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        if isinstance(data, list):
+                            for item in data:
+                                if self._is_valid_product(item):
+                                    processed_product = self._process_product_data(item)
+                                    await self.index_product(processed_product)
+                                    products_updated += 1
+                        elif isinstance(data, dict) and 'products' in data:
+                            for product in data['products']:
+                                if self._is_valid_product(product):
+                                    processed_product = self._process_product_data(product)
+                                    await self.index_product(processed_product)
+                                    products_updated += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to update from {json_file}: {e}")
+                
+                # Process solutions
+                for json_file in data_dir.glob("*solution*.json"):
+                    try:
+                        with open(json_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        if isinstance(data, list):
+                            for item in data:
+                                if 'name' in item and 'description' in item:
+                                    await self.index_solution(item)
+                                    solutions_updated += 1
+                        elif isinstance(data, dict) and 'solutions' in data:
+                            for solution in data['solutions']:
+                                if 'name' in solution and 'description' in solution:
+                                    await self.index_solution(solution)
+                                    solutions_updated += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to update from {json_file}: {e}")
+            
+            # Refresh indices
+            await self._safe_refresh_indices()
+            
+            logger.info(f"Updated {products_updated} products and {solutions_updated} solutions")
+            
+        except Exception as e:
+            logger.error(f"Failed to update existing data: {e}")
             raise
 
     async def search_products_with_fallback(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:

@@ -1,7 +1,9 @@
+import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from .base import AIProvider, AIMessage, AIResponse
 from .function_models import ConversationAnalysis
+from services.prompt_manager import get_prompt_manager
 
 class ConversationFlowAgent(AIProvider):
     """Intelligent agent for managing conversation flow and determining readiness for different stages"""
@@ -24,9 +26,39 @@ class ConversationFlowAgent(AIProvider):
     ) -> Dict[str, Any]:
         """Analyze conversation state using Pydantic function calling"""
         
+        # Track token usage from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+            
         conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
         
-        analysis_prompt = f"""Analyze this B2B sales conversation to determine the current stage, readiness levels, and next steps.
+        # Get prompt from admin dashboard
+        prompt_manager = get_prompt_manager()
+        
+        # Get conversation flow prompt
+        flow_prompt = prompt_manager.get_prompt("conversation_flow", "main_system_prompt", "")
+        
+        if flow_prompt:
+            # Use dynamic prompt with conversation data
+            analysis_prompt = f"""{flow_prompt}
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT: {customer_context or 'None'}
+
+Analyze the conversation comprehensively to understand:
+1. What stage of the sales process we're in
+2. How much business context we understand (0-100)
+3. How clear the technical requirements are (0-100) 
+4. How ready the customer is to make a decision (0-100)
+5. Whether they're ready for a quote
+6. What information is still missing
+7. What questions should be asked next
+8. Whether product retrieval is needed at this stage"""
+        else:
+            # Fallback to original hardcoded prompt
+            analysis_prompt = f"""Analyze this B2B sales conversation to determine the current stage, readiness levels, and next steps.
 
 CONVERSATION:
 {conversation_text}
@@ -129,21 +161,32 @@ Analyze the conversation comprehensively to understand:
                 analysis_dict['current_stage'] = 'solution_presentation'
                 analysis_dict['should_retrieve_products'] = True
             
-            # Enforce stage progression with more robust checks
-            if analysis_dict['current_stage'] == 'quote_ready':
-                # Only allow quote_ready if we have recommendations and selection
+            # Enforce strict stage progression with robust checks
+            if analysis_dict['current_stage'] == 'solution_presentation':
+                # Ensure we have presented recommendations
                 if not analysis_dict.get('recommendations_presented', False):
-                    analysis_dict['current_stage'] = 'solution_presentation'
+                    analysis_dict['should_retrieve_products'] = True
                     analysis_dict['quote_ready'] = False
                     analysis_dict['should_generate_quote'] = False
+                # Check if recommendations have been selected
                 elif not analysis_dict.get('recommendation_selected', False):
                     analysis_dict['quote_ready'] = False
                     analysis_dict['should_generate_quote'] = False
-                elif not (business_context_score >= 80 and technical_score >= 80):
-                    # Require high scores for quote readiness
+                    # Force staying in solution presentation until selection
+                    analysis_dict['current_stage'] = 'solution_presentation'
+                # Only allow quote_ready if we have both recommendations and selection
+                elif (analysis_dict.get('recommendations_presented', False) and 
+                      analysis_dict.get('recommendation_selected', False) and
+                      business_context_score >= 80 and 
+                      technical_score >= 80):
+                    analysis_dict['current_stage'] = 'quote_ready'
+                    analysis_dict['quote_ready'] = True
+                    analysis_dict['should_generate_quote'] = True
+                else:
+                    # Stay in solution presentation if any conditions aren't met
+                    analysis_dict['current_stage'] = 'solution_presentation'
                     analysis_dict['quote_ready'] = False
                     analysis_dict['should_generate_quote'] = False
-                    analysis_dict['current_stage'] = 'solution_presentation'
             
             # Add confidence scores to the analysis
             analysis_dict['confidence_scores'] = {

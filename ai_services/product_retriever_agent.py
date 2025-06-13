@@ -30,11 +30,15 @@ class ProductRetrieverAgent(AIProvider):
             # Format response content
             content = self._format_recommendation_response(result)
             
+            # Track token usage from base provider
+            if hasattr(self.base_provider, 'usage_tracker'):
+                self.usage_tracker = self.base_provider.usage_tracker
+            
             return AIResponse(
                 content=content,
                 model=self.provider_name,
                 provider=self.provider_name,
-                usage={},
+                usage=result.get('usage', {}),
                 metadata={
                     'recommendations': result.get('products', []),
                     'solutions': result.get('solutions', []),
@@ -99,7 +103,7 @@ class ProductRetrieverAgent(AIProvider):
             # Original pre-built system recommendations
             if products:
                 response += "📦 **Recommended Products:**\n"
-                for i, product in enumerate(products[:5], 1):
+                for i, product in enumerate(products, 1):
                     response += f"{i}. **{product.get('name', 'Unknown Product')}**\n"
                     response += f"   • Description: {product.get('description', 'No description available')}\n"
                     if product.get('price'):
@@ -742,7 +746,7 @@ CUSTOMER REQUIREMENTS:
 {json.dumps(requirements, indent=2)}
 
 AVAILABLE PRODUCTS:
-{json.dumps(products[:5], indent=2)}
+{json.dumps(products, indent=2)}
 
 AVAILABLE SOLUTIONS:
 {json.dumps(solutions, indent=2)}

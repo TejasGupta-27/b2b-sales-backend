@@ -23,6 +23,7 @@ from routes.leads import router as leads_router
 from routes.quotes import router as quotes_router
 from routes.speech import router as speech_router
 from routes.recommendations import router as recommendations_router
+from routes.admin import router as admin_router
 
 # Import AI services
 from ai_services.factory import AIServiceFactory
@@ -55,6 +56,15 @@ from services.pitch_deck_service import PitchDeckService
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Add file handler for main application logs
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+main_log_handler = logging.FileHandler(log_dir / "main.log")
+main_log_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+main_log_handler.setFormatter(formatter)
+logger.addHandler(main_log_handler)
+
 # Create FastAPI app
 app = FastAPI(
     title="B2B Sales AI Assistant",
@@ -86,6 +96,7 @@ app.include_router(leads_router)
 app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
+app.include_router(admin_router)
 
 # Keep your working models
 class SalesChatMessage(BaseModel):
@@ -156,20 +167,20 @@ async def startup_event():
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
         
-        # Test database connection (remove await since it's not async)
-        test_connection()
-        
-        # Create database tables
-        create_tables()
-        
-        # Initialize Elasticsearch (with error handling)
+        # Initialize Elasticsearch first (with error handling)
         try:
             elasticsearch_service = get_elasticsearch_service()
             await elasticsearch_service.initialize()
             logger.info("✅ Elasticsearch initialized successfully")
         except Exception as e:
-            logger.warning(f"⚠️ Elasticsearch initialization failed: {e}")
-            logger.info("🔄 Continuing with fallback data...")
+            logger.error(f"❌ Elasticsearch initialization failed: {e}")
+            raise  # Re-raise the exception since Elasticsearch is critical
+        
+        # Test database connection (remove await since it's not async)
+        test_connection()
+        
+        # Create database tables
+        create_tables()
         
         # Initialize ChromaDB if hybrid retriever is enabled
         if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
@@ -843,19 +854,39 @@ async def get_hybrid_stats():
 
 @app.post("/api/debug/sync-chroma")
 async def sync_chroma_data():
-    """Manually sync limited data from JSON files to ChromaDB"""
+    """Manually sync limited data from JSON files to ChromaDB with duplicate prevention"""
     try:
         if not chroma_service:
             return {"error": "ChromaDB not initialized"}
         
-        # Use limited loading instead of full Elasticsearch sync
-        result = await chroma_service.load_limited_data_from_json(max_per_file=50)
+        # Use safe sync method to prevent duplicates
+        result = await chroma_service.sync_data_safely(max_per_file=50, clear_existing=False)
         stats = await chroma_service.get_collection_stats()
         
         return {
-            "message": "ChromaDB limited sync completed (50 items per JSON file)",
-            "loading_result": result,
-            "stats": stats
+            "message": "ChromaDB safe sync completed (prevents duplicates)",
+            "sync_result": result,
+            "final_stats": stats
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/debug/sync-chroma-force")
+async def sync_chroma_data_force():
+    """Force sync ChromaDB data by clearing existing and reloading"""
+    try:
+        if not chroma_service:
+            return {"error": "ChromaDB not initialized"}
+        
+        # Clear existing data and reload
+        result = await chroma_service.sync_data_safely(max_per_file=50, clear_existing=True)
+        stats = await chroma_service.get_collection_stats()
+        
+        return {
+            "message": "ChromaDB force sync completed (cleared and reloaded)",
+            "sync_result": result,
+            "final_stats": stats
         }
         
     except Exception as e:

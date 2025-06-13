@@ -2,6 +2,8 @@ import json
 from typing import List, Dict, Any, Optional
 from .base import AIProvider, AIMessage, AIResponse
 from models.lead import Lead
+from services.prompt_manager import get_prompt_manager
+
 class SalesAgentProvider(AIProvider):
     """Specialized AI provider for B2B sales conversations"""
     
@@ -60,6 +62,17 @@ class SalesAgentProvider(AIProvider):
     
     def _build_sales_system_prompt(self, lead: Optional[Lead], stage: str) -> str:
         """Build the main system prompt for the sales agent"""
+        
+        # Get prompt from admin dashboard
+        prompt_manager = get_prompt_manager()
+        
+        # Get the sales agent prompt with stage variable
+        system_prompt = prompt_manager.get_system_prompt("sales_agent", variables={"stage": stage})
+        
+        if system_prompt:
+            return system_prompt
+        
+        # Fallback to hardcoded prompt
         return f"""You are an expert B2B sales agent with deep knowledge of technology solutions. Your role is to:
 
 1. QUALIFY prospects by understanding their business needs, pain points, and decision-making process

@@ -4,15 +4,66 @@ import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from io import BytesIO
-
+import logging
 from .base import AIProvider, AIMessage, AIResponse
 from .function_models import QuoteData, CustomerInfo, QuoteLineItem
 from services.pdf_generator import PDFGenerator
 from services.elasticsearch_service import get_elasticsearch_service
 from .dynamic_extraction_agent import DynamicExtractionAgent
-
-# Additional Pydantic models for quote generation functions
 from pydantic import BaseModel, Field
+from pathlib import Path
+from services.prompt_manager import get_prompt_manager
+import os
+
+logger = logging.getLogger(__name__)
+
+class QuoteLineItem(BaseModel):
+    """Individual line item in a quote"""
+    name: str = Field(description="Product/service name")
+    description: str = Field(description="Detailed description")
+    quantity: int = Field(default=1, description="Quantity")
+    unit_price: float = Field(description="Price per unit")
+    total_price: float = Field(description="Total price for this line item")
+    category: str = Field(default="Technology", description="Product category")
+
+class QuoteCustomerInfo(BaseModel):
+    """Customer information for the quote"""
+    company_name: str = Field(description="Company name")
+    contact_name: str = Field(description="Primary contact name")
+    email: str = Field(description="Contact email")
+    phone: Optional[str] = Field(default=None, description="Phone number")
+    address: Optional[str] = Field(default=None, description="Company address")
+
+class QuoteFinancials(BaseModel):
+    """Financial breakdown of the quote"""
+    subtotal: float = Field(description="Subtotal before tax")
+    tax_rate: float = Field(default=0.08, description="Tax rate as decimal")
+    tax_amount: float = Field(description="Tax amount")
+    total: float = Field(description="Final total amount")
+    currency: str = Field(default="USD", description="Currency code")
+
+class StructuredQuote(BaseModel):
+    """Complete structured quote for PDF and pitch deck generation"""
+    quote_number: str = Field(description="Unique quote number")
+    title: str = Field(description="Professional quote title")
+    company_tagline: str = Field(description="Company tagline")
+    
+    # Customer and business info
+    customer_info: QuoteCustomerInfo = Field(description="Customer information")
+    business_context: str = Field(description="Business context and use case")
+    
+    # Products and pricing
+    line_items: List[QuoteLineItem] = Field(description="List of products/services")
+    financials: QuoteFinancials = Field(description="Financial breakdown")
+    
+    # Terms and next steps
+    terms_and_conditions: List[str] = Field(description="Terms and conditions")
+    implementation_notes: List[str] = Field(description="Implementation details")
+    next_steps: List[str] = Field(description="Next steps for customer")
+    
+    # Metadata
+    valid_until: str = Field(description="Quote expiration date")
+    created_at: str = Field(description="Quote creation date")
 
 class QuoteTitleGeneration(BaseModel):
     """Model for generating quote titles"""
@@ -38,13 +89,17 @@ class QuoteGenerationAgent(AIProvider):
         
     @property
     def provider_name(self) -> str:
-        return f"quote_generation_agent_{self.base_provider.provider_name}"
+        return "quote_generation_agent"
     
     def is_configured(self) -> bool:
         return self.base_provider.is_configured()
     
     async def generate_response(self, messages: List[AIMessage], **kwargs) -> AIResponse:
         """This agent only generates quotes, not conversational responses"""
+        # Track token usage from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+            
         return AIResponse(
             content="Quote Generation Agent - use generate_quote_from_conversation method",
             model="quote-agent",
@@ -57,296 +112,359 @@ class QuoteGenerationAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
-        """Generate quote from the selected recommendation"""
+        """Generate quote using simplified workflow with conversation messages directly"""
         
-        print(f"🔍 Quote Agent: Starting quote generation from selected recommendation...")
+        logger.info(f"🔍 Quote Agent: Starting simplified quote generation...")
+        print(f"🔍 Debug - Input validation:")
+        print(f"   conversation_messages type: {type(conversation_messages)}")
+        print(f"   conversation_messages length: {len(conversation_messages) if conversation_messages else 0}")
+        print(f"   customer_context type: {type(customer_context)}")
+        print(f"   customer_context keys: {list(customer_context.keys()) if customer_context else 'None'}")
         
         try:
-            # Get the selected recommendation from customer context
-            selected_recommendation = customer_context.get('selected_recommendation')
-            if not selected_recommendation:
-                raise ValueError("No recommendation has been selected for quote generation")
+            # Use conversation_messages directly instead of extracting from recommendation_context
+            if not conversation_messages:
+                logger.error("❌ No conversation messages provided")
+                print("❌ Debug - conversation_messages is empty!")
+                raise ValueError("No conversation messages available for quote generation")
             
-            # Create line item from the selected recommendation with safe field access
-            try:
-                # Safely get price with default
-                price = 0.0
-                try:
-                    price = float(selected_recommendation.get('price', 0))
-                except (ValueError, TypeError):
-                    print("⚠️ Invalid price format, using default of 0.0")
-                
-                # Safely get other fields with defaults
-                line_item = {
-                    'name': selected_recommendation.get('name', 'Technology Solution'),
-                    'description': selected_recommendation.get('description', 'Professional technology solution'),
-                    'quantity': 1,
-                    'unit_price': price,
-                    'total_price': price,
-                    'specifications': selected_recommendation.get('specifications', {}),
-                    'features': selected_recommendation.get('features', []),
-                    'benefits': selected_recommendation.get('benefits', [])
-                }
-                
-                # Validate required fields
-                if not line_item['name']:
-                    raise ValueError("Product name is required")
-                
-            except Exception as e:
-                print(f"⚠️ Error processing selected recommendation: {str(e)}")
-                raise ValueError(f"Invalid recommendation data: {str(e)}")
+            logger.info(f"✅ Found {len(conversation_messages)} conversation messages")
+            print(f"🔍 Debug - Processing conversation messages...")
             
-            # Calculate totals
-            subtotal = line_item['total_price']
-            tax_rate = 0.08  # Default tax rate
-            tax_amount = subtotal * tax_rate
-            total = subtotal + tax_amount
+            # Prepare conversation text for AI analysis - handle both AIMessage objects and dicts
+            conversation_parts = []
+            for i, msg in enumerate(conversation_messages):
+                print(f"🔍 Debug - Message {i+1}: type={type(msg)}")
+                if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                    # AIMessage object
+                    if msg.content:
+                        conversation_parts.append(f"{msg.role}: {msg.content}")
+                        print(f"   AIMessage - Role: {msg.role}, Content length: {len(msg.content)}")
+                elif isinstance(msg, dict):
+                    # Dictionary format
+                    role = msg.get('role', 'user')
+                    content = msg.get('content', '')
+                    if content:
+                        conversation_parts.append(f"{role}: {content}")
+                        print(f"   Dict - Role: {role}, Content length: {len(content)}")
+                elif isinstance(msg, str):
+                    # String format - just add as user message
+                    conversation_parts.append(f"user: {msg}")
+                    print(f"   String - Length: {len(msg)}")
+                else:
+                    print(f"   Unknown message format: {msg}")
             
-            # Prepare quote data
-            quote_data = {
-                'customer_info': customer_context or {},
-                'line_items': [line_item],  # Only include the selected recommendation
-                'subtotal': subtotal,
-                'tax_rate': tax_rate,
-                'tax_amount': tax_amount,
-                'total': total,
-                'currency': 'USD',
-                'business_context': customer_context or {},
-                'extraction_confidence': 'high'
-            }
+            conversation_text = "\n".join(conversation_parts)
+            print(f"🔍 Debug - Final conversation text length: {len(conversation_text)}")
             
-            # Generate quote using the data
-            quote = await self._generate_fully_dynamic_quote(quote_data)
+            if not conversation_text.strip():
+                logger.error("❌ No valid conversation content found")
+                print("❌ Debug - conversation_text is empty after processing!")
+                raise ValueError("No valid conversation content available")
+
+            # Create prompt for structured quote generation - no product retrieval required
+            print("🔍 Debug - Preparing quote prompt...")
+            safe_context = self._safe_serialize_context(customer_context)
+            print(f"🔍 Debug - Safe context length: {len(safe_context)}")
             
+            quote_prompt = f"""Based on this sales conversation, generate a complete structured quote.
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT:
+{safe_context}
+
+Generate a complete quote with:
+1. Customer information extracted from conversation
+2. 2-5 most relevant products based on their needs (use realistic technology products)
+3. Professional pricing with subtotal, tax, and total
+4. Business context explaining why these products fit
+5. Professional terms and conditions
+6. Implementation notes and next steps
+7. Professional quote title and company tagline
+
+Make sure all prices are realistic and the quote looks professional. If specific products weren't mentioned, suggest appropriate technology solutions based on the conversation context."""
+
+            print(f"🔍 Debug - Quote prompt length: {len(quote_prompt)}")
+            
+            # Use Pydantic function calling to generate structured quote
+            print("🔍 Debug - Calling base_provider.generate_structured_response...")
+            response = await self.base_provider.generate_structured_response(
+                [AIMessage(role="user", content=quote_prompt)],
+                StructuredQuote
+            )
+            
+            print(f"🔍 Debug - Structured response type: {type(response)}")
+            print(f"🔍 Debug - Response model_dump available: {hasattr(response, 'model_dump')}")
+            
+            # Convert to dictionary and add metadata
+            quote_dict = response.model_dump()
+            print(f"🔍 Debug - Quote dict type: {type(quote_dict)}")
+            print(f"🔍 Debug - Quote dict keys: {list(quote_dict.keys())}")
+            
+            quote_id = quote_dict['quote_number'].split('-')[-1] if '-' in quote_dict['quote_number'] else str(uuid.uuid4())[:8]
+            print(f"🔍 Debug - Generated quote_id: {quote_id}")
+            
+            quote_dict.update({
+                'quote_id': quote_id,
+                'generation_method': 'pydantic_structured_simplified',
+                'data_source': 'conversation_only'
+            })
+            
+            print("🔍 Debug - Starting PDF generation...")
             # Generate PDF
-            quote = await self._generate_quote_pdf(quote)
+            quote_dict = await self._generate_quote_pdf(quote_dict)
+            print(f"🔍 Debug - PDF generation completed")
+            print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
-            print(f"📄 Quote Agent: Quote generated with PDF for selected recommendation")
-            return quote
-            
-        except ValueError as ve:
-            print(f"❌ Quote Agent: Validation error - {str(ve)}")
-            raise
+            logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']}")
+            return quote_dict
             
         except Exception as e:
-            print(f"❌ Quote Agent: Error - {str(e)}")
+            logger.error(f"❌ Quote generation failed: {str(e)}")
             import traceback
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
+            print(f"❌ Debug - Full exception details:")
+            print(f"   Exception type: {type(e)}")
+            print(f"   Exception message: {str(e)}")
+            print(f"   Full traceback: {traceback.format_exc()}")
             return None
     
-    async def _generate_fully_dynamic_quote(self, extracted_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate quote using ONLY extracted data - no assumptions"""
-        
-        quote_id = str(uuid.uuid4())[:8]
-        current_time = datetime.now()
-        valid_until = current_time + timedelta(days=30)
-        
-        # Use extracted data directly
-        customer_info = extracted_data.get('customer_info', {})
-        line_items = extracted_data.get('line_items', [])
-        subtotal = extracted_data.get('subtotal', 0)
-        tax_rate = extracted_data.get('tax_rate', 0.08)
-        tax_amount = extracted_data.get('tax_amount', subtotal * tax_rate)
-        total = extracted_data.get('total', subtotal + tax_amount)
-        currency = extracted_data.get('currency', 'USD')
-        business_context = extracted_data.get('business_context', {})
-        
-        # Generate dynamic title and tagline using Pydantic function calling
-        title_data = await self._generate_title_and_tagline(line_items, business_context)
-        
-        # Generate terms and conditions using Pydantic function calling
-        terms_data = await self._generate_terms_and_conditions(line_items, business_context)
-        
-        # Build the complete quote structure
-        quote = {
-            "quote_number": f"Q-{quote_id}",
-            "quote_id": quote_id,
-            "created_at": current_time.isoformat(),
-            "valid_until": valid_until.isoformat(),
-            "quote_title": title_data.get('title', 'Professional Technology Solution'),
-            "company_tagline": title_data.get('tagline', 'Your Technology Partner'),
-            
-            # Customer information
-            "customer_info": customer_info,
-            
-            # Line items with full details
-            "line_items": line_items,
-            
-            # Pricing breakdown
-            "subtotal": subtotal,
-            "tax_rate": tax_rate,
-            "tax_amount": tax_amount,
-            "total": total,
-            "currency": currency,
-            
-            # Business context and terms
-            "business_context": business_context,
-            "terms_and_conditions": terms_data.get('terms_and_conditions', []),
-            "implementation_notes": terms_data.get('implementation_notes', []),
-            "next_steps": terms_data.get('next_steps', []),
-            
-            # Metadata
-            "generation_method": "pydantic_function_calling",
-            "data_source": "conversation_analysis",
-            "extraction_confidence": extracted_data.get('extraction_confidence', 'medium')
-        }
-        
-        print(f"✅ Quote Agent: Generated quote #{quote_id} with {len(line_items)} line items totaling ${total:,.2f}")
-        return quote
-    
-    async def _generate_title_and_tagline(self, line_items: List[Dict], business_context: Dict[str, Any]) -> Dict[str, str]:
-        """Generate dynamic quote title and tagline using Pydantic function calling"""
-        
+    async def _generate_quote_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate PDF for the quote with comprehensive debugging"""
         try:
-            # Create context for title generation
-            items_summary = ", ".join([item.get('name', 'Product') for item in line_items[:3]])
-            use_case = business_context.get('use_case', 'Technology Solution')
+            print("🔍 Debug - Starting PDF generation...")
+            print(f"🔍 Debug - Input quote_dict type: {type(quote_dict)}")
+            print(f"🔍 Debug - Input quote_dict keys: {list(quote_dict.keys())}")
             
-            title_prompt = f"""Generate a professional quote title and company tagline based on these products and business context.
-
-PRODUCTS: {items_summary}
-USE CASE: {use_case}
-BUSINESS CONTEXT: {json.dumps(business_context, indent=2)}
-
-Generate:
-1. A concise, professional quote title that reflects what the customer is buying and why
-2. A professional company tagline that reflects our expertise in their industry/use case
-
-Examples of good titles:
-- "Enterprise Workstation Solution for Video Production"
-- "High-Performance Storage Infrastructure for Data Analytics"
-- "Complete Networking Solution for Office Expansion"
-
-Examples of good taglines:
-- "Powering Innovation Through Technology"
-- "Your Trusted Technology Partner"  
-- "Excellence in Enterprise Solutions"
-"""
-
-            response = await self.base_provider.generate_structured_response(
-                [AIMessage(role="user", content=title_prompt)],
-                QuoteTitleGeneration
-            )
+            from services.pdf_generator import PDFGenerator
+            print("🔍 Debug - PDFGenerator imported successfully")
             
-            return {
-                'title': response.title,
-                'tagline': response.tagline
-            }
+            pdf_generator = PDFGenerator()
+            print("🔍 Debug - PDFGenerator initialized")
             
-        except Exception as e:
-            print(f"⚠️ Title generation failed: {e}")
-            return {
-                'title': 'Professional Technology Solution',
-                'tagline': 'Your Technology Partner'
-            }
-    
-    async def _generate_terms_and_conditions(self, line_items: List[Dict], business_context: Dict[str, Any]) -> Dict[str, List[str]]:
-        """Generate terms, implementation notes, and next steps using Pydantic function calling"""
-        
-        try:
-            items_summary = [f"{item.get('name', '')}: {item.get('description', '')}" for item in line_items]
-            timeline = business_context.get('timeline', 'standard')
+            # Get quote ID for file naming
+            quote_id = quote_dict.get('quote_id', 'unknown')
+            quote_number = quote_dict.get('quote_number', 'QUOTE-UNKNOWN')
+            print(f"🔍 Debug - Quote ID: {quote_id}")
+            print(f"🔍 Debug - Quote number: {quote_number}")
             
-            terms_prompt = f"""Generate comprehensive quote terms for this technology solution.
-
-PRODUCTS:
-{chr(10).join(items_summary)}
-
-BUSINESS CONTEXT: {json.dumps(business_context, indent=2)}
-TIMELINE: {timeline}
-
-Generate:
-1. Professional terms and conditions (4-6 items covering payment, delivery, warranties, support)
-2. Implementation notes (3-5 items covering deployment, setup, training, integration)
-3. Next steps for the customer (3-5 action items)
-
-Consider the timeline urgency when generating next steps.
-"""
-
-            response = await self.base_provider.generate_structured_response(
-                [AIMessage(role="user", content=terms_prompt)],
-                QuoteTermsGeneration
-            )
+            # Create filename
+            filename = f"quote_{quote_id}.pdf"
+            print(f"🔍 Debug - Target filename: {filename}")
             
-            return {
-                'terms_and_conditions': response.terms_and_conditions,
-                'implementation_notes': response.implementation_notes,
-                'next_steps': response.next_steps
-            }
+            # Convert the quote dict to match the PDF generator's expected format
+            pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
+            print(f"🔍 Debug - Converted quote data keys: {list(pdf_quote_data.keys())}")
             
-        except Exception as e:
-            print(f"⚠️ Terms generation failed: {e}")
-            return {
-                'terms_and_conditions': [
-                    "Payment terms: Net 30 days from invoice date",
-                    "Delivery: 5-10 business days after order confirmation",
-                    "Warranty: Standard manufacturer warranty applies",
-                    "Installation support included for first 30 days",
-                    "Prices valid for 30 days from quote date"
-                ],
-                'implementation_notes': [
-                    "Professional installation and configuration included",
-                    "Complete testing and validation before handover",
-                    "User training and documentation provided",
-                    "30-day post-implementation support included"
-                ],
-                'next_steps': [
-                    "Review quote details and specifications",
-                    "Contact us with any questions or modifications",
-                    "Submit purchase order to begin processing",
-                    "Schedule implementation planning meeting"
-                ]
-            }
-    
-    async def _generate_quote_pdf(self, quote: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate PDF for the quote using the PDF generator service"""
-        
-        try:
-            print("📄 Generating PDF for quote...")
+            # Generate and save the PDF (this is synchronous, not async)
+            print("🔍 Debug - Calling pdf_generator.save_pdf_to_file...")
+            pdf_path = pdf_generator.save_pdf_to_file(pdf_quote_data, filename)
+            print(f"🔍 Debug - save_pdf_to_file returned: {pdf_path}")
+            print(f"🔍 Debug - File path type: {type(pdf_path)}")
             
-            # Generate PDF using the PDF generator service
-            pdf_data = self.pdf_generator.generate_quote_pdf(quote)
-            
-            if pdf_data:
-                # Save PDF to file
-                quote_id = quote.get('quote_id', 'unknown')
-                pdf_filename = f"quote_{quote_id}.pdf"
-                pdf_path = f"Data/quotes/{pdf_filename}"
-                
-                # Ensure directory exists
+            # Check if file was actually created
+            if pdf_path:
                 import os
-                os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
-                
-                # Write PDF data
-                if isinstance(pdf_data, bytes):
-                    with open(pdf_path, 'wb') as f:
-                        f.write(pdf_data)
-                elif isinstance(pdf_data, BytesIO):
-                    with open(pdf_path, 'wb') as f:
-                        f.write(pdf_data.getvalue())
+                if os.path.exists(pdf_path):
+                    file_size = os.path.getsize(pdf_path)
+                    print(f"🔍 Debug - PDF file exists: {pdf_path}")
+                    print(f"🔍 Debug - PDF file size: {file_size} bytes")
+                    
+                    # Add PDF info to quote
+                    quote_dict.update({
+                        'pdf_generated': True,
+                        'pdf_path': pdf_path,
+                        'pdf_url': f'/api/quotes/download-pdf/{quote_id}',
+                        'file_size': file_size
+                    })
+                    
+                    print(f"✅ PDF generated successfully: {pdf_path}")
                 else:
-                    print(f"⚠️ Unexpected PDF data type: {type(pdf_data)}")
-                    return quote
-                
-                # Add PDF information to quote
-                quote['pdf_filename'] = pdf_filename
-                quote['pdf_path'] = pdf_path
-                quote['pdf_url'] = f"/api/quotes/download-pdf/{quote_id}"
-                quote['pdf_generated'] = True
-                quote['pdf_generated_at'] = datetime.now().isoformat()
-                
-                print(f"✅ PDF generated successfully: {pdf_path}")
-                
+                    print(f"❌ Debug - PDF file does not exist: {pdf_path}")
+                    quote_dict.update({
+                        'pdf_generated': False,
+                        'pdf_error': 'PDF file was not created',
+                        'pdf_path': pdf_path
+                    })
             else:
-                print("⚠️ PDF generation returned no data")
-                quote['pdf_error'] = "PDF generation failed - no data returned"
-                
-        except Exception as e:
-            print(f"❌ PDF generation failed: {str(e)}")
-            quote['pdf_error'] = f"PDF generation error: {str(e)}"
-            quote['pdf_generated'] = False
+                print("❌ Debug - No PDF path returned")
+                quote_dict.update({
+                    'pdf_generated': False,
+                    'pdf_error': 'No file path returned from PDF generator'
+                })
             
-        return quote
+            print(f"🔍 Debug - Final quote_dict after PDF generation:")
+            print(f"   pdf_generated: {quote_dict.get('pdf_generated', 'Not set')}")
+            print(f"   pdf_path: {quote_dict.get('pdf_path', 'Not set')}")
+            print(f"   pdf_url: {quote_dict.get('pdf_url', 'Not set')}")
+            print(f"   pdf_error: {quote_dict.get('pdf_error', 'Not set')}")
+            
+            return quote_dict
+            
+        except ImportError as e:
+            print(f"❌ Debug - PDF Generator import failed: {str(e)}")
+            quote_dict.update({
+                'pdf_generated': False,
+                'pdf_error': f'PDF Generator import failed: {str(e)}'
+            })
+            return quote_dict
+            
+        except Exception as e:
+            print(f"❌ Debug - PDF generation exception: {str(e)}")
+            import traceback
+            print(f"❌ Debug - PDF generation traceback: {traceback.format_exc()}")
+            quote_dict.update({
+                'pdf_generated': False,
+                'pdf_error': f'PDF generation failed: {str(e)}'
+            })
+            return quote_dict
+
+    def _convert_quote_for_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert the structured quote format to PDF generator format"""
+        try:
+            print("🔍 Debug - Converting quote format for PDF generator...")
+            
+            # Handle customer_info format conversion
+            customer_info = quote_dict.get('customer_info', {})
+            pdf_customer_info = {}
+            
+            if isinstance(customer_info, dict):
+                # Map the fields correctly
+                pdf_customer_info['company'] = customer_info.get('company_name', 'Valued Customer')
+                pdf_customer_info['contact'] = customer_info.get('contact_name', 'Dear Customer')
+                pdf_customer_info['email'] = customer_info.get('email', '')
+                pdf_customer_info['phone'] = customer_info.get('phone', '')
+                pdf_customer_info['address'] = customer_info.get('address', '')
+            
+            # Handle financials format conversion
+            financials = quote_dict.get('financials', {})
+            
+            # Convert to the format expected by PDF generator
+            pdf_quote_data = {
+                'quote_number': quote_dict.get('quote_number', 'N/A'),
+                'quote_id': quote_dict.get('quote_id', 'unknown'),
+                'created_at': quote_dict.get('created_at', ''),
+                'valid_until': quote_dict.get('valid_until', ''),
+                'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
+                'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
+                'customer_info': pdf_customer_info,
+                'line_items': quote_dict.get('line_items', []),
+                'subtotal': financials.get('subtotal', 0) if financials else 0,
+                'tax_rate': financials.get('tax_rate', 0) if financials else 0,
+                'tax_amount': financials.get('tax_amount', 0) if financials else 0,
+                'total': financials.get('total', 0) if financials else 0,
+                'currency': financials.get('currency', 'USD') if financials else 'USD',
+                'terms_and_conditions': quote_dict.get('terms_and_conditions', []),
+                'implementation_notes': quote_dict.get('implementation_notes', []),
+                'next_steps': quote_dict.get('next_steps', [])
+            }
+            
+            print(f"🔍 Debug - PDF quote data converted successfully")
+            print(f"   customer_info keys: {list(pdf_quote_data['customer_info'].keys())}")
+            print(f"   line_items count: {len(pdf_quote_data['line_items'])}")
+            print(f"   total: {pdf_quote_data['total']}")
+            
+            return pdf_quote_data
+            
+        except Exception as e:
+            print(f"❌ Debug - Quote format conversion failed: {str(e)}")
+            # Return minimal safe format
+            return {
+                'quote_number': quote_dict.get('quote_number', 'N/A'),
+                'quote_id': quote_dict.get('quote_id', 'unknown'),
+                'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
+                'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
+                'customer_info': {'company': 'Valued Customer', 'contact': 'Dear Customer'},
+                'line_items': [],
+                'subtotal': 0,
+                'tax_amount': 0,
+                'total': 0,
+                'currency': 'USD',
+                'terms_and_conditions': [],
+                'implementation_notes': [],
+                'next_steps': []
+            }
+
+    def _serialize_quote_for_storage(self, quote: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize quote data for storage by removing circular references"""
+        serialized = quote.copy()
+        
+        # Remove any potential circular references
+        if 'metadata' in serialized:
+            del serialized['metadata']
+            
+        # Ensure all nested objects are JSON serializable
+        for key, value in serialized.items():
+            if isinstance(value, (dict, list)):
+                serialized[key] = json.loads(json.dumps(value, default=str))
+            elif not isinstance(value, (str, int, float, bool, type(None))):
+                serialized[key] = str(value)
+                
+        return serialized
+
+    def _safe_serialize_context(self, context: Optional[Dict[str, Any]]) -> str:
+        """Serialize customer context safely to avoid circular references"""
+        if context is None:
+            return 'None'
+        
+        try:
+            # Extract only the essential fields we need for quote generation
+            safe_context = {}
+            
+            # Basic customer info
+            if 'company_name' in context:
+                safe_context['company_name'] = context['company_name']
+            if 'contact_name' in context:
+                safe_context['contact_name'] = context['contact_name']
+            if 'email' in context:
+                safe_context['email'] = context['email']
+            if 'industry' in context:
+                safe_context['industry'] = context['industry']
+            
+            # Business context from recommendation_context if available
+            rec_context = context.get('recommendation_context', {})
+            if rec_context:
+                if 'extracted_requirements' in rec_context:
+                    requirements = rec_context['extracted_requirements']
+                    safe_context['extracted_requirements'] = {
+                        'technical_requirements': requirements.get('technical_requirements', []),
+                        'business_requirements': requirements.get('business_requirements', []),
+                        'use_case': requirements.get('use_case', ''),
+                        'industry': requirements.get('industry', ''),
+                        'budget_range': requirements.get('budget_range', ''),
+                        'timeline': requirements.get('timeline', '')
+                    }
+                
+                # Add simplified product info for context
+                available_products = rec_context.get('available_products', [])
+                if available_products:
+                    safe_context['available_products_count'] = len(available_products)
+                    # Include just the names and prices of top 5 products
+                    safe_context['top_products'] = []
+                    for product in available_products[:5]:
+                        safe_context['top_products'].append({
+                            'name': product.get('name', 'Unknown'),
+                            'price': product.get('price', 0),
+                            'category': product.get('category', 'general')
+                        })
+            
+            return json.dumps(safe_context, indent=2)
+            
+        except Exception as e:
+            logger.warning(f"Failed to serialize customer context: {e}")
+            # Return minimal context as fallback
+            return json.dumps({
+                'company_name': context.get('company_name', 'Valued Customer'),
+                'industry': context.get('industry', 'Technology'),
+                'note': 'Full context could not be serialized due to complexity'
+            }, indent=2)
+
+    # Remove the old complex methods - they're no longer needed with simplified workflow
+    # def _extract_fallback_recommendation - REMOVED
+    # async def _generate_fully_dynamic_quote - REMOVED  
+    # async def _analyze_conversation_for_quote_products - REMOVED
 
     # Remove the problematic get_product_catalog method entirely
     # def get_product_catalog(self):
