@@ -92,4 +92,43 @@ class Quote(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     # Relationship with lead
-    lead = relationship("Lead") 
+    lead = relationship("Lead")
+
+class ProductRecommendation(Base):
+    __tablename__ = "product_recommendations"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    recommendation_set_id = Column(String, ForeignKey("recommendation_sets.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    price = Column(Float, nullable=False)
+    features = Column(JSON, nullable=False)  # List of features
+    benefits = Column(JSON, nullable=False)  # List of benefits
+    suitability_score = Column(Float, nullable=False)
+    customization_options = Column(JSON)  # Optional customization options
+    
+    # Relationship with recommendation set
+    recommendation_set = relationship("RecommendationSet", back_populates="product_recommendations")
+
+class RecommendationSet(Base):
+    __tablename__ = "recommendation_sets"
+    
+    id = Column(String, primary_key=True)
+    lead_id = Column(String, ForeignKey("leads.id"), nullable=False)
+    recommendations = Column(JSON, nullable=False)  # List of ProductRecommendation objects
+    created_at = Column(DateTime, server_default=func.now())
+    selected_recommendations = Column(JSON, default=list)  # List of selected product IDs
+    selection_timestamps = Column(JSON, default=dict)  # Map of product_id to selection timestamp
+    reasoning = Column(Text)
+    next_steps = Column(JSON)  # List of next steps
+    conversation_state = Column(JSON)  # Store conversation state and flow analysis
+    current_stage = Column(String, default="solution_presentation")  # Current conversation stage
+    quote_data = Column(JSON)  # Store generated quote data
+    quote_generated_at = Column(DateTime)  # Timestamp when quote was generated
+    
+    # Relationship with lead
+    lead = relationship("Lead")
+    
+    # Relationship with product recommendations
+    product_recommendations = relationship("ProductRecommendation", back_populates="recommendation_set", cascade="all, delete-orphan") 

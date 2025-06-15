@@ -518,3 +518,185 @@ class ChromaDBService:
                 "error": str(e),
                 "initialized": False
             }
+
+    async def sync_data_safely(self, max_per_file: int = 50, clear_existing: bool = False):
+        """Safely sync data to ChromaDB with duplicate prevention"""
+        try:
+            if clear_existing:
+                logger.info("Clearing existing ChromaDB collections...")
+                await self.clear_collections()
+            
+            logger.info(f"Syncing data to ChromaDB (max {max_per_file} per file)...")
+            
+            # Get existing IDs to prevent duplicates
+            existing_product_ids = await self.get_existing_product_ids()
+            existing_solution_ids = await self.get_existing_solution_ids()
+            
+            data_dir = settings.data_dir
+            total_products_added = 0
+            total_solutions_added = 0
+            total_products_skipped = 0
+            total_solutions_skipped = 0
+            files_processed = 0
+            
+            # Process all JSON files
+            for json_file in data_dir.glob("*.json"):
+                try:
+                    logger.info(f"Processing file: {json_file.name}")
+                    
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    file_products_added = 0
+                    file_solutions_added = 0
+                    file_products_skipped = 0
+                    file_solutions_skipped = 0
+                    
+                    # Handle different JSON structures
+                    if isinstance(data, list):
+                        items = data[:max_per_file]
+                        for item in items:
+                            if self._is_product_data(item):
+                                item_id = item.get('id') or f"product_{hash(str(item))}"
+                                if item_id not in existing_product_ids:
+                                    await self.index_product(item)
+                                    existing_product_ids.add(item_id)
+                                    file_products_added += 1
+                                else:
+                                    file_products_skipped += 1
+                            elif self._is_solution_data(item):
+                                item_id = item.get('id') or f"solution_{hash(str(item))}"
+                                if item_id not in existing_solution_ids:
+                                    await self.index_solution(item)
+                                    existing_solution_ids.add(item_id)
+                                    file_solutions_added += 1
+                                else:
+                                    file_solutions_skipped += 1
+                                    
+                    elif isinstance(data, dict):
+                        if 'products' in data:
+                            products = data['products'][:max_per_file]
+                            for product in products:
+                                if self._is_valid_product(product):
+                                    processed_product = self._process_product_data(product)
+                                    product_id = processed_product.get('id')
+                                    if product_id not in existing_product_ids:
+                                        await self.index_product(processed_product)
+                                        existing_product_ids.add(product_id)
+                                        file_products_added += 1
+                                    else:
+                                        file_products_skipped += 1
+                        
+                        if 'solutions' in data:
+                            solutions = data['solutions'][:max_per_file]
+                            for solution in solutions:
+                                if self._is_valid_solution(solution):
+                                    processed_solution = self._process_solution_data(solution)
+                                    solution_id = processed_solution.get('id')
+                                    if solution_id not in existing_solution_ids:
+                                        await self.index_solution(processed_solution)
+                                        existing_solution_ids.add(solution_id)
+                                        file_solutions_added += 1
+                                    else:
+                                        file_solutions_skipped += 1
+                    
+                    total_products_added += file_products_added
+                    total_solutions_added += file_solutions_added
+                    total_products_skipped += file_products_skipped
+                    total_solutions_skipped += file_solutions_skipped
+                    files_processed += 1
+                    
+                    logger.info(f"✅ {json_file.name}: +{file_products_added} products, +{file_solutions_added} solutions (skipped {file_products_skipped + file_solutions_skipped} duplicates)")
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to process {json_file.name}: {e}")
+                    continue
+            
+            logger.info(f"🎯 ChromaDB Sync Summary:")
+            logger.info(f"   Files processed: {files_processed}")
+            logger.info(f"   Products added: {total_products_added} (skipped {total_products_skipped} duplicates)")
+            logger.info(f"   Solutions added: {total_solutions_added} (skipped {total_solutions_skipped} duplicates)")
+            
+            return {
+                "files_processed": files_processed,
+                "products_added": total_products_added,
+                "solutions_added": total_solutions_added,
+                "products_skipped": total_products_skipped,
+                "solutions_skipped": total_solutions_skipped,
+                "max_per_file": max_per_file
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to sync data to ChromaDB: {e}")
+            raise
+
+    async def get_existing_product_ids(self) -> set:
+        """Get set of existing product IDs to prevent duplicates"""
+        try:
+            if not self.products_collection:
+                return set()
+            
+            # Get all products (just metadata to get IDs)
+            results = self.products_collection.get()
+            existing_ids = set()
+            
+            if results and results.get('metadatas'):
+                for metadata in results['metadatas']:
+                    if metadata.get('id'):
+                        existing_ids.add(metadata['id'])
+            
+            logger.info(f"Found {len(existing_ids)} existing product IDs")
+            return existing_ids
+            
+        except Exception as e:
+            logger.warning(f"Failed to get existing product IDs: {e}")
+            return set()
+
+    async def get_existing_solution_ids(self) -> set:
+        """Get set of existing solution IDs to prevent duplicates"""
+        try:
+            if not self.solutions_collection:
+                return set()
+            
+            # Get all solutions (just metadata to get IDs)
+            results = self.solutions_collection.get()
+            existing_ids = set()
+            
+            if results and results.get('metadatas'):
+                for metadata in results['metadatas']:
+                    if metadata.get('id'):
+                        existing_ids.add(metadata['id'])
+            
+            logger.info(f"Found {len(existing_ids)} existing solution IDs")
+            return existing_ids
+            
+        except Exception as e:
+            logger.warning(f"Failed to get existing solution IDs: {e}")
+            return set()
+
+    async def clear_collections(self):
+        """Clear all data from ChromaDB collections"""
+        try:
+            if self.products_collection:
+                # Delete the collection and recreate it
+                self.client.delete_collection("products")
+                self.products_collection = self.client.get_or_create_collection(
+                    name="products",
+                    embedding_function=self.embedding_function,
+                    metadata={"description": "Product catalog for semantic search"}
+                )
+                logger.info("Cleared products collection")
+            
+            if self.solutions_collection:
+                # Delete the collection and recreate it
+                self.client.delete_collection("solutions")
+                self.solutions_collection = self.client.get_or_create_collection(
+                    name="solutions", 
+                    embedding_function=self.embedding_function,
+                    metadata={"description": "Solutions catalog for semantic search"}
+                )
+                logger.info("Cleared solutions collection")
+                
+        except Exception as e:
+            logger.error(f"Failed to clear collections: {e}")
+            raise

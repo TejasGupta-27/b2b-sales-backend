@@ -42,6 +42,10 @@ class HybridProductRetrieverAgent(AIProvider):
     
     async def generate_response(self, messages: List[AIMessage], **kwargs) -> AIResponse:
         """This agent doesn't generate conversational responses directly"""
+        # Track token usage from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+            
         return AIResponse(
             content="Hybrid Product Retriever Agent - use retrieve_products method",
             model="hybrid-retriever-agent",
@@ -416,7 +420,7 @@ CUSTOMER REQUIREMENTS:
 {json.dumps(requirements, indent=2)}
 
 HYBRID PRODUCT RESULTS:
-{json.dumps(products[:5], indent=2)}
+{json.dumps(products, indent=2)}
 
 SEMANTIC SOLUTION RESULTS:
 {json.dumps(solutions, indent=2)}

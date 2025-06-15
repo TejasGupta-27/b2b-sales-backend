@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     database_url: str = os.getenv("DATABASE_URL", "postgresql://myuser:mypassword@db:5432/chat_db")
     
     # Elasticsearch Configuration
-    elasticsearch_url: str = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
+    elasticsearch_url: str = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
     elasticsearch_index_products: str = os.getenv("ELASTICSEARCH_INDEX_PRODUCTS", "products")
     elasticsearch_index_solutions: str = os.getenv("ELASTICSEARCH_INDEX_SOLUTIONS", "solutions")
     
@@ -38,13 +38,13 @@ class Settings(BaseSettings):
     # Azure OpenAI
     azure_openai_api_key: Optional[str] = os.getenv("AZURE_OPENAI_API_KEY")
     azure_openai_endpoint: Optional[str] = os.getenv("AZURE_OPENAI_ENDPOINT")
-    azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION")
+    azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
     azure_openai_deployment_name: str = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini")
     
     # Azure Embeddings (separate deployment)
     azure_embedding_endpoint: Optional[str] = os.getenv("AZURE_EMBEDDING_ENDPOINT")
     azure_embedding_api_key: Optional[str] = os.getenv("AZURE_EMBEDDING_API_KEY")
-    azure_embedding_deployment_name: str = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME")
+    azure_embedding_deployment_name: str = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "text-embedding-3-large")
     
     # Hugging Face
     huggingface_api_key: Optional[str] = os.getenv("HUGGINGFACE_API_KEY")

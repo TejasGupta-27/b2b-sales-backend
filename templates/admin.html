@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B2B Sales AI - Admin Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; 
+            background: #f4f6f8;
+            min-height: 100vh; 
+            color: #222;
+            line-height: 1.6;
+        }
+        
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 32px; 
+            display: grid;
+            gap: 32px;
+            background: none;
+        }
+        
+        .header { 
+            background: #fff;
+            border-radius: 16px; 
+            padding: 40px; 
+            margin-bottom: 0; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e5e7eb;
+            display: grid;
+            gap: 16px;
+        }
+        
+        .header h1 { 
+            color: #1a202c; 
+            margin-bottom: 0; 
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            line-height: 1.2;
+        }
+        
+        .header p { 
+            color: #64748b; 
+            font-size: 1.1rem;
+            font-weight: 400;
+            max-width: 800px;
+            line-height: 1.6;
+        }
+        
+        .dashboard-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); 
+            gap: 32px; 
+            margin-bottom: 0; 
+        }
+        
+        .card { 
+            background: #fff;
+            border-radius: 16px; 
+            padding: 32px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e5e7eb;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            display: grid;
+            gap: 24px;
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2, #f093fb);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .card:hover { 
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card:hover::before {
+            opacity: 1;
+        }
+        
+        .card h2 { 
+            color: #1a202c; 
+            margin-bottom: 0; 
+            display: flex; 
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 600;
+            gap: 12px;
+        }
+        
+        .card h2::before { 
+            content: ''; 
+            width: 4px; 
+            height: 28px; 
+            background: #2563eb;
+            border-radius: 2px;
+        }
+        
+        .section-title {
+            color: #1a202c;
+            font-weight: 600;
+            margin-bottom: 16px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-title::before {
+            content: '';
+            width: 3px;
+            height: 16px;
+            background: #2563eb;
+            border-radius: 2px;
+        }
+        
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        
+        .btn { 
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn:hover::before {
+            left: 100%;
+        }
+        
+        .btn:hover { 
+            background: #1742a0;
+            box-shadow: 0 4px 16px rgba(37,99,235,0.12);
+        }
+        
+        .btn-danger { 
+            background: #dc2626;
+            box-shadow: 0 2px 8px rgba(220,38,38,0.08);
+        }
+        
+        .btn-danger:hover { 
+            background: #991b1b;
+            box-shadow: 0 4px 16px rgba(220,38,38,0.12);
+        }
+        
+        .btn-success { 
+            background: #059669;
+            box-shadow: 0 2px 8px rgba(16,185,129,0.08);
+        }
+        
+        .btn-success:hover { 
+            background: #065f46;
+            box-shadow: 0 4px 16px rgba(16,185,129,0.12);
+        }
+        
+        .form-group { 
+            margin-bottom: 24px; 
+        }
+        
+        .form-group label { 
+            display: block; 
+            margin-bottom: 8px; 
+            font-weight: 600; 
+            color: #1a202c;
+            font-size: 14px;
+        }
+        
+        .form-group input, .form-group textarea, .form-group select { 
+            width: 100%; 
+            padding: 12px 16px; 
+            border: 2px solid #e2e8f0; 
+            border-radius: 10px; 
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: #ffffff;
+            color: #1a202c;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .form-group textarea { 
+            min-height: 120px; 
+            resize: vertical; 
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        }
+        
+        .log-viewer { 
+            background: #23272f;
+            color: #e2e8f0; 
+            padding: 24px; 
+            border-radius: 12px; 
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 13px; 
+            max-height: 500px; 
+            overflow-y: auto; 
+            white-space: pre-wrap;
+            border: 1px solid #475569;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 24px;
+        }
+        
+        .status-indicator { 
+            display: inline-block; 
+            width: 12px; 
+            height: 12px; 
+            border-radius: 50%; 
+            margin-right: 10px;
+            position: relative;
+        }
+        
+        .status-indicator::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-online { 
+            background: #10b981;
+        }
+        
+        .status-online::after {
+            background: #10b981;
+        }
+        
+        .status-offline { 
+            background: #ef4444;
+        }
+        
+        .status-offline::after {
+            background: #ef4444;
+        }
+        
+        .status-warning { 
+            background: #f59e0b;
+        }
+        
+        .status-warning::after {
+            background: #f59e0b;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .metric { 
+            text-align: center; 
+            padding: 24px; 
+            background: #f8fafc;
+            border-radius: 12px; 
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+            display: grid;
+            gap: 8px;
+        }
+        
+        .metric-value { 
+            font-size: 2.25rem; 
+            font-weight: 700; 
+            color: #2563eb;
+            line-height: 1;
+        }
+        
+        .metric-label { 
+            font-size: 13px; 
+            color: #64748b; 
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .tab-container { 
+            background: #fff;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e5e7eb;
+        }
+        
+        .tab-buttons { 
+            display: flex; 
+            border-bottom: 2px solid #e2e8f0; 
+            margin-bottom: 32px;
+            overflow-x: auto;
+            gap: 4px;
+            padding-bottom: 4px;
+        }
+        
+        .tab-button { 
+            background: none; 
+            border: none; 
+            padding: 16px 24px; 
+            cursor: pointer; 
+            border-bottom: 3px solid transparent; 
+            transition: all 0.3s ease;
+            font-weight: 500;
+            color: #444;
+            white-space: nowrap;
+            position: relative;
+            font-size: 15px;
+        }
+        
+        .tab-button.active { 
+            border-bottom-color: #2563eb; 
+            color: #2563eb; 
+            font-weight: 600;
+            background: #f4f6f8;
+        }
+        
+        .tab-button:hover:not(.active) {
+            color: #222;
+            background: #f1f5f9;
+        }
+        
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+            padding: 8px 0;
+        }
+        
+        .tab-content.active { 
+            display: block; 
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .alert { 
+            padding: 16px 20px; 
+            border-radius: 12px; 
+            margin-bottom: 24px;
+            border-left: 4px solid;
+            font-weight: 500;
+            position: relative;
+            overflow: hidden;
+            animation: slideIn 0.3s ease-out;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e5e7eb;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .alert::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+        
+        .alert:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .alert-success { 
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+            border-left-color: #10b981; 
+            color: #065f46;
+        }
+        
+        .alert-error { 
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            border-left-color: #ef4444; 
+            color: #991b1b;
+        }
+        
+        .loading { 
+            display: inline-block; 
+            width: 20px; 
+            height: 20px; 
+            border: 3px solid #e2e8f0; 
+            border-top: 3px solid #667eea; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+        }
+        
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        
+        .section-divider {
+            margin: 20px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a202c;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .tooltip:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+                gap: 16px;
+            }
+            
+            .header {
+                padding: 24px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+            
+            .card {
+                padding: 24px;
+            }
+            
+            .metric-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tab-buttons {
+                flex-wrap: wrap;
+            }
+            
+            .tab-button {
+                padding: 12px 16px;
+                font-size: 14px;
+            }
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5a67d8, #6b46c1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>B2B Sales AI - Admin Dashboard</h1>
+            <p>Comprehensive system management: Data operations, health monitoring, file management, and advanced diagnostics</p>
+        </div>
+        
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2>System Status</h2>
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-value" id="uptime">--</div>
+                        <div class="metric-label">Uptime</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="total-requests">--</div>
+                        <div class="metric-label">Total Requests</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="active-leads">--</div>
+                        <div class="metric-label">Active Leads</div>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="refreshStatus()">🔄 Refresh Status</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Data Management</h2>
+                <div>
+                    <h4 class="section-title">Elasticsearch Operations</h4>
+                    <div class="btn-group">
+                        <button class="btn btn-success tooltip" onclick="updateElasticsearch()" title="Updates existing data without deletion">
+                            🔄 Update Data (Safe)
+                        </button>
+                        <button class="btn tooltip" onclick="forceReindexElasticsearch()" title="Completely replaces all data">
+                            ⚠️ Force Replace Data
+                        </button>
+                        <button class="btn tooltip" onclick="validateElasticsearch()" title="Check data integrity">
+                            ✅ Validate Data
+                        </button>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="section-title">ChromaDB Operations</h4>
+                    <div class="btn-group">
+                        <button class="btn btn-success tooltip" onclick="syncChromaDB()" title="Adds new data, prevents duplicates">
+                            🔄 Sync ChromaDB (Safe)
+                        </button>
+                        <button class="btn tooltip" onclick="syncChromaDBForce()" title="Clears existing and reloads all data">
+                            ⚠️ Force Sync ChromaDB
+                        </button>
+                        <button class="btn tooltip" onclick="validateChromaDB()" title="Check ChromaDB status">
+                            ✅ Validate ChromaDB
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="font-size: 12px; color: #64748b; padding: 16px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong>Safe operations</strong> preserve existing data and prevent duplicates.<br>
+                    <strong>Force operations</strong> completely replace all data.
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>File Operations</h2>
+                <div>
+                    <h4 class="section-title">Data Export</h4>
+                    <div class="btn-group">
+                        <button class="btn tooltip" onclick="downloadData('products')" title="Download products as JSON">
+                            📥 Export Products
+                        </button>
+                        <button class="btn tooltip" onclick="downloadData('solutions')" title="Download solutions as JSON">
+                            📥 Export Solutions
+                        </button>
+                        <button class="btn tooltip" onclick="downloadData('elasticsearch')" title="Export all Elasticsearch data">
+                            📥 Export Elasticsearch
+                        </button>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="section-title">Log Management</h4>
+                    <div class="btn-group">
+                        <button class="btn tooltip" onclick="downloadLogs('main.log')" title="Download main application logs">
+                            📥 Download Logs
+                        </button>
+                        <button class="btn btn-danger tooltip" onclick="clearLogs()" title="Clear all log files">
+                            🗑️ Clear Logs
+                        </button>
+                        <button class="btn tooltip" onclick="viewLogs()" title="View logs in browser">
+                            👁️ View Logs
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>System Tools</h2>
+                <div>
+                    <h4 class="section-title">Health Checks</h4>
+                    <div class="btn-group">
+                        <button class="btn tooltip" onclick="checkElasticsearchHealth()" title="Check Elasticsearch connection and health">
+                            🏥 Check Elasticsearch
+                        </button>
+                        <button class="btn tooltip" onclick="checkChromaDBHealth()" title="Check ChromaDB connection and status">
+                            🏥 Check ChromaDB
+                        </button>
+                        <button class="btn tooltip" onclick="checkDatabaseHealth()" title="Check PostgreSQL database status">
+                            🏥 Check Database
+                        </button>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="section-title">Advanced Options</h4>
+                    <div class="btn-group">
+                        <button class="btn tooltip" onclick="showDataSourceStatus()" title="View detailed data source information">
+                            📊 Data Source Status
+                        </button>
+                        <button class="btn tooltip" onclick="showSystemMetrics()" title="View performance metrics">
+                            📈 System Metrics
+                        </button>
+                        <button class="btn btn-danger tooltip" onclick="resetSystem()" title="Reset entire system (dangerous)">
+                            🔥 Reset System
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="showTab('prompts')">Prompt Management</button>
+                <button class="tab-button" onclick="showTab('data')">Data Management</button>
+                <button class="tab-button" onclick="showTab('logs')">Log Viewer</button>
+                <button class="tab-button" onclick="showTab('metrics')">Performance Metrics</button>
+            </div>
+            
+            <div id="prompts-tab" class="tab-content active">
+                <h3 style="color: #1a202c; margin-bottom: 24px;">Prompt Templates</h3>
+                <div class="form-group">
+                    <label for="prompt-category">Category:</label>
+                    <select id="prompt-category" onchange="loadPrompts()">
+                        <option value="sales_agent">Sales Agent</option>
+                        <option value="quote_generation">Quote Generation</option>
+                        <option value="conversation_flow">Conversation Flow</option>
+                        <option value="product_retriever">Product Retriever</option>
+                        <option value="discovery">Discovery</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="prompt-name">Prompt Name:</label>
+                    <input type="text" id="prompt-name" placeholder="e.g., main_system_prompt">
+                </div>
+                <div class="form-group">
+                    <label for="prompt-content">Prompt Content:</label>
+                    <textarea id="prompt-content" rows="10" placeholder="Enter your prompt template here..."></textarea>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="savePrompt()">💾 Save Prompt</button>
+                    <button class="btn" onclick="loadPrompts()">🔄 Load Prompts</button>
+                    <button class="btn" onclick="testPrompt()">🧪 Test Prompt</button>
+                </div>
+                <div id="prompts-list" style="margin-top: 32px;"></div>
+            </div>
+            
+            <div id="data-tab" class="tab-content">
+                <h3 style="color: #1a202c; margin-bottom: 24px;">Data Sources</h3>
+                <div class="form-group">
+                    <label for="data-source">Data Source:</label>
+                    <select id="data-source">
+                        <option value="products">Products (JSON)</option>
+                        <option value="solutions">Solutions (JSON)</option>
+                        <option value="elasticsearch">Elasticsearch</option>
+                        <option value="chromadb">ChromaDB</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="data-file">Upload Data File:</label>
+                    <input type="file" id="data-file" accept=".json,.csv,.txt">
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="uploadData()">📤 Upload Data</button>
+                    <button class="btn" onclick="downloadData()">📥 Download Data</button>
+                    <button class="btn" onclick="validateData()">✅ Validate Data</button>
+                </div>
+                <div id="data-status" style="margin-top: 32px;"></div>
+            </div>
+            
+            <div id="logs-tab" class="tab-content">
+                <h3 style="color: #1a202c; margin-bottom: 24px;">System Logs</h3>
+                <div class="form-group">
+                    <label for="log-file">Log File:</label>
+                    <select id="log-file" onchange="loadLogs()">
+                        <option value="main.log">Main Application</option>
+                        <option value="azure_openai.log">Azure OpenAI</option>
+                        <option value="all">All Logs</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="log-level">Filter by Level:</label>
+                    <select id="log-level" onchange="filterLogs()">
+                        <option value="all">All Levels</option>
+                        <option value="ERROR">Error</option>
+                        <option value="WARNING">Warning</option>
+                        <option value="INFO">Info</option>
+                        <option value="DEBUG">Debug</option>
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="loadLogs()">🔄 Refresh Logs</button>
+                    <button class="btn" onclick="downloadLogs()">📥 Download Logs</button>
+                    <button class="btn btn-danger" onclick="clearLogs()">🗑️ Clear Logs</button>
+                </div>
+                <div id="log-content" class="log-viewer">Loading logs...</div>
+            </div>
+            
+            <div id="metrics-tab" class="tab-content">
+                <h3 style="color: #1a202c; margin-bottom: 24px;">Performance Metrics</h3>
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-value" id="avg-response-time">--</div>
+                        <div class="metric-label">Avg Response Time (ms)</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="success-rate">--</div>
+                        <div class="metric-label">Success Rate (%)</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="token-usage">--</div>
+                        <div class="metric-label">Token Usage Today</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="active-sessions">--</div>
+                        <div class="metric-label">Active Sessions</div>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="refreshMetrics()">🔄 Refresh Metrics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Global variables
+        let currentPrompts = {};
+        let currentLogs = '';
+        
+        // Tab management function
+        function showTab(tabName) {
+            // Remove active class from all tabs and buttons
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Add active class to selected tab and button
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load appropriate data for the tab
+            if (tabName === 'prompts') {
+                loadPrompts();
+            } else if (tabName === 'logs') {
+                loadLogs();
+            } else if (tabName === 'metrics') {
+                refreshMetrics();
+            } else if (tabName === 'data') {
+                loadDataStatus();
+            }
+        }
+        
+        // System status functions
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/api/admin/status');
+                const data = await response.json();
+                document.getElementById('uptime').textContent = data.uptime || '--';
+                document.getElementById('total-requests').textContent = data.total_requests || '--';
+                document.getElementById('active-leads').textContent = data.active_leads || '--';
+            } catch (error) {
+                console.error('Error refreshing status:', error);
+                showAlert('Error refreshing status', 'error');
+            }
+        }
+        
+        // Prompt management functions
+        async function loadPrompts() {
+            const category = document.getElementById('prompt-category').value;
+            try {
+                const response = await fetch('/api/admin/prompts/' + category);
+                const data = await response.json();
+                currentPrompts = data;
+                const listElement = document.getElementById('prompts-list');
+                listElement.innerHTML = '<h4 style="color: #1a202c; margin-bottom: 16px;">Existing Prompts:</h4>';
+                
+                Object.keys(data).forEach(promptName => {
+                    const promptDiv = document.createElement('div');
+                    promptDiv.style.cssText = 'border: 1px solid #e2e8f0; padding: 16px; margin: 12px 0; border-radius: 8px; background: #ffffff;';
+                    promptDiv.innerHTML = '<strong style="color: #1a202c;">' + promptName + '</strong>' +
+                        '<button class="btn" style="float: right; margin-left: 10px;" onclick="deletePrompt(\'' + category + '\', \'' + promptName + '\')">Delete</button>' +
+                        '<button class="btn" style="float: right;" onclick="editPrompt(\'' + promptName + '\')">Edit</button>' +
+                        '<br><br><div style="font-size: 12px; color: #64748b; max-height: 100px; overflow-y: auto;">' + 
+                        data[promptName].substring(0, 200) + '...</div>';
+                    listElement.appendChild(promptDiv);
+                });
+            } catch (error) {
+                console.error('Error loading prompts:', error);
+                showAlert('Error loading prompts', 'error');
+            }
+        }
+        
+        async function savePrompt() {
+            const category = document.getElementById('prompt-category').value;
+            const name = document.getElementById('prompt-name').value;
+            const content = document.getElementById('prompt-content').value;
+            
+            if (!name || !content) {
+                showAlert('Please fill in both name and content', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/prompts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: category, name: name, content: content })
+                });
+                
+                if (response.ok) {
+                    showAlert('Prompt saved successfully', 'success');
+                    loadPrompts();
+                    document.getElementById('prompt-name').value = '';
+                    document.getElementById('prompt-content').value = '';
+                } else {
+                    showAlert('Error saving prompt', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving prompt:', error);
+                showAlert('Error saving prompt', 'error');
+            }
+        }
+        
+        function editPrompt(promptName) {
+            document.getElementById('prompt-name').value = promptName;
+            document.getElementById('prompt-content').value = currentPrompts[promptName];
+        }
+        
+        async function deletePrompt(category, promptName) {
+            if (!confirm('Are you sure you want to delete the prompt "' + promptName + '"?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/prompts/' + category + '/' + promptName, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showAlert('Prompt deleted successfully', 'success');
+                    loadPrompts();
+                } else {
+                    showAlert('Error deleting prompt', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting prompt:', error);
+                showAlert('Error deleting prompt', 'error');
+            }
+        }
+        
+        async function testPrompt() {
+            const category = document.getElementById('prompt-category').value;
+            const name = document.getElementById('prompt-name').value;
+            const content = document.getElementById('prompt-content').value;
+            
+            if (!name || !content) {
+                showAlert('Please fill in both name and content to test', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/prompts/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: category, name: name, content: content })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                        const metrics = result.test_results;
+                        let message = '✅ Prompt tested! Words: ' + metrics.word_count + ', Chars: ' + metrics.character_count;
+                        showAlert(message, 'success');
+                        console.log('Prompt test results:', result.test_results);
+                    } else {
+                        showAlert(result.message, 'error');
+                    }
+                } else {
+                    showAlert('Error testing prompt', 'error');
+                }
+            } catch (error) {
+                console.error('Error testing prompt:', error);
+                showAlert('Error testing prompt', 'error');
+            }
+        }
+        
+        // Log management functions
+        async function loadLogs() {
+            const logFile = document.getElementById('log-file').value;
+            const logContent = document.getElementById('log-content');
+            logContent.innerHTML = '<div class="loading"></div> Loading logs...';
+            
+            try {
+                const response = await fetch('/api/admin/logs/' + logFile);
+                const data = await response.json();
+                currentLogs = data.content;
+                logContent.textContent = currentLogs;
+                logContent.scrollTop = logContent.scrollHeight;
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                logContent.textContent = 'Error loading logs: ' + error.message;
+            }
+        }
+        
+        function filterLogs() {
+            const level = document.getElementById('log-level').value;
+            const logContent = document.getElementById('log-content');
+            
+            if (level === 'all') {
+                logContent.textContent = currentLogs;
+            } else {
+                const lines = currentLogs.split('\n');
+                const filteredLines = lines.filter(line => line.includes(level));
+                logContent.textContent = filteredLines.join('\n');
+            }
+        }
+        
+        async function downloadLogs(logFile) {
+            try {
+                const url = logFile ? `/api/admin/logs/${logFile}/download` : '/api/admin/logs/main.log/download';
+                window.open(url, '_blank');
+                showAlert('Log download started', 'success');
+            } catch (error) {
+                console.error('Error downloading logs:', error);
+                showAlert('Error downloading logs', 'error');
+            }
+        }
+        
+        async function clearLogs() {
+            if (!confirm('Are you sure you want to clear all logs?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/logs/clear', { method: 'POST' });
+                if (response.ok) {
+                    showAlert('Logs cleared successfully', 'success');
+                    loadLogs();
+                } else {
+                    showAlert('Error clearing logs', 'error');
+                }
+            } catch (error) {
+                console.error('Error clearing logs:', error);
+                showAlert('Error clearing logs', 'error');
+            }
+        }
+        
+        // Data management functions
+        async function uploadData() {
+            const dataSource = document.getElementById('data-source').value;
+            const fileInput = document.getElementById('data-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showAlert('Please select a file', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('source', dataSource);
+            
+            try {
+                const response = await fetch('/api/admin/data/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    showAlert('Data uploaded successfully', 'success');
+                    loadDataStatus();
+                } else {
+                    showAlert('Error uploading data', 'error');
+                }
+            } catch (error) {
+                console.error('Error uploading data:', error);
+                showAlert('Error uploading data', 'error');
+            }
+        }
+        
+        async function downloadData(dataSource) {
+            try {
+                const response = await fetch('/api/admin/data/download/' + dataSource);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = dataSource + '_export.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showAlert(dataSource + ' data downloaded successfully', 'success');
+                } else {
+                    showAlert('Error downloading ' + dataSource + ' data', 'error');
+                }
+            } catch (error) {
+                console.error('Error downloading data:', error);
+                showAlert('Error downloading data', 'error');
+            }
+        }
+        
+        async function validateData() {
+            const dataSource = document.getElementById('data-source').value;
+            
+            try {
+                const response = await fetch('/api/admin/data/validate/' + dataSource, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    let message = dataSource + ' validation completed. ';
+                    if (result.valid) {
+                        message += '✅ Valid! ';
+                    } else {
+                        message += '❌ Issues found: ' + result.errors.length + ' errors. ';
+                    }
+                    if (result.warnings && result.warnings.length > 0) {
+                        message += '⚠️ ' + result.warnings.length + ' warnings. ';
+                    }
+                    showAlert(message, result.valid ? 'success' : 'error');
+                    console.log('Validation results:', result);
+                } else {
+                    showAlert('Error validating ' + dataSource + ' data', 'error');
+                }
+            } catch (error) {
+                console.error('Error validating data:', error);
+                showAlert('Error validating data', 'error');
+            }
+        }
+        
+        async function loadDataStatus() {
+            try {
+                const response = await fetch('/api/admin/data/status');
+                const data = await response.json();
+                const statusElement = document.getElementById('data-status');
+                
+                let html = '<h4 style="color: #1a202c; margin-bottom: 16px;">Data Sources Status:</h4>';
+                html += '<div style="margin: 10px 0;"><span class="status-indicator ' + 
+                    (data.elasticsearch ? 'status-online' : 'status-offline') + 
+                    '"></span>Elasticsearch: ' + (data.elasticsearch ? 'Connected' : 'Disconnected');
+                if (data.elasticsearch_stats) {
+                    html += ' (' + data.elasticsearch_stats.products + ' products, ' + 
+                        data.elasticsearch_stats.solutions + ' solutions)';
+                }
+                html += '</div>';
+                
+                html += '<div style="margin: 10px 0;"><span class="status-indicator ' + 
+                    (data.chromadb ? 'status-online' : 'status-offline') + 
+                    '"></span>ChromaDB: ' + (data.chromadb ? 'Connected' : 'Disconnected');
+                if (data.chromadb_stats) {
+                    html += ' (' + data.chromadb_stats.products_count + ' products, ' + 
+                        data.chromadb_stats.solutions_count + ' solutions)';
+                }
+                html += '</div>';
+                
+                html += '<div style="margin: 10px 0;"><span class="status-indicator ' + 
+                    (data.json_files ? 'status-online' : 'status-warning') + 
+                    '"></span>JSON Files: ' + (data.json_files_count || 0) + ' files found</div>';
+                
+                statusElement.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading data status:', error);
+                showAlert('Error loading data status', 'error');
+            }
+        }
+        
+        // Metrics functions
+        async function refreshMetrics() {
+            try {
+                const response = await fetch('/api/admin/metrics');
+                const data = await response.json();
+                document.getElementById('avg-response-time').textContent = data.avg_response_time || '--';
+                document.getElementById('success-rate').textContent = data.success_rate || '--';
+                document.getElementById('token-usage').textContent = data.token_usage || '--';
+                document.getElementById('active-sessions').textContent = data.active_sessions || '--';
+            } catch (error) {
+                console.error('Error refreshing metrics:', error);
+                showAlert('Error refreshing metrics', 'error');
+            }
+        }
+        
+        // Quick action functions
+        async function updateData() {
+            try {
+                showAlert('Updating data safely (preserving existing)...', 'success');
+                const response = await fetch('/api/admin/reindex?force_replace=false', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'Data updated successfully', 'success');
+                } else {
+                    showAlert('Error updating data', 'error');
+                }
+            } catch (error) {
+                console.error('Error updating data:', error);
+                showAlert('Error updating data', 'error');
+            }
+        }
+        
+        async function reindexData() {
+            if (!confirm('Are you sure you want to FORCE REPLACE all data? This will delete existing data and reload from JSON files.')) {
+                return;
+            }
+            try {
+                showAlert('Force replacing all data...', 'success');
+                const response = await fetch('/api/admin/reindex/force', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'Data replaced successfully', 'success');
+                } else {
+                    showAlert('Error replacing data', 'error');
+                }
+            } catch (error) {
+                console.error('Error replacing data:', error);
+                showAlert('Error replacing data', 'error');
+            }
+        }
+        
+        async function syncChromaDB() {
+            try {
+                showAlert('Syncing ChromaDB safely (preventing duplicates)...', 'success');
+                const response = await fetch('/api/admin/sync-chroma?clear_existing=false', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'ChromaDB synced successfully', 'success');
+                } else {
+                    showAlert('Error syncing ChromaDB', 'error');
+                }
+            } catch (error) {
+                console.error('Error syncing ChromaDB:', error);
+                showAlert('Error syncing ChromaDB', 'error');
+            }
+        }
+        
+        async function syncChromaDBForce() {
+            if (!confirm('Are you sure you want to FORCE SYNC ChromaDB? This will clear existing data and reload from JSON files.')) {
+                return;
+            }
+            try {
+                showAlert('Force syncing ChromaDB (clearing and reloading)...', 'success');
+                const response = await fetch('/api/admin/sync-chroma?clear_existing=true', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'ChromaDB force synced successfully', 'success');
+                } else {
+                    showAlert('Error force syncing ChromaDB', 'error');
+                }
+            } catch (error) {
+                console.error('Error force syncing ChromaDB:', error);
+                showAlert('Error force syncing ChromaDB', 'error');
+            }
+        }
+        
+        // Enhanced admin functions
+        async function updateElasticsearch() {
+            try {
+                showAlert('Updating Elasticsearch data safely (preserving existing)...', 'success');
+                const response = await fetch('/api/admin/reindex?force_replace=false', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'Elasticsearch updated successfully', 'success');
+                } else {
+                    showAlert('Error updating Elasticsearch', 'error');
+                }
+            } catch (error) {
+                console.error('Error updating Elasticsearch:', error);
+                showAlert('Error updating Elasticsearch', 'error');
+            }
+        }
+        
+        async function forceReindexElasticsearch() {
+            if (!confirm('Are you sure you want to FORCE REPLACE all Elasticsearch data? This will delete existing data and reload from JSON files.')) {
+                return;
+            }
+            try {
+                showAlert('Force replacing all Elasticsearch data...', 'success');
+                const response = await fetch('/api/admin/reindex/force', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'Elasticsearch data replaced successfully', 'success');
+                } else {
+                    showAlert('Error replacing Elasticsearch data', 'error');
+                }
+            } catch (error) {
+                console.error('Error replacing Elasticsearch data:', error);
+                showAlert('Error replacing Elasticsearch data', 'error');
+            }
+        }
+        
+        async function validateElasticsearch() {
+            try {
+                showAlert('Validating Elasticsearch data...', 'success');
+                const response = await fetch('/api/admin/data/validate/elasticsearch', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    let message = 'Elasticsearch validation completed. ';
+                    if (result.valid) {
+                        message += '✅ Valid! ';
+                        if (result.stats) {
+                            message += `(${result.stats.products_count || 0} products, ${result.stats.solutions_count || 0} solutions)`;
+                        }
+                    } else {
+                        message += `❌ Issues found: ${result.errors.length} errors. `;
+                    }
+                    if (result.warnings && result.warnings.length > 0) {
+                        message += `⚠️ ${result.warnings.length} warnings. `;
+                    }
+                    showAlert(message, result.valid ? 'success' : 'error');
+                    console.log('Elasticsearch validation results:', result);
+                } else {
+                    showAlert('Error validating Elasticsearch', 'error');
+                }
+            } catch (error) {
+                console.error('Error validating Elasticsearch:', error);
+                showAlert('Error validating Elasticsearch', 'error');
+            }
+        }
+        
+        async function validateChromaDB() {
+            try {
+                showAlert('Validating ChromaDB...', 'success');
+                const response = await fetch('/api/admin/data/validate/chromadb', { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    let message = 'ChromaDB validation completed. ';
+                    if (result.valid) {
+                        message += '✅ Valid! ';
+                        if (result.stats) {
+                            message += `(${result.stats.products_count || 0} products, ${result.stats.solutions_count || 0} solutions)`;
+                        }
+                    } else {
+                        message += `❌ Issues found: ${result.errors.length} errors. `;
+                    }
+                    if (result.warnings && result.warnings.length > 0) {
+                        message += `⚠️ ${result.warnings.length} warnings. `;
+                    }
+                    showAlert(message, result.valid ? 'success' : 'error');
+                    console.log('ChromaDB validation results:', result);
+                } else {
+                    showAlert('Error validating ChromaDB', 'error');
+                }
+            } catch (error) {
+                console.error('Error validating ChromaDB:', error);
+                showAlert('Error validating ChromaDB', 'error');
+            }
+        }
+        
+        // Health check functions
+        async function checkElasticsearchHealth() {
+            try {
+                showAlert('Checking Elasticsearch health...', 'success');
+                const response = await fetch('/api/debug/elasticsearch');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'healthy') {
+                        const products = result.indices.products.count;
+                        const solutions = result.indices.solutions.count;
+                        showAlert(`✅ Elasticsearch healthy! ${products} products, ${solutions} solutions`, 'success');
+                    } else {
+                        showAlert(`❌ Elasticsearch unhealthy: ${result.error}`, 'error');
+                    }
+                    console.log('Elasticsearch health:', result);
+                } else {
+                    showAlert('Error checking Elasticsearch health', 'error');
+                }
+            } catch (error) {
+                console.error('Error checking Elasticsearch health:', error);
+                showAlert('Error checking Elasticsearch health', 'error');
+            }
+        }
+        
+        async function checkChromaDBHealth() {
+            try {
+                showAlert('Checking ChromaDB health...', 'success');
+                const response = await fetch('/api/debug/chroma-status');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'healthy') {
+                        const products = result.stats.products_count;
+                        const solutions = result.stats.solutions_count;
+                        showAlert(`✅ ChromaDB healthy! ${products} products, ${solutions} solutions`, 'success');
+                    } else if (result.status === 'not_initialized') {
+                        showAlert(`⚠️ ChromaDB not initialized: ${result.reason}`, 'error');
+                    } else {
+                        showAlert(`❌ ChromaDB unhealthy: ${result.error}`, 'error');
+                    }
+                    console.log('ChromaDB health:', result);
+                } else {
+                    showAlert('Error checking ChromaDB health', 'error');
+                }
+            } catch (error) {
+                console.error('Error checking ChromaDB health:', error);
+                showAlert('Error checking ChromaDB health', 'error');
+            }
+        }
+        
+        async function checkDatabaseHealth() {
+            try {
+                showAlert('Checking database health...', 'success');
+                const response = await fetch('/api/debug/database');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'connected') {
+                        const leads = result.counts.leads;
+                        const messages = result.counts.messages;
+                        showAlert(`✅ Database healthy! ${leads} leads, ${messages} messages`, 'success');
+                    } else {
+                        showAlert(`❌ Database unhealthy: ${result.error}`, 'error');
+                    }
+                    console.log('Database health:', result);
+                } else {
+                    showAlert('Error checking database health', 'error');
+                }
+            } catch (error) {
+                console.error('Error checking database health:', error);
+                showAlert('Error checking database health', 'error');
+            }
+        }
+        
+        // Advanced system functions
+        async function showDataSourceStatus() {
+            try {
+                showAlert('Loading data source status...', 'success');
+                const response = await fetch('/api/admin/data/status');
+                if (response.ok) {
+                    const result = await response.json();
+                    let statusHtml = '<h4 style="color: #1a202c; margin-bottom: 16px;">Data Sources Status:</h4>';
+                    statusHtml += `<div style="margin: 10px 0;"><span class="status-indicator ${result.elasticsearch ? 'status-online' : 'status-offline'}"></span>Elasticsearch: ${result.elasticsearch ? 'Connected' : 'Disconnected'}`;
+                    if (result.elasticsearch_stats) {
+                        statusHtml += ` (${result.elasticsearch_stats.products} products, ${result.elasticsearch_stats.solutions} solutions)`;
+                    }
+                    statusHtml += '</div>';
+                    
+                    statusHtml += `<div style="margin: 10px 0;"><span class="status-indicator ${result.chromadb ? 'status-online' : 'status-offline'}"></span>ChromaDB: ${result.chromadb ? 'Connected' : 'Disconnected'}`;
+                    if (result.chromadb_stats) {
+                        statusHtml += ` (${result.chromadb_stats.products_count} products, ${result.chromadb_stats.solutions_count} solutions)`;
+                    }
+                    statusHtml += '</div>';
+                    
+                    statusHtml += `<div style="margin: 10px 0;"><span class="status-indicator ${result.json_files ? 'status-online' : 'status-warning'}"></span>JSON Files: ${result.json_files_count || 0} files found</div>`;
+                    
+                    // Show in data status area or create popup
+                    const dataStatusElement = document.getElementById('data-status');
+                    if (dataStatusElement) {
+                        dataStatusElement.innerHTML = statusHtml;
+                        showTab('data');
+                    } else {
+                        // Create a temporary popup
+                        const popup = document.createElement('div');
+                        popup.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 1000; max-width: 500px;';
+                        popup.innerHTML = statusHtml + '<br><button class="btn" onclick="this.parentElement.remove()">Close</button>';
+                        document.body.appendChild(popup);
+                    }
+                    showAlert('Data source status loaded', 'success');
+                } else {
+                    showAlert('Error loading data source status', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading data source status:', error);
+                showAlert('Error loading data source status', 'error');
+            }
+        }
+        
+        async function showSystemMetrics() {
+            try {
+                showAlert('Loading system metrics...', 'success');
+                const response = await fetch('/api/admin/metrics');
+                if (response.ok) {
+                    const result = await response.json();
+                    document.getElementById('avg-response-time').textContent = result.avg_response_time || '--';
+                    document.getElementById('success-rate').textContent = result.success_rate || '--';
+                    document.getElementById('token-usage').textContent = result.token_usage || '--';
+                    document.getElementById('active-sessions').textContent = result.active_sessions || '--';
+                    
+                    // Switch to metrics tab
+                    showTab('metrics');
+                    showAlert('System metrics updated', 'success');
+                } else {
+                    showAlert('Error loading system metrics', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading system metrics:', error);
+                showAlert('Error loading system metrics', 'error');
+            }
+        }
+        
+        // Enhanced download and view functions
+        async function downloadData(dataSource) {
+            try {
+                const response = await fetch('/api/admin/data/download/' + dataSource);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = dataSource + '_export.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showAlert(dataSource + ' data downloaded successfully', 'success');
+                } else {
+                    showAlert('Error downloading ' + dataSource + ' data', 'error');
+                }
+            } catch (error) {
+                console.error('Error downloading data:', error);
+                showAlert('Error downloading data', 'error');
+            }
+        }
+        
+        async function downloadLogs(logFile) {
+            try {
+                const url = logFile ? `/api/admin/logs/${logFile}/download` : '/api/admin/logs/main.log/download';
+                window.open(url, '_blank');
+                showAlert('Log download started', 'success');
+            } catch (error) {
+                console.error('Error downloading logs:', error);
+                showAlert('Error downloading logs', 'error');
+            }
+        }
+        
+        async function viewLogs() {
+            try {
+                // Switch to logs tab and load logs
+                showTab('logs');
+                await loadLogs();
+                showAlert('Logs loaded in viewer', 'success');
+            } catch (error) {
+                console.error('Error viewing logs:', error);
+                showAlert('Error viewing logs', 'error');
+            }
+        }
+        
+        // Utility functions
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-' + type;
+            alertDiv.textContent = message;
+            document.body.insertBefore(alertDiv, document.body.firstChild);
+            setTimeout(function() {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+        
+        // Initialize the dashboard when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshStatus();
+            loadPrompts();
+            refreshMetrics();
+        });
+        
+        // Set up automatic refresh every 30 seconds
+        setInterval(function() {
+            refreshStatus();
+            refreshMetrics();
+        }, 30000);
+    </script>
+</body>
+</html> 

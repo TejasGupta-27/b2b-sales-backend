@@ -7,5 +7,7 @@ async def get_speech_service():
     await service.initialize()
     try:
         yield service
+    except Exception as e:
+        raise e
     finally:
         await service.close() 

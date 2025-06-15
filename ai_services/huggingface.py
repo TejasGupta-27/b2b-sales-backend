@@ -65,13 +65,26 @@ class HuggingFaceProvider(AIProvider):
                         else:
                             generated_text = "Sorry, I couldn't generate a response."
                         
-                        return AIResponse(
+                        # Calculate token usage (approximate)
+                        prompt_tokens = len(prompt.split())
+                        completion_tokens = len(generated_text.split())
+                        
+                        response = AIResponse(
                             content=generated_text.strip(),
                             model=self.config["model"],
                             provider=self.provider_name,
-                            usage={"prompt_tokens": len(prompt.split()), "completion_tokens": len(generated_text.split())},
+                            usage={
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens
+                            },
                             finish_reason="stop"
                         )
+                        
+                        # Track token usage
+                        self._track_usage(response.usage)
+                        
+                        return response
                 
                 raise Exception("Model is still loading after multiple attempts")
                 

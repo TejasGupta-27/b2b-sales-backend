@@ -1,111 +1,137 @@
+version: '3.8'
+
 services:
-  db:
-    build:
-      context: ./db
+  # Main B2B Sales Backend Application
+  b2b-sales-backend:
+    build: 
+      context: .
       dockerfile: Dockerfile
+    expose:
+      - "3001"
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: chat_db
+      # Database Configuration
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/b2b_sales
+      
+      # AI Service Configuration
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_EMBEDDING_ENDPOINT=${AZURE_EMBEDDING_ENDPOINT}
+      - AZURE_EMBEDDING_API_KEY=${AZURE_EMBEDDING_API_KEY}
+      
+      # Elasticsearch Configuration
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
+      
+      # Application Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=3001
+      - DEBUG=true
+      - USE_HYBRID_RETRIEVER=true
+      - FORCE_RELOAD_DATA=false
+      - SKIP_DATA_LOADING=false
+      
+      # CORS Configuration
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
+      
+    volumes:
+      
+
+
+      # Persist logs
+      - ./logs:/app/logs
+      # Persist admin configuration (prompts, data sources)
+      - ./Data/admin_config:/app/Data/admin_config
+      # Persist uploaded data
+      - ./Data/uploads:/app/Data/uploads
+      # Persist generated quotes and pitch decks
+      - ./Data/quotes:/app/Data/quotes
+      - ./Data/pitch_decks:/app/Data/pitch_decks
+      # Persist JSON data files
+      - ./Data/json:/app/Data/json
+      # Persist ChromaDB data
+      - ./chroma_db:/app/chroma_db
+    depends_on:
+      - postgres
+      - elasticsearch
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: b2b_sales
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-
+      # Initialize with extensions
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d chat_db"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 60s
 
+  # Elasticsearch for Product Search
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - cluster.routing.allocation.disk.threshold_enabled=false
-      - cluster.routing.allocation.disk.watermark.low=1gb
-      - cluster.routing.allocation.disk.watermark.high=500mb
-      - cluster.routing.allocation.disk.watermark.flood_stage=200mb
     ports:
       - "9200:9200"
       - "9300:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
 
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./Data:/app/Data
-      - chroma_data:/app/chroma_db
+  # Kibana for Elasticsearch Management (Optional)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
     environment:
-      - PYTHONUNBUFFERED=1
-      - API_HOST=0.0.0.0
-      - API_PORT=3001
-      - DEBUG=true
-      - CORS_ORIGINS=http://localhost:3000
-      - POSTGRES_USER=myuser
-      - POSTGRES_PASSWORD=mypassword
-      - POSTGRES_DB=chat_db
-      - DATABASE_URL=postgresql://myuser:mypassword@db:5432/chat_db
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - ELASTICSEARCH_INDEX_PRODUCTS=products
-      - ELASTICSEARCH_INDEX_SOLUTIONS=solutions
-      - CHROMA_DB_PATH=/app/chroma_db
-      - CHROMA_MAX_ITEMS_PER_FILE=50
-      - DATA_DIR=Data/json
-      - DEFAULT_AI_PROVIDER=azure_openai
-      - AZURE_OPENAI_API_VERSION=2025-01-01-preview
-      - AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4.1-mini
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-      - AZURE_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-large
-      - AZURE_EMBEDDING_ENDPOINT=https://internship2025-teama.openai.azure.com/
-      - AZURE_EMBEDDING_API_KEY=${AZURE_EMBEDDING_API_KEY}
-      - HUGGINGFACE_MODEL=microsoft/DialoGPT-medium
-      - FORCE_RELOAD_DATA=false
-      - SKIP_DATA_LOADING=false
-      - USE_HYBRID_RETRIEVER=true
-      - ELASTICSEARCH_WEIGHT=0.4
-      - SEMANTIC_WEIGHT=0.6
-      - HTTP_PROXY=${HTTP_PROXY}
-      - HTTPS_PROXY=${HTTPS_PROXY}
-      - NO_PROXY=${NO_PROXY}
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+    ports:
+      - "5601:5601"
     depends_on:
-      db:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
+      - elasticsearch
     restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Adminer for Database Management (Optional)
+  adminer:
+    image: adminer:4.8.1
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    profiles:
+      - monitoring
 
 volumes:
   postgres_data:
+    driver: local
   elasticsearch_data:
-  chroma_data:
+    driver: local
+
+networks:
+  default:
+    name: b2b-sales-network

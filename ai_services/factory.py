@@ -2,6 +2,7 @@ from typing import Dict, Type
 from .base import AIProvider
 from .azure_openai import AzureOpenAIProvider
 from .huggingface import HuggingFaceProvider
+from .token_tracker import TokenTracker
 from config import settings
 
 class AIServiceFactory:
@@ -39,7 +40,13 @@ class AIServiceFactory:
         else:
             config = {}
         
-        return provider_class(**config)
+        # Create provider instance
+        provider = provider_class(**config)
+        
+        # Initialize token tracker
+        provider.usage_tracker = TokenTracker()
+        
+        return provider
     
     @classmethod
     def get_available_providers(cls) -> list[str]:

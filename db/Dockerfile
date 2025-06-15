@@ -1,7 +1,7 @@
 FROM postgres:15
 
-# Copy initialization scripts
-COPY ./init-scripts/ /docker-entrypoint-initdb.d/
+# Copy initialization scripts - COMMENTED OUT since using Alembic
+# COPY ./init-scripts/ /docker-entrypoint-initdb.d/
 
 # Set environment variables
 ENV POSTGRES_USER=myuser

@@ -34,6 +34,7 @@ langchain
 langchain_community
 langchain_chroma
 beautifulsoup4
+ragas>=0.1.0
 
 # Speech recognition
 openai-whisper
@@ -51,3 +52,6 @@ requests
 
 # Added from the code block
 gTTS==2.5.1
+
+# PowerPoint generation
+python-pptx>=0.6.21

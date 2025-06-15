@@ -45,7 +45,7 @@ jobs:
       - run:
           name: List files in /app
           command: |
-            docker exec app-backend-1 ls -l /app
+            docker exec app-b2b-sales-backend-1 ls -l /app
       - run:
           name: Show files in CI context
           command: |

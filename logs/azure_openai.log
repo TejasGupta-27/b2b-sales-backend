@@ -1,0 +1,1080 @@
+2025-05-30 00:44:22,020 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:44:22,021 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:44:22,101 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:44:26,064 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:44:26,067 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:44:26,067 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:44:26,110 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:44:29,098 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:44:29,099 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:44:29,102 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:44:29,146 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:44:31,695 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:44:32,346 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:44:32,350 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:44:32,392 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:44:37,266 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:44:37,267 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:44:37,267 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:44:37,308 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:44:40,095 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:46:32,624 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:46:32,625 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:46:32,694 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:46:40,956 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:46:40,963 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:46:40,964 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:46:41,011 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:46:44,345 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:46:44,348 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:46:44,350 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:46:44,406 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:46:47,658 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:46:47,899 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:46:47,904 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:46:47,934 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:46:53,297 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 00:46:53,299 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 00:46:53,299 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 00:46:53,326 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 00:46:56,493 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 01:31:37,819 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 01:31:37,820 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 01:31:37,959 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 01:31:41,668 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 01:31:41,672 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 01:31:41,673 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 01:31:41,744 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 01:31:44,814 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 01:31:44,816 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 01:31:44,817 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 01:31:44,851 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 01:31:48,006 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 01:31:48,313 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 01:31:48,314 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 01:31:48,372 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 01:31:56,437 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-05-30 01:31:56,440 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-05-30 01:31:56,441 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-05-30 01:31:56,483 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-05-30 01:31:59,966 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:15:47,493 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:15:47,495 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:15:47,635 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:15:52,337 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:15:52,345 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:15:52,346 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:15:52,388 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:15:55,194 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:15:55,197 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:15:55,197 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:15:55,253 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:15:57,926 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:15:59,542 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:15:59,543 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:15:59,587 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:16:03,833 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:16:03,833 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:16:03,834 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:16:03,884 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:16:08,622 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:16:51,306 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:16:51,307 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:16:51,356 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:16:57,823 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:16:57,825 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:16:57,826 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:16:57,876 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:17:01,288 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:17:01,289 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:17:01,290 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:17:01,325 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:17:04,320 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:17:04,512 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:17:04,512 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:17:04,559 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:17:10,880 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:17:10,881 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:17:10,882 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:17:10,915 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:17:14,080 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:17:57,541 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:17:57,542 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:17:57,608 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:18:02,139 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:18:02,140 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:18:02,141 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:18:02,188 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:18:04,798 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:18:04,798 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:18:04,799 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:18:04,860 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:18:08,504 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:18:09,308 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:18:09,308 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:18:09,375 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:18:13,863 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:18:13,866 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:18:13,867 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:18:13,937 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:18:15,835 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:18:59,040 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:18:59,041 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:18:59,095 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:19:04,340 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:19:04,342 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:19:04,343 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:19:04,401 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:19:07,211 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:19:07,212 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:19:07,213 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:19:07,247 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:19:10,078 - ai_services.azure_openai - WARNING - Content filter triggered - using fallback response
+2025-06-02 02:19:10,193 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:19:10,194 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:19:10,266 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:19:16,633 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:19:16,633 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:19:16,634 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:19:16,683 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:19:19,666 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:19:56,275 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:19:56,275 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:19:56,315 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:20:01,119 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:20:01,121 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:20:01,122 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:20:01,156 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:20:04,167 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:20:04,168 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:20:04,168 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:20:04,212 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:20:07,523 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:20:07,667 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:20:07,668 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:20:07,705 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:20:12,188 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:20:12,194 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:20:12,195 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:20:12,255 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:20:14,891 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:09,397 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:09,398 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:09,451 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:21:17,119 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:17,121 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:17,121 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:17,180 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:21:20,484 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:20,485 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:20,485 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:20,520 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:21:24,507 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:24,652 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:24,653 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:24,704 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:21:29,771 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:29,775 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:29,776 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:29,810 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:21:33,284 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:53,965 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:53,967 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:54,017 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:21:59,376 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:21:59,379 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:21:59,380 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:21:59,425 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:22:05,130 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:22:05,132 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:22:05,133 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:22:05,185 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:22:10,733 - ai_services.azure_openai - WARNING - Content filter triggered - using fallback response
+2025-06-02 02:22:10,835 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:22:10,839 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:22:10,901 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:22:21,120 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:22:21,120 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:22:21,121 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:22:21,155 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:22:26,400 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:23:09,880 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:23:09,881 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:23:09,946 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:23:15,513 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:23:15,518 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:23:15,520 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:23:15,586 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:23:20,503 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:23:20,504 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:23:20,505 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:23:20,540 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:23:24,797 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:23:24,984 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:23:24,984 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:23:25,059 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:23:29,613 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:23:29,614 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:23:29,615 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:23:29,650 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:23:31,982 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:23:52,345 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:23:52,347 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:23:52,418 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:24:01,045 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:24:01,046 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:24:01,047 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:24:01,085 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:24:03,931 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:24:03,931 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:24:03,932 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:24:03,984 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:24:08,320 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:24:08,467 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:24:08,468 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:24:08,509 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:24:20,639 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:24:20,640 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:24:20,640 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:24:20,671 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:24:24,157 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:43:24,081 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:43:24,085 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:43:24,287 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:43:30,118 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:43:30,127 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:43:30,128 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:43:30,183 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:43:33,609 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:43:33,610 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:43:33,611 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:43:33,690 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:43:36,157 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:43:37,754 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:43:37,755 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:43:37,821 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:43:45,258 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:43:45,260 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:43:45,268 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:43:45,342 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:43:49,586 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:44:04,847 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:44:04,850 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:44:04,910 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:44:09,756 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:44:09,758 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:44:09,760 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:44:09,804 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:44:13,034 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:44:13,037 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:44:13,038 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:44:13,073 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:44:16,015 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:44:16,285 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:44:16,286 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:44:16,331 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:44:21,281 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:44:21,283 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:44:21,284 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:44:21,316 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:44:23,847 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:47:41,389 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:47:41,390 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:47:41,459 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:47:47,997 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:47:48,001 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:47:48,001 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:47:48,057 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:47:52,160 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:47:52,161 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:47:52,163 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:47:52,208 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:47:56,791 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:47:56,971 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:47:56,971 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:47:57,039 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:48:04,320 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:48:04,321 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:48:04,321 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:48:04,356 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:48:07,358 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:48:55,263 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:48:55,263 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:48:55,300 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:48:59,677 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:48:59,679 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:48:59,680 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:48:59,738 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:49:02,733 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:49:02,735 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:49:02,736 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:49:02,770 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:49:05,743 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:49:05,885 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:49:05,887 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:49:05,928 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:49:16,405 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:49:16,405 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:49:16,406 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:49:16,467 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:49:20,151 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:58:47,286 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:58:47,287 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:58:47,389 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:58:52,729 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:58:52,735 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:58:52,736 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:58:52,770 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:58:56,629 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:58:56,635 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:58:56,637 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:58:56,682 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:59:01,341 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:59:01,593 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:59:01,596 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:59:01,679 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:59:12,369 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 02:59:12,370 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 02:59:12,371 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 02:59:12,425 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 02:59:16,378 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:01:05,880 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:01:05,881 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:01:05,944 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:01:10,386 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:01:10,389 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:01:10,391 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:01:10,435 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:01:13,423 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:01:13,425 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:01:13,427 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:01:13,486 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:01:16,461 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:01:16,666 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:01:16,666 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:01:16,728 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:01:19,659 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:01:19,660 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:01:19,660 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:01:19,721 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:01:22,547 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:52:07,667 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:52:07,670 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:52:07,809 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:52:13,685 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:52:13,693 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:52:13,694 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:52:13,752 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:52:18,860 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:52:18,864 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:52:18,865 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:52:18,927 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:52:21,576 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:52:22,068 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:52:22,069 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:52:22,117 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:52:24,617 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:52:24,619 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:52:24,620 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:52:24,683 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:52:27,305 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:53:11,390 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:53:11,391 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:53:11,451 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:53:16,271 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:53:16,272 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:53:16,273 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:53:16,329 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:53:19,650 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:53:19,651 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:53:19,651 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:53:19,696 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:53:22,694 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:53:22,832 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:53:22,833 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:53:22,900 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:53:25,892 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:53:25,895 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:53:25,895 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:53:25,955 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:53:28,108 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:54:00,245 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:54:00,246 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:54:00,331 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:54:08,391 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:54:08,395 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:54:08,395 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:54:08,452 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:54:12,310 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:54:12,312 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:54:12,313 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:54:12,374 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:54:15,943 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:54:16,148 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:54:16,149 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:54:16,213 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:54:21,556 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:54:21,557 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:54:21,557 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:54:21,617 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:54:24,301 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:55:37,004 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:55:37,004 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:55:37,062 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:55:42,217 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:55:42,219 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:55:42,220 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:55:42,276 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:55:45,277 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:55:45,279 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:55:45,279 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:55:45,343 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:55:47,956 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:55:48,130 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:55:48,131 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:55:48,195 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:55:51,180 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:55:51,181 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:55:51,183 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:55:51,229 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:55:54,536 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:56:31,059 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:56:31,061 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:56:31,170 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:56:36,941 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:56:36,942 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:56:36,943 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:56:36,987 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:56:40,338 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:56:40,340 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:56:40,341 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:56:40,405 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:56:43,336 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:56:43,549 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:56:43,551 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:56:43,614 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:56:49,275 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:56:49,276 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:56:49,276 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:56:49,329 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:56:52,297 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:57:20,801 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:57:20,804 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:57:20,877 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:57:26,354 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:57:26,357 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:57:26,360 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:57:26,423 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:57:29,379 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:57:29,380 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:57:29,380 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:57:29,443 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:57:32,613 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:57:32,741 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:57:32,742 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:57:32,803 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:57:35,343 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:57:35,344 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:57:35,345 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:57:35,395 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:57:38,186 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:58:16,616 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:58:16,618 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:58:16,690 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:58:23,627 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:58:23,630 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:58:23,631 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:58:23,686 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:58:26,652 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:58:26,654 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:58:26,655 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:58:26,741 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:58:30,040 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:58:30,264 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:58:30,264 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:58:30,364 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:58:34,628 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:58:34,629 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:58:34,631 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:58:34,720 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:58:36,828 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:58:56,243 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:58:56,244 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:58:56,303 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:59:02,034 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:59:02,035 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:59:02,036 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:59:02,106 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:59:05,075 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:59:05,076 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:59:05,077 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:59:05,139 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:59:08,613 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:59:09,209 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:59:09,213 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:59:09,283 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:59:12,420 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:59:12,422 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:59:12,424 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:59:12,487 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 03:59:15,010 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 03:59:59,148 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 03:59:59,153 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 03:59:59,222 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:04,437 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:04,440 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:04,442 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:04,502 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:08,101 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:08,102 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:08,102 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:08,142 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:10,692 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:10,849 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:10,850 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:10,902 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:13,542 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:13,545 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:13,551 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:13,603 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:16,129 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:27,411 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:27,411 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:27,468 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:34,215 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:34,220 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:34,222 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:34,289 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:37,885 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:37,886 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:37,887 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:37,923 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:41,702 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:41,943 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:41,944 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:41,989 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:44,794 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:00:44,795 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:00:44,800 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:00:44,843 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:00:52,584 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:04:22,569 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:04:22,570 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:04:22,652 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:04:31,469 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:04:31,473 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:04:31,474 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:04:31,530 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:04:34,709 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:04:34,711 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:04:34,712 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:04:34,792 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:04:41,224 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:04:41,514 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:04:41,515 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:04:41,576 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:04:50,691 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:04:50,695 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:04:50,696 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:04:50,729 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:04:53,710 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:23:13,139 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:23:13,142 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:23:13,365 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:23:19,670 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:23:19,677 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:23:19,677 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:23:19,716 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:23:22,993 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:23:22,998 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:23:22,999 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:23:23,064 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:23:26,033 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:23:28,106 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:23:28,137 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:23:28,232 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:23:33,890 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:23:33,893 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:23:33,895 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:23:33,936 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:23:36,123 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:24:09,106 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:24:09,106 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:24:09,183 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:24:14,679 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:24:14,680 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:24:14,681 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:24:14,735 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:24:18,039 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:24:18,040 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:24:18,042 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:24:18,113 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:24:21,557 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:24:21,865 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:24:21,865 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:24:21,924 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:24:24,432 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:24:24,433 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:24:24,433 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:24:24,468 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:24:27,152 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:24:52,087 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:24:52,088 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:24:52,131 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:00,273 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:00,279 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:00,280 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:00,318 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:03,311 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:03,312 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:03,313 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:03,356 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:06,999 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:07,180 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:07,183 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:07,275 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:11,635 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:11,637 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:11,638 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:11,687 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:14,029 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:25,498 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:25,507 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:25,569 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:30,987 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:30,988 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:30,988 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:31,050 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:34,353 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:34,355 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:34,356 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:34,412 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:37,418 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:37,615 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:37,619 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:37,681 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:40,277 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:25:40,278 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:25:40,279 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:25:40,312 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:25:43,950 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:26:06,976 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:26:06,976 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:26:07,030 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:26:12,284 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:26:12,293 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:26:12,295 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:26:12,338 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:26:15,471 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:26:15,471 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:26:15,472 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:26:15,518 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:26:18,764 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:26:18,952 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:26:18,954 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:26:19,013 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:26:22,688 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:26:22,689 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:26:22,690 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:26:22,732 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:26:27,154 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:27:33,041 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:27:33,042 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:27:33,081 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:27:42,205 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:27:42,207 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:27:42,209 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:27:42,251 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:27:46,355 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:27:46,356 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:27:46,358 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:27:46,395 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:27:49,233 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:27:49,437 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:27:49,439 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:27:49,489 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:27:52,609 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:27:52,613 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:27:52,615 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:27:52,684 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:27:55,631 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:12,986 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:12,988 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:13,066 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:19,157 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:19,158 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:19,159 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:19,215 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:22,679 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:22,680 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:22,681 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:22,736 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:25,888 - ai_services.azure_openai - WARNING - Content filter triggered - using fallback response
+2025-06-02 04:28:25,928 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:25,929 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:25,969 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:30,687 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:30,689 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:30,690 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:30,741 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:34,194 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:50,601 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:50,602 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:50,674 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:55,152 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:55,153 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:55,154 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:55,208 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:28:58,044 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:28:58,048 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:28:58,050 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:28:58,108 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:29:00,925 - ai_services.azure_openai - WARNING - Content filter triggered - using fallback response
+2025-06-02 04:29:00,965 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:29:00,966 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:29:01,003 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:29:06,352 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:29:06,353 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:29:06,354 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:29:06,389 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:29:09,704 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:29:42,361 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:29:42,362 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:29:42,427 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:29:48,285 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:29:48,290 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:29:48,292 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:29:48,374 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:29:51,630 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:29:51,634 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:29:51,635 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:29:51,684 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:29:54,834 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:29:55,055 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:29:55,055 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:29:55,120 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:00,286 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:00,287 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:00,287 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:00,349 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:02,997 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:18,425 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:18,426 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:18,503 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:28,430 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:28,433 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:28,434 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:28,469 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:32,119 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:32,121 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:32,123 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:32,174 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:34,993 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:35,144 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:35,145 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:35,202 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:38,031 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:38,033 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:38,035 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:38,106 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:40,603 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:51,417 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:51,418 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:51,480 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:30:57,239 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:30:57,240 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:30:57,243 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:30:57,288 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:31:02,198 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:31:02,198 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:31:02,199 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:31:02,251 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:31:05,630 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:31:05,810 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:31:05,812 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:31:05,876 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:31:08,590 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:31:08,592 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:31:08,593 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:31:08,649 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:31:13,392 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:32:28,862 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:32:28,870 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:32:28,946 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:32:34,032 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:32:34,033 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:32:34,034 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:32:34,075 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:32:37,082 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:32:37,083 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:32:37,084 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:32:37,121 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:32:39,627 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:32:39,759 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:32:39,760 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:32:39,807 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:32:46,987 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:32:46,988 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:32:46,989 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:32:47,051 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:32:50,355 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:33:30,231 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:33:30,232 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:33:30,277 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:33:34,190 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:33:34,193 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:33:34,195 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:33:34,237 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:33:37,553 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:33:37,554 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:33:37,556 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:33:37,594 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:33:41,708 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:33:41,888 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:33:41,895 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:33:41,962 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:33:47,949 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:33:47,949 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:33:47,950 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:33:47,996 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:33:51,950 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:35:32,765 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:35:32,767 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:35:32,816 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:35:43,017 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:35:43,018 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:35:43,018 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:35:43,066 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:35:46,379 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:35:46,380 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:35:46,381 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:35:46,449 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:35:51,346 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:35:51,530 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:35:51,531 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:35:51,612 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:36:01,387 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 04:36:01,389 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 04:36:01,394 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 04:36:01,458 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 04:36:05,263 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 06:59:22,702 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 06:59:22,703 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 06:59:22,841 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 06:59:28,457 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 06:59:28,466 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 06:59:28,468 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 06:59:28,546 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 06:59:31,970 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 06:59:31,971 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 06:59:31,971 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 06:59:32,003 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 06:59:34,368 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 06:59:37,757 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 06:59:37,758 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 06:59:37,802 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 06:59:42,897 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 06:59:42,897 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 06:59:42,899 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 06:59:42,952 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 06:59:45,766 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:00:32,300 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:00:32,301 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:00:32,362 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:00:37,283 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:00:37,285 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:00:37,286 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:00:37,324 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:00:40,611 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:00:40,611 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:00:40,612 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:00:40,672 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:00:43,037 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:00:43,407 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:00:43,408 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:00:43,510 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:00:47,400 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:00:47,402 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:00:47,402 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:00:47,450 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:00:52,613 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:01:24,088 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:01:24,089 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:01:24,157 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:01:30,376 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:01:30,377 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:01:30,378 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:01:30,427 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:01:34,375 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:01:34,376 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:01:34,377 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:01:34,414 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:01:37,760 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:01:38,949 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:01:38,949 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:01:39,061 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:01:46,179 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:01:46,181 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:01:46,181 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:01:46,241 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:01:50,105 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:02:24,773 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:02:24,774 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:02:24,814 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:02:35,013 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:02:35,015 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:02:35,016 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:02:35,050 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:02:40,481 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:02:40,482 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:02:40,482 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:02:40,517 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:02:45,754 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:02:46,206 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:02:46,206 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:02:46,267 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:02:53,924 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:02:53,928 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:02:53,929 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:02:53,995 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:02:56,557 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:03:27,862 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:03:27,863 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:03:27,914 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:03:33,252 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:03:33,255 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:03:33,256 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:03:33,286 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:03:37,439 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:03:37,440 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:03:37,442 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:03:37,475 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:03:40,923 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:03:41,183 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:03:41,184 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:03:41,225 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:03:45,407 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:03:45,407 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:03:45,408 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:03:45,461 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:03:48,160 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:04:59,416 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:04:59,417 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:04:59,481 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:10,877 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:10,878 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:10,878 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:10,941 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:15,360 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:15,362 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:15,363 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:15,399 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:18,845 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:19,151 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:19,152 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:19,232 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:22,688 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:22,688 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:22,689 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:22,726 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:25,249 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:42,204 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:42,207 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:42,272 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:50,688 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:50,689 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:50,689 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:50,745 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:55,088 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:55,089 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:55,089 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:55,141 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:05:59,493 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:05:59,720 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:05:59,720 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:05:59,770 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:06:06,401 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:06:06,402 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:06:06,403 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:06:06,458 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:06:09,087 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:06:38,678 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:06:38,678 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:06:38,739 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:06:48,772 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:06:48,775 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:06:48,775 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:06:48,820 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:06:52,287 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:06:52,288 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:06:52,288 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:06:52,344 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:06:55,518 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:06:56,217 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:06:56,225 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:06:56,292 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:08,008 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:07:08,010 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:07:08,011 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:07:08,050 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:11,039 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:07:24,812 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:07:24,812 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:07:24,885 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:30,536 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:07:30,537 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:07:30,537 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:07:30,594 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:33,726 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:07:33,727 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:07:33,727 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:07:33,758 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:36,774 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:07:36,932 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:07:36,953 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:07:37,010 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:42,380 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:07:42,381 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:07:42,381 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:07:42,417 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:07:46,196 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:08:00,607 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:08:00,608 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:08:00,668 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:08:06,057 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:08:06,061 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:08:06,063 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:08:06,108 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:08:09,437 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:08:09,438 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:08:09,439 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:08:09,494 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:08:13,274 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:08:13,645 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:08:13,650 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:08:13,711 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:08:17,887 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:08:17,887 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:08:17,888 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:08:17,942 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:08:20,958 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:09:32,120 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:09:32,120 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:09:32,176 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:09:39,517 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:09:39,520 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:09:39,522 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:09:39,559 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:09:43,423 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:09:43,424 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:09:43,424 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:09:43,487 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:09:50,225 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:09:50,447 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:09:50,447 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:09:50,496 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:09:54,393 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API
+2025-06-02 07:09:54,394 - ai_services.azure_openai - INFO - Initializing Azure OpenAI client with endpoint: https://internship2025-teama.openai.azure.com/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2025-01-01-preview
+2025-06-02 07:09:54,395 - ai_services.azure_openai - INFO - Using deployment: gpt-4.1-mini
+2025-06-02 07:09:54,427 - ai_services.azure_openai - INFO - Making request to Azure OpenAI API...
+2025-06-02 07:09:59,002 - ai_services.azure_openai - INFO - Successfully received response from Azure OpenAI API

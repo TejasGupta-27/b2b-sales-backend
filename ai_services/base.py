@@ -54,5 +54,10 @@ class AIProvider(ABC):
     
     def _track_usage(self, usage: Dict[str, Any]):
         """Track token usage"""
-        if self.usage_tracker:
-            self.usage_tracker.track_usage(self.provider_name, usage) 
+        if self.usage_tracker and usage:
+            self.usage_tracker.track_usage(
+                provider=self.provider_name,
+                model=self.config.get("deployment_name") or self.config.get("model", "unknown"),
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0)
+            ) 

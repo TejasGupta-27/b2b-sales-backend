@@ -1,7 +1,9 @@
+import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from .base import AIProvider, AIMessage, AIResponse
 from .function_models import ConversationAnalysis
+from services.prompt_manager import get_prompt_manager
 
 class ConversationFlowAgent(AIProvider):
     """Intelligent agent for managing conversation flow and determining readiness for different stages"""
@@ -24,9 +26,39 @@ class ConversationFlowAgent(AIProvider):
     ) -> Dict[str, Any]:
         """Analyze conversation state using Pydantic function calling"""
         
+        # Track token usage from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+            
         conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
         
-        analysis_prompt = f"""Analyze this B2B sales conversation to determine the current stage, readiness levels, and next steps.
+        # Get prompt from admin dashboard
+        prompt_manager = get_prompt_manager()
+        
+        # Get conversation flow prompt
+        flow_prompt = prompt_manager.get_prompt("conversation_flow", "main_system_prompt", "")
+        
+        if flow_prompt:
+            # Use dynamic prompt with conversation data
+            analysis_prompt = f"""{flow_prompt}
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT: {customer_context or 'None'}
+
+Analyze the conversation comprehensively to understand:
+1. What stage of the sales process we're in
+2. How much business context we understand (0-100)
+3. How clear the technical requirements are (0-100) 
+4. How ready the customer is to make a decision (0-100)
+5. Whether they're ready for a quote
+6. What information is still missing
+7. What questions should be asked next
+8. Whether product retrieval is needed at this stage"""
+        else:
+            # Fallback to original hardcoded prompt
+            analysis_prompt = f"""Analyze this B2B sales conversation to determine the current stage, readiness levels, and next steps.
 
 CONVERSATION:
 {conversation_text}
@@ -40,14 +72,34 @@ IMPORTANT: For current_stage, you MUST use one of these exact values:
 - "quote_ready" - Customer is ready for pricing
 - "closing" - Final negotiation and closing
 
+IMPORTANT GUIDELINES:
+1. Do NOT suggest scheduling a meeting unless the customer explicitly requests one
+2. Focus on gathering information through the chat interface
+3. Only suggest meetings for complex technical discussions or final negotiations
+4. Prefer providing information and quotes through the chat interface
+5. Use meetings as a last resort, not a default next step
+6. Only recommend product retrieval in solution_presentation or quote_ready stages
+7. Do NOT set quote_ready or should_generate_quote to True unless:
+   - We have presented recommendations AND
+   - The customer has explicitly selected a recommendation AND
+   - We have sufficient business and technical requirements
+8. Do NOT skip stages - must go through discovery before solution presentation
+9. Must have recommendations presented before quote generation
+10. Must have recommendation selected before quote generation
+11. Transition to solution_presentation when:
+    - Business context score is >= 70% AND
+    - Technical requirements score is >= 70% AND
+    - Customer has expressed interest in solutions or recommendations
+
 Analyze the conversation comprehensively to understand:
 1. What stage of the sales process we're in (use exact values above)
 2. How much business context we understand (0-100)
 3. How clear the technical requirements are (0-100) 
 4. How ready the customer is to make a decision (0-100)
-5. Whether they're ready for a quote
+5. Whether they're ready for a quote (only if all conditions met)
 6. What information is still missing
-7. What questions should be asked next"""
+7. What questions should be asked next
+8. Whether product retrieval is needed at this stage"""
 
         try:
             # Use structured response with Pydantic
@@ -65,6 +117,83 @@ Analyze the conversation comprehensively to understand:
                 'technical_requirements': analysis.technical_requirements_score / 100,
                 'operational_requirements': analysis.decision_readiness_score / 100,
                 'pain_points': len([msg for msg in messages if 'problem' in msg.content.lower() or 'issue' in msg.content.lower()]) / 10
+            }
+            
+            # Add product retrieval flag
+            analysis_dict['should_retrieve_products'] = analysis_dict['current_stage'] in ['solution_presentation', 'quote_ready']
+            
+            # Enhanced stage transition logic
+            business_context_score = analysis_dict.get('business_context_score', 0)
+            technical_score = analysis_dict.get('technical_requirements_score', 0)
+            
+            # Check for solution interest indicators - product agnostic
+            solution_interest = any(term in conversation_text.lower() for term in [
+                'show me options', 'recommend', 'suggest', 'what do you recommend',
+                'what options', 'which one', 'compare', 'looking for', 'need a',
+                'prepare options', 'suitable models', 'options matching',
+                'what can you offer', 'what solutions', 'what products',
+                'tell me about', 'show me what', 'what are the options',
+                'what would you recommend', 'what do you suggest',
+                'help me choose', 'help me find', 'looking to buy',
+                'interested in', 'want to know about', 'can you show me',
+                'price', 'cost', 'budget', 'investment',  # Added price-related terms
+                'specifications', 'features', 'capabilities',  # Added technical terms
+                'requirements', 'needs', 'looking for'  # Added requirement terms
+            ])
+            
+            # Also check for implicit solution interest through context
+            implicit_interest = any(term in conversation_text.lower() for term in [
+                'budget', 'price range', 'cost', 'investment',
+                'requirements', 'needs', 'looking for',
+                'current system', 'current solution',
+                'problems with', 'issues with', 'challenges with',
+                'upgrade', 'replace', 'better', 'improve',  # Added improvement terms
+                'performance', 'efficiency', 'productivity',  # Added performance terms
+                'solution', 'system', 'setup', 'configuration'  # Added solution terms
+            ])
+            
+            # Enhanced stage transition logic
+            if (business_context_score >= 70 and 
+                technical_score >= 70 and 
+                (solution_interest or implicit_interest) and 
+                analysis_dict['current_stage'] == 'deep_discovery'):
+                print("🔄 Transitioning to solution presentation stage based on sufficient context and solution interest")
+                analysis_dict['current_stage'] = 'solution_presentation'
+                analysis_dict['should_retrieve_products'] = True
+            
+            # Enforce strict stage progression with robust checks
+            if analysis_dict['current_stage'] == 'solution_presentation':
+                # Ensure we have presented recommendations
+                if not analysis_dict.get('recommendations_presented', False):
+                    analysis_dict['should_retrieve_products'] = True
+                    analysis_dict['quote_ready'] = False
+                    analysis_dict['should_generate_quote'] = False
+                # Check if recommendations have been selected
+                elif not analysis_dict.get('recommendation_selected', False):
+                    analysis_dict['quote_ready'] = False
+                    analysis_dict['should_generate_quote'] = False
+                    # Force staying in solution presentation until selection
+                    analysis_dict['current_stage'] = 'solution_presentation'
+                # Only allow quote_ready if we have both recommendations and selection
+                elif (analysis_dict.get('recommendations_presented', False) and 
+                      analysis_dict.get('recommendation_selected', False) and
+                      business_context_score >= 80 and 
+                      technical_score >= 80):
+                    analysis_dict['current_stage'] = 'quote_ready'
+                    analysis_dict['quote_ready'] = True
+                    analysis_dict['should_generate_quote'] = True
+                else:
+                    # Stay in solution presentation if any conditions aren't met
+                    analysis_dict['current_stage'] = 'solution_presentation'
+                    analysis_dict['quote_ready'] = False
+                    analysis_dict['should_generate_quote'] = False
+            
+            # Add confidence scores to the analysis
+            analysis_dict['confidence_scores'] = {
+                'business_context': business_context_score / 100,
+                'technical_requirements': technical_score / 100,
+                'solution_interest': 1.0 if solution_interest else 0.5 if implicit_interest else 0.0,
+                'stage_transition': 1.0 if analysis_dict['current_stage'] != 'deep_discovery' else 0.0
             }
             
             return analysis_dict
@@ -244,6 +373,10 @@ Keep your response conversational and helpful."""
         # Simple heuristic analysis
         tech_mentions = sum(1 for term in ['cpu', 'gpu', 'ram', 'storage', 'specs'] if term in conversation_text)
         quote_requests = sum(1 for term in ['quote', 'price', 'cost', 'pdf'] if term in conversation_text)
+        meeting_requests = sum(1 for term in ['meeting', 'call', 'schedule', 'demo'] if term in conversation_text)
+        
+        # Only suggest meeting if explicitly requested
+        should_suggest_meeting = meeting_requests > 0
         
         return {
             'business_context_score': 60 if customer_context else 30,
@@ -251,6 +384,7 @@ Keep your response conversational and helpful."""
             'decision_readiness_score': min(100, quote_requests * 30),
             'quote_ready': quote_requests > 0 and tech_mentions > 2,
             'should_generate_quote': quote_requests > 0,
+            'should_suggest_meeting': should_suggest_meeting,
             'confidence_level': 'low',
             'current_stage': 'deep_discovery',
             'reasoning': 'Fallback heuristic analysis',
@@ -344,3 +478,105 @@ json
     ) -> AIResponse:
         """Generate response using the base provider"""
         return await self.base_provider.generate_response(messages, customer_context, **kwargs)
+
+    def _fallback_requirement_extraction(
+        self, 
+        conversation_text: str, 
+        customer_context: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Enhanced fallback requirement extraction"""
+        
+        text_lower = conversation_text.lower()
+        
+        # Enhanced technical requirement patterns
+        technical_patterns = [
+            r'(?:need|require|looking for|want).*?(?:computer|pc|server|workstation)',
+            r'(?:specifications|specs|requirements).*?(?:cpu|processor|ram|memory|storage|disk)',
+            r'(?:performance|speed|capacity|storage).*?(?:gb|tb|mhz|ghz)',
+            r'(?:operating system|os).*?(?:windows|linux|mac)',
+            r'(?:network|connectivity).*?(?:ethernet|wifi|bluetooth)',
+            r'(?:display|monitor).*?(?:resolution|size|inches)',
+            r'(?:security|protection).*?(?:encryption|firewall|antivirus)'
+        ]
+        
+        # Enhanced business requirement patterns
+        business_patterns = [
+            r'(?:company|business|organization).*?(?:size|employees|revenue)',
+            r'(?:industry|sector).*?(?:manufacturing|healthcare|finance|retail)',
+            r'(?:budget|cost|price).*?(?:range|limit|maximum)',
+            r'(?:timeline|deadline|schedule).*?(?:urgent|soon|month|quarter)',
+            r'(?:location|office).*?(?:remote|onsite|hybrid)',
+            r'(?:compliance|regulations).*?(?:required|mandatory|necessary)',
+            r'(?:growth|expansion).*?(?:plan|forecast|projection)'
+        ]
+        
+        technical_requirements = []
+        business_requirements = []
+        
+        # Extract technical requirements
+        for pattern in technical_patterns:
+            matches = re.findall(pattern, text_lower)
+            for match in matches:
+                if match not in technical_requirements:
+                    technical_requirements.append(match)
+        
+        # Extract business requirements
+        for pattern in business_patterns:
+            matches = re.findall(pattern, text_lower)
+            for match in matches:
+                if match not in business_requirements:
+                    business_requirements.append(match)
+        
+        # Enhanced category detection
+        categories = []
+        category_patterns = [
+            r'(?:computer|pc|desktop|laptop|workstation)',
+            r'(?:server|storage|nas|san)',
+            r'(?:network|router|switch|firewall)',
+            r'(?:monitor|display|printer|scanner)',
+            r'(?:security|backup|disaster recovery)',
+            r'(?:cloud|virtualization|container)',
+            r'(?:peripheral|accessory|component)'
+        ]
+        
+        for pattern in category_patterns:
+            matches = re.findall(pattern, text_lower)
+            for match in matches:
+                if match not in categories:
+                    categories.append(match.replace('_', ' ').title())
+        
+        # Enhanced search terms extraction
+        search_terms = []
+        key_terms = {
+            'hardware': ['computer', 'server', 'workstation', 'peripheral', 'accessory', 'monitor', 'printer', 'storage'],
+            'software': ['operating system', 'application', 'software', 'program', 'solution'],
+            'network': ['network', 'router', 'switch', 'firewall', 'connectivity'],
+            'security': ['security', 'protection', 'encryption', 'firewall', 'antivirus'],
+            'storage': ['storage', 'backup', 'nas', 'san', 'raid'],
+            'performance': ['performance', 'speed', 'capacity', 'processing', 'memory']
+        }
+        
+        for category, terms in key_terms.items():
+            for term in terms:
+                if term in text_lower:
+                    search_terms.append(term)
+        
+        # Calculate requirement scores
+        requirement_scores = {
+            'technical_completeness': min(100, len(technical_requirements) * 20),
+            'business_completeness': min(100, len(business_requirements) * 20),
+            'category_specificity': min(100, len(categories) * 25),
+            'search_term_relevance': min(100, len(search_terms) * 15)
+        }
+        
+        return {
+            'technical_requirements': technical_requirements or ['Standard performance', 'Basic specifications'],
+            'business_requirements': business_requirements or ['Business use', 'Professional environment'],
+            'product_categories': categories or ['Computer', 'Peripheral'],
+            'search_terms': search_terms or ['computer', 'peripheral'],
+            'use_case': 'Business technology solution',
+            'industry': customer_context.get('industry') if customer_context else 'business',
+            'extraction_method': 'enhanced_pattern_based',
+            'requirement_scores': requirement_scores,
+            'confidence_level': 'medium' if len(technical_requirements) > 0 or len(business_requirements) > 0 else 'low'
+        }
