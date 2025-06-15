@@ -82,7 +82,8 @@ class HybridProductRetrieverAgent(AIProvider):
             "retrieval_confidence": self._calculate_hybrid_confidence(hybrid_results, requirements)
         }
     
-    def _extract_search_query(requirements: dict) -> str:
+    def _extract_search_query(self, requirements: dict) -> str:
+        print("✅ Using updated _extract_search_query method")
         """
         Extract a concise search query string from the structured requirements dictionary.
         Prioritizes 'SEARCH KEYWORDS' and 'PRODUCT CATEGORIES'.
@@ -264,19 +265,21 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
 
         # Fallback: Use realtime ingestion if products are too few
         if len(quality_products) < 3:
+            # print('r',type(requirements))
             print("🚨 Not enough products found. Invoking realtime fallback retrieval...")
+            print('[DEBUG]',type(requirements))
             try:
                 search_query = self._extract_search_query(requirements)
-                realtime_fallback_products = await get_products(search_query)
+                realtime_fallback_products = get_products(search_query)
                 for product in realtime_fallback_products:
                     product['search_source'] = 'fallback'
                     product['keyword_score'] = 0
                     product['semantic_score'] = product.get('_similarity_score', 0)
                     product['hybrid_score'] = product['semantic_score']
                 
-                merged_products = self._merge_product_results(quality_products,realtime_fallback_products)
+                merged_products = realtime_fallback_products + quality_products
                 search_methods['realtime_fallback'] = len(realtime_fallback_products)
-                print(f"✅ Retrieved {len(realtime_fallback_products)} fallback products.")
+                print(f"✅ Retrieved {len(realtime_fallback_products)} web products.")
             except Exception as e:
                 print(f"❌ Realtime fallback retrieval failed: {e}")
 

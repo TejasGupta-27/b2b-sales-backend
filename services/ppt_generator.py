@@ -215,7 +215,7 @@ def add_comparison_table(slide, table_data,prs):
             cell.text_frame.paragraphs[0].font.size = Pt(12)
 
 
-def generate_ppt(data: dict):
+def generate_ppt(data: dict, output_path=OUTPUT_PATH):
     # Load template if it exists, otherwise create new presentation
     if os.path.exists(TEMPLATE_PATH):
         print("📋 Using template.pptx")
@@ -331,12 +331,78 @@ def generate_ppt(data: dict):
 
     # Save presentation
     try:
-        os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-        prs.save(OUTPUT_PATH)
-        print(f"✅ Presentation saved successfully to: {OUTPUT_PATH}")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        prs.save(output_path)
+        print(f"✅ Presentation saved successfully to: {output_path}")
     except Exception as e:
         print(f"❌ Error saving presentation: {e}")
         raise
+
+def extract_text_from_quote(quote: Dict[str, Any]) -> str:
+    """Flatten all relevant fields in the quote into a single summary text string."""
+    parts = []
+
+    # Add metadata
+    parts.append(f"Quote Title: {quote.get('quote_title', '')}")
+    parts.append(f"Tagline: {quote.get('company_tagline', '')}")
+
+    # Add customer info
+    customer = quote.get("customer_info", {})
+    for key, value in customer.items():
+        parts.append(f"{key.capitalize()}: {value}")
+
+    # Add business context
+    for key, value in quote.get("business_context", {}).items():
+        parts.append(f"{key.capitalize()}: {value}")
+
+    # Add line items
+    parts.append("Line Items:")
+    for item in quote.get("line_items", []):
+        name = item.get("name", "")
+        desc = item.get("description", "")
+        qty = item.get("quantity", "")
+        price = item.get("unit_price", "")
+        parts.append(f"- {name}: {desc}, Qty: {qty}, Price: {price}")
+
+    # Add pricing
+    parts.append(f"Subtotal: {quote.get('subtotal', '')}")
+    parts.append(f"Tax: {quote.get('tax_amount', '')} ({quote.get('tax_rate', '') * 100:.0f}%)")
+    parts.append(f"Total: {quote.get('total', '')} {quote.get('currency', '')}")
+
+    # Add terms
+    parts.append("Terms and Conditions:")
+    parts.extend(quote.get("terms_and_conditions", []))
+
+    # Add implementation notes and next steps
+    parts.append("Implementation Notes:")
+    parts.extend(quote.get("implementation_notes", []))
+
+    parts.append("Next Steps:")
+    parts.extend(quote.get("next_steps", []))
+
+    return "\n".join([str(p) for p in parts if p])
+
+# Generate ppt from quote
+def generate_ppt_from_quote(quote):
+    ppt_structure = extract_ppt_structure(extract_text_from_quote(quote))
+
+    ppt_id = quote.get("quote_id", "anon")
+    ppt_filename = f"quote_{ppt_id}_deck.pptx"
+    ppt_path = os.path.join("Data/presentations", ppt_filename)
+    os.makedirs("Data/presentations", exist_ok=True)
+
+    generate_ppt(ppt_structure, ppt_path)
+
+    quote.update({
+        "ppt_filename": ppt_filename,
+        "ppt_path": ppt_path,
+        "ppt_url": f"/api/quotes/download/{ppt_id}",
+        "ppt_generated": True,
+        "ppt_generated_at": datetime.now().isoformat()
+    })
+
+    return ppt_path
+
 
 
 if __name__ == "__main__":

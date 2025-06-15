@@ -12,8 +12,13 @@ from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
 from config import settings
 
-from services.ppt_generator import extract_ppt_structure, generate_ppt
+from services.ppt_generator import generate_ppt_from_quote
+from services.email_sender import send_quote_email
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from email.mime.text import MIMEText
 
 
 class EnhancedB2BSalesAgent(AIProvider):
@@ -414,7 +419,7 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 'error': str(e),
                 'retrieval_confidence': 0.0
             }
-    def _quote_to_text(quote: Dict[str, Any]) -> str:
+    def _quote_to_text(self,quote: Dict[str, Any]) -> str:
         lines = []
         lines.append(f"Quote Number: {quote.get('quote_number', '')}")
         lines.append(f"Title: {quote.get('quote_title', '')}")
@@ -460,56 +465,38 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
         
         # Let quote agent generate quote with enhanced context
         try:
-            quote = await self.quote_agent.generate_quote_from_conversation(
-                enhanced_conversation,
-                enhanced_customer_context
-            )
-            print(type(quote),'\n',quote)
-            
+            quote = await self.quote_agent.generate_quote_from_conversation(enhanced_conversation, enhanced_customer_context)
+
             if quote:
-                print(f"✅ Quote Agent provided enhanced quote with ID: {quote.get('id')}")
-                print(f"📄 PDF URL: {quote.get('pdf_url', 'Not generated')}")
-                
-                # === Generate PPT Deck ===
+                print(f"✅ Quote generated: {quote.get('id')}")
+                ppt_path = generate_ppt_from_quote(quote)
+                response.metadata["ppt_path"] = ppt_path
+
+                pdf_path = quote.get("pdf_path") or quote.get("pdf_url")
                 try:
-                    print("📊 Generating PowerPoint pitch deck from quote...")
-                    ppt_structure = extract_ppt_structure(self._quote_to_text(quote))
-                    
-                    ppt_dir = "ppt"
-                    os.makedirs(ppt_dir, exist_ok=True)
-                    ppt_path = os.path.join(ppt_dir, f"quote_{quote.get('id', 'anon')}_deck.pptx")
-                    
-                    generate_ppt(ppt_structure, output_path=ppt_path)
-                    
-                    print(f"✅ PPT generated: {ppt_path}")
-                    response.metadata["ppt_path"] = ppt_path  # Optional: link for download
-                except Exception as ppt_error:
-                    print(f"❌ PPT generation failed: {ppt_error}")
-                    response.metadata["ppt_error"] = str(ppt_error)
+                    send_quote_email(quote, ppt_path, pdf_path)
+                    response.metadata["quote_email_sent"] = True
+                    response.metadata["quote_email"] = quote["customer_info"].get("email")
+                    response.content += f"\n\n📩 I've emailed the quote and deck to {quote['customer_info'].get('email')}."
+                except Exception as email_err:
+                    print(f"❌ Email failed: {email_err}")
+                    response.metadata["quote_email_error"] = str(email_err)
 
-                
-                # Add quote to response metadata
-                response.metadata['quote'] = quote
-                response.metadata['quote_generated'] = True
-                response.metadata['quote_id'] = quote.get('id')
-                
-                # Enhance sales response to incorporate the quote
+                response.metadata.update({
+                    "quote": quote,
+                    "quote_generated": True,
+                    "quote_id": quote.get("id")
+                })
                 response = self._enhance_response_with_dynamic_quote(response, quote)
-
             else:
-                print("❌ Quote agent couldn't generate quote from enhanced conversation")
-                response.metadata['quote_generation_failed'] = True
-                
-                # Add fallback message
-                response.content += "\n\n💡 I'd be happy to prepare a detailed quote for you! Let me gather a bit more information to ensure I provide the most accurate recommendations."
-                
+                response.metadata["quote_generation_failed"] = True
+                response.content += "\n\n💡 I’ll need a few more details to prepare your quote."
+
         except Exception as e:
-            print(f"❌ Error in quote generation: {str(e)}")
-            response.metadata['quote_error'] = str(e)
-            
-            # Add error handling message
-            response.content += "\n\n💡 I'm ready to prepare a quote for you! Let me just verify a few details to ensure accuracy."
-        
+            print(f"❌ Quote generation error: {e}")
+            response.metadata["quote_error"] = str(e)
+            response.content += "\n\n💡 Something went wrong. Let me confirm the details first."
+
         return response
     
     def _enhance_conversation_for_quote_generation(self, flow_analysis: Dict[str, Any]) -> List[AIMessage]:

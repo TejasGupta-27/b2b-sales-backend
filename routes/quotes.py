@@ -56,6 +56,30 @@ async def download_quote_pdf(quote_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# PPT
+@router.get("/download/{quote_id}")
+async def download_quote_ppt(quote_id: str):
+    """Download PowerPoint file for a quote"""
+    try:
+        file_path = Path(f"Data/presentations/quote_{quote_id}_deck.pptx")
+        print("Presentation being saved")
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="PPT file not found")
+        
+        def iter_file():
+            with open(file_path, 'rb') as file:
+                yield from file
+        
+        return StreamingResponse(
+            iter_file(),
+            media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            headers={
+                "Content-Disposition": f"attachment; filename=quote_{quote_id}_deck.pptx"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/generate-pdf-from-data")
 async def generate_pdf_from_quote_data(quote_data: Dict[str, Any]):
     """Generate PDF from existing quote data"""
