@@ -92,7 +92,7 @@ jobs:
             scp -r . $AZURE_VM_USER@$AZURE_VM_HOST:~/b2b-sales-backend/
             
             # Connect to Azure VM and deploy
-            ssh $AZURE_VM_USER@$AZURE_VM_HOST << 'EOF'
+            ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
               cd ~/b2b-sales-backend
               
               # Pull latest changes (if using git)
@@ -114,7 +114,7 @@ jobs:
             sleep 30
             
             # Check if the application is running
-            ssh $AZURE_VM_USER@$AZURE_VM_HOST << 'EOF'
+            ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
               curl -f http://localhost:3001/health || exit 1
             EOF
 
