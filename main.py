@@ -37,7 +37,7 @@ from models.lead import Lead
 
 # Import services
 from services.elasticsearch_service import get_elasticsearch_service
-from services.chroma_service import ChromaDBService
+from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 
 # Import configuration
 from config import settings
@@ -153,8 +153,8 @@ class ChatSearchRequest(BaseModel):
     use_fuzzy: Optional[bool] = False
     similarity_threshold: Optional[float] = 0.3
 
-# Add ChromaDB service initialization
-chroma_service = None
+# Add Elasticsearch Vector service initialization
+vector_service = None
 
 # Initialize speech service
 speech_service = None
@@ -162,7 +162,7 @@ speech_service = None
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global chroma_service, speech_service
+    global vector_service, speech_service
     
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
@@ -182,35 +182,35 @@ async def startup_event():
         # Create database tables
         create_tables()
         
-        # Initialize ChromaDB if hybrid retriever is enabled
+        # Initialize Elasticsearch Vector Service if hybrid retriever is enabled
         if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
             try:
-                chroma_service = ChromaDBService(
+                vector_service = get_elasticsearch_vector_service(
                     azure_embedding_endpoint=settings.azure_embedding_endpoint,
                     azure_embedding_key=settings.azure_embedding_api_key
                 )
-                await chroma_service.initialize()
-                logger.info("✅ ChromaDB initialized successfully")
+                await vector_service.initialize()
+                logger.info("✅ Elasticsearch Vector Service initialized successfully")
                 
-                # Check if ChromaDB is empty and needs population
-                stats = await chroma_service.get_collection_stats()
+                # Check if vector indices are empty and need population
+                stats = await vector_service.get_collection_stats()
                 if stats["products_count"] == 0 and stats["solutions_count"] == 0:
-                    logger.info("🔄 ChromaDB is empty, loading data from JSON files...")
-                    result = await chroma_service.load_limited_data_from_json(max_per_file=50)
-                    logger.info(f"✅ ChromaDB data loading completed: {result}")
+                    logger.info("🔄 Vector indices are empty, loading data from JSON files...")
+                    result = await vector_service.load_data_from_json(max_per_file=50)
+                    logger.info(f"✅ Vector data loading completed: {result}")
                 elif settings.force_reload_data:
-                    logger.info("🔄 Force reload enabled, reloading ChromaDB data...")
-                    result = await chroma_service.load_limited_data_from_json(max_per_file=50)
-                    logger.info(f"✅ ChromaDB force reload completed: {result}")
+                    logger.info("🔄 Force reload enabled, reloading vector data...")
+                    result = await vector_service.load_data_from_json(max_per_file=50)
+                    logger.info(f"✅ Vector force reload completed: {result}")
                 else:
-                    logger.info(f"✅ ChromaDB already has data: {stats}")
+                    logger.info(f"✅ Vector indices already have data: {stats}")
                 
-            except Exception as chroma_error:
-                logger.error(f"❌ ChromaDB initialization failed: {chroma_error}")
-                chroma_service = None
-                logger.info("🔄 Continuing without ChromaDB...")
+            except Exception as vector_error:
+                logger.error(f"❌ Elasticsearch Vector Service initialization failed: {vector_error}")
+                vector_service = None
+                logger.info("🔄 Continuing without vector search...")
         else:
-            logger.info("⚠️ ChromaDB disabled or Azure embeddings not configured")
+            logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
         
         logger.info("✅ Application startup completed")
         
@@ -844,27 +844,27 @@ async def get_hybrid_stats():
             "azure_embeddings_configured": bool(settings.azure_embedding_endpoint)
         }
         
-        if chroma_service:
-            stats["chroma"] = await chroma_service.get_collection_stats()
+        if vector_service:
+            stats["vector_service"] = await vector_service.get_collection_stats()
         
         return stats
         
     except Exception as e:
         return {"error": str(e)}
 
-@app.post("/api/debug/sync-chroma")
-async def sync_chroma_data():
-    """Manually sync limited data from JSON files to ChromaDB with duplicate prevention"""
+@app.post("/api/debug/sync-vector")
+async def sync_vector_data():
+    """Manually sync limited data from JSON files to Elasticsearch Vector Service with duplicate prevention"""
     try:
-        if not chroma_service:
-            return {"error": "ChromaDB not initialized"}
+        if not vector_service:
+            return {"error": "Elasticsearch Vector Service not initialized"}
         
         # Use safe sync method to prevent duplicates
-        result = await chroma_service.sync_data_safely(max_per_file=50, clear_existing=False)
-        stats = await chroma_service.get_collection_stats()
+        result = await vector_service.sync_data_safely(max_per_file=50, clear_existing=False)
+        stats = await vector_service.get_collection_stats()
         
         return {
-            "message": "ChromaDB safe sync completed (prevents duplicates)",
+            "message": "Elasticsearch Vector Service safe sync completed (prevents duplicates)",
             "sync_result": result,
             "final_stats": stats
         }
@@ -872,19 +872,19 @@ async def sync_chroma_data():
     except Exception as e:
         return {"error": str(e)}
 
-@app.post("/api/debug/sync-chroma-force")
-async def sync_chroma_data_force():
-    """Force sync ChromaDB data by clearing existing and reloading"""
+@app.post("/api/debug/sync-vector-force")
+async def sync_vector_data_force():
+    """Force sync Elasticsearch Vector Service data by clearing existing and reloading"""
     try:
-        if not chroma_service:
-            return {"error": "ChromaDB not initialized"}
+        if not vector_service:
+            return {"error": "Elasticsearch Vector Service not initialized"}
         
         # Clear existing data and reload
-        result = await chroma_service.sync_data_safely(max_per_file=50, clear_existing=True)
-        stats = await chroma_service.get_collection_stats()
+        result = await vector_service.sync_data_safely(max_per_file=50, clear_existing=True)
+        stats = await vector_service.get_collection_stats()
         
         return {
-            "message": "ChromaDB force sync completed (cleared and reloaded)",
+            "message": "Elasticsearch Vector Service force sync completed (cleared and reloaded)",
             "sync_result": result,
             "final_stats": stats
         }
@@ -893,18 +893,18 @@ async def sync_chroma_data_force():
         return {"error": str(e)}
 
 # Add new endpoint for limited population
-@app.post("/api/debug/populate-chroma-limited")
-async def populate_chroma_limited(max_per_file: int = 50):
-    """Populate ChromaDB with limited data from JSON files"""
+@app.post("/api/debug/populate-vector-limited")
+async def populate_vector_limited(max_per_file: int = 50):
+    """Populate Elasticsearch Vector Service with limited data from JSON files"""
     try:
-        if not chroma_service:
-            return {"error": "ChromaDB not initialized"}
+        if not vector_service:
+            return {"error": "Elasticsearch Vector Service not initialized"}
         
-        result = await chroma_service.load_limited_data_from_json(max_per_file=max_per_file)
-        stats = await chroma_service.get_collection_stats()
+        result = await vector_service.load_data_from_json(max_per_file=max_per_file)
+        stats = await vector_service.get_collection_stats()
         
         return {
-            "message": f"ChromaDB limited population completed (max {max_per_file} per file)",
+            "message": f"Elasticsearch Vector Service limited population completed (max {max_per_file} per file)",
             "loading_result": result,
             "final_stats": stats
         }
@@ -912,25 +912,25 @@ async def populate_chroma_limited(max_per_file: int = 50):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/api/debug/chroma-status")
-async def get_chroma_status():
-    """Get detailed ChromaDB status and perform test search"""
+@app.get("/api/debug/vector-status")
+async def get_vector_status():
+    """Get detailed Elasticsearch Vector Service status and perform test search"""
     try:
-        if not chroma_service:
+        if not vector_service:
             return {
                 "status": "not_initialized",
-                "error": "ChromaDB service not available",
+                "error": "Elasticsearch Vector Service not available",
                 "reason": "Either hybrid retrieval is disabled or Azure embeddings not configured"
             }
         
         # Get collection stats
-        stats = await chroma_service.get_collection_stats()
+        stats = await vector_service.get_collection_stats()
         
         # Perform test searches if data exists
         test_results = {}
         if stats["products_count"] > 0:
             try:
-                test_products = await chroma_service.semantic_search_products("laptop computer", n_results=3)
+                test_products = await vector_service.semantic_search_products("laptop computer", n_results=3)
                 test_results["product_search"] = {
                     "query": "laptop computer",
                     "results_count": len(test_products),
@@ -941,7 +941,7 @@ async def get_chroma_status():
         
         if stats["solutions_count"] > 0:
             try:
-                test_solutions = await chroma_service.semantic_search_solutions("business automation", n_results=3)
+                test_solutions = await vector_service.semantic_search_solutions("business automation", n_results=3)
                 test_results["solution_search"] = {
                     "query": "business automation", 
                     "results_count": len(test_solutions),

@@ -1,5 +1,5 @@
 {
-  "total_tokens": 219443,
+  "total_tokens": 222971,
   "daily_usage": {
     "2025-05-26": {
       "tokens": 2379
@@ -11,15 +11,15 @@
       "tokens": 73023
     },
     "2025-06-13": {
-      "tokens": 118835
+      "tokens": 122363
     }
   },
   "provider_usage": {
     "azure_openai": {
-      "total_tokens": 219443,
+      "total_tokens": 222971,
       "models": {
         "gpt-4.1-mini": {
-          "total_tokens": 219443
+          "total_tokens": 222971
         }
       }
     }

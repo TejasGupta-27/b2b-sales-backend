@@ -4,6 +4,8 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
     expose:
       - "3001"
     environment:
@@ -33,13 +35,15 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
 
     volumes:
+      # Persist logs
+      - ./logs:/app/logs
+      # Persist admin configuration (prompts, data sources)
       - ./Data/admin_config:/app/Data/admin_config
       - ./Data/uploads:/app/Data/uploads
       - ./Data/quotes:/app/Data/quotes
       - ./Data/pitch_decks:/app/Data/pitch_decks
       - ./Data/json:/app/Data/json
-      - ./chroma_db:/app/chroma_db
-
+      # Note: ChromaDB volume removed - using Elasticsearch for all search functionality
     depends_on:
       - postgres
       - elasticsearch

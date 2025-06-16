@@ -1,16 +1,21 @@
 import json
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional
 from .base import AIProvider, AIMessage, AIResponse
 from services.elasticsearch_service import get_elasticsearch_service
+<<<<<<< HEAD
 from services.chroma_service import ChromaDBService
 from services.realtime_ingestor import get_products # Adjust if path differs
+=======
+from services.elasticsearch_vector_service import get_elasticsearch_vector_service
+>>>>>>> 51044012ac0cbae799ecb6a3ca39553db1231e1e
 from .function_models import RequirementExtraction, ProductAnalysis
 
 logger = logging.getLogger(__name__)
 
 class HybridProductRetrieverAgent(AIProvider):
-    """Hybrid product retriever using both Elasticsearch and ChromaDB"""
+    """Hybrid product retriever using Elasticsearch for both keyword and semantic search"""
     
     def __init__(
         self, 
@@ -22,7 +27,10 @@ class HybridProductRetrieverAgent(AIProvider):
         super().__init__(**kwargs)
         self.base_provider = base_provider
         self.elasticsearch = get_elasticsearch_service()
-        self.chroma_service = ChromaDBService(azure_embedding_endpoint, azure_embedding_key)
+        self.vector_service = get_elasticsearch_vector_service(
+            azure_embedding_endpoint, 
+            azure_embedding_key
+        )
         
     @property
     def provider_name(self) -> str:
@@ -34,8 +42,8 @@ class HybridProductRetrieverAgent(AIProvider):
     async def initialize(self):
         """Initialize both search services"""
         try:
-            await self.chroma_service.initialize()
-            logger.info("Hybrid Product Retriever initialized successfully")
+            await self.vector_service.initialize()
+            logger.info("Hybrid Product Retriever (Elasticsearch Vector) initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Hybrid Product Retriever: {e}")
             raise
@@ -211,15 +219,15 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
     KEYWORD_FALLBACK_TRIGGERS = ["latest", "new release", "compare", "review", "availability"]
 
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform hybrid search using both Elasticsearch and ChromaDB"""
+        """Perform hybrid search using Elasticsearch keyword and vector search"""
         
-        print("🔍 Performing hybrid search (Elasticsearch + ChromaDB)...")
+        print("🔍 Performing hybrid search (Elasticsearch keyword + vector)...")
         
         # Parallel searches
-        elasticsearch_products, chroma_products, chroma_solutions = await asyncio.gather(
+        elasticsearch_products, vector_products, vector_solutions = await asyncio.gather(
             self._elasticsearch_search(requirements),
-            self._chroma_semantic_search_products(requirements),
-            self._chroma_semantic_search_solutions(requirements),
+            self._elasticsearch_vector_search_products(requirements),
+            self._elasticsearch_vector_search_solutions(requirements),
             return_exceptions=True
         )
         
@@ -228,36 +236,32 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             print(f"⚠️ Elasticsearch search failed: {elasticsearch_products}")
             elasticsearch_products = []
             
-        if isinstance(chroma_products, Exception):
-            print(f"⚠️ ChromaDB product search failed: {chroma_products}")
-            chroma_products = []
+        if isinstance(vector_products, Exception):
+            print(f"⚠️ Elasticsearch vector product search failed: {vector_products}")
+            vector_products = []
             
-        if isinstance(chroma_solutions, Exception):
-            print(f"⚠️ ChromaDB solution search failed: {chroma_solutions}")
-            chroma_solutions = []
+        if isinstance(vector_solutions, Exception):
+            print(f"⚠️ Elasticsearch vector solution search failed: {vector_solutions}")
+            vector_solutions = []
         
         # Debug logging before merge
         print(f"🔍 Pre-merge counts:")
         print(f"   Elasticsearch products: {len(elasticsearch_products)}")
-        print(f"   ChromaDB products: {len(chroma_products)}")
-        print(f"   ChromaDB solutions: {len(chroma_solutions)}")
+        print(f"   Vector products: {len(vector_products)}")
+        print(f"   Vector solutions: {len(vector_solutions)}")
         
-        # Merge and deduplicate results
-        merged_products = self._merge_product_results(elasticsearch_products, chroma_products)
-        merged_solutions = chroma_solutions  # Only from ChromaDB for now
+        # Merge product results
+        merged_products = self._merge_product_results(elasticsearch_products, vector_products)
         
-        # Debug logging after merge
-        print(f"🔍 Post-merge counts:")
-        print(f"   Merged products: {len(merged_products)}")
-        print(f"   Final solutions: {len(merged_solutions)}")
-        
+        # Track search methods
         search_methods = {
-            "elasticsearch_products": len(elasticsearch_products),
-            "chroma_products": len(chroma_products),
-            "chroma_solutions": len(chroma_solutions),
-            "merged_products": len(merged_products)
+            'elasticsearch_products': len(elasticsearch_products),
+            'vector_products': len(vector_products),
+            'vector_solutions': len(vector_solutions),
+            'merged_products': len(merged_products)
         }
         
+<<<<<<< HEAD
         # Use only products with decent hybrid scores
         quality_products = [p for p in merged_products if p.get('hybrid_score', 0) >= 25]
 
@@ -288,11 +292,17 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
                 print(f"❌ Realtime fallback retrieval failed: {e}")
 
         print(f"🎯 Hybrid search results: {search_methods}")
+=======
+        print(f"🎯 Hybrid search complete:")
+        print(f"   Final merged products: {len(merged_products)}")
+        print(f"   Vector solutions: {len(vector_solutions)}")
+        print(f"   Search methods: {search_methods}")
+>>>>>>> 51044012ac0cbae799ecb6a3ca39553db1231e1e
         
         return {
-            "products": merged_products,
-            "solutions": merged_solutions,
-            "search_methods": search_methods
+            'products': merged_products,
+            'solutions': vector_solutions,
+            'search_methods': search_methods
         }
     
     async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
@@ -303,59 +313,61 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             print(f"❌ Elasticsearch search failed: {e}")
             return []
     
-    async def _chroma_semantic_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search products using ChromaDB semantic search"""
+    async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
+        """Search products using Elasticsearch vector search"""
         try:
             semantic_query = requirements.get('semantic_query', '')
             if not semantic_query:
                 return []
             
             # Build category filter if available
-            where_filter = None
+            filters = None
             categories = requirements.get('product_categories', [])
             if categories:
-                where_filter = {"category": {"$in": categories}}
+                filters = {"category": categories}
             
-            return await self.chroma_service.semantic_search_products(
+            return await self.vector_service.vector_search_products(
                 query=semantic_query,
-                n_results=15,
-                where_filter=where_filter
+                size=15,
+                filters=filters,
+                hybrid_weight=0.1  # Small weight for text search
             )
         except Exception as e:
-            print(f"❌ ChromaDB product search failed: {e}")
+            print(f"❌ Elasticsearch vector product search failed: {e}")
             return []
     
-    async def _chroma_semantic_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search solutions using ChromaDB semantic search"""
+    async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
+        """Search solutions using Elasticsearch vector search"""
         try:
             semantic_query = requirements.get('semantic_query', '')
             if not semantic_query:
                 return []
             
             # Build industry filter if available
-            where_filter = None
+            filters = None
             industry = requirements.get('industry', '')
             if industry:
-                where_filter = {"industry": {"$contains": industry}}
+                filters = {"industry": [industry] if isinstance(industry, str) else industry}
             
-            return await self.chroma_service.semantic_search_solutions(
+            return await self.vector_service.vector_search_solutions(
                 query=semantic_query,
-                n_results=10,
-                where_filter=where_filter
+                size=10,
+                filters=filters,
+                hybrid_weight=0.1  # Small weight for text search
             )
         except Exception as e:
-            print(f"❌ ChromaDB solution search failed: {e}")
+            print(f"❌ Elasticsearch vector solution search failed: {e}")
             return []
     
     def _merge_product_results(
         self, 
         elasticsearch_products: List[Dict], 
-        chroma_products: List[Dict]
+        vector_products: List[Dict]
     ) -> List[Dict]:
         """Merge and deduplicate product results from both sources"""
         
         print(f"🔀 Starting merge process...")
-        print(f"   Input: {len(elasticsearch_products)} ES products, {len(chroma_products)} Chroma products")
+        print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
         
         merged = {}
         
@@ -370,8 +382,8 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
                 merged[product_id] = product
                 print(f"   📋 ES {i+1}: {product_name} (ID: {product_id}, Score: {product.get('_score', 0)})")
         
-        # Add ChromaDB results with semantic score
-        for i, product in enumerate(chroma_products):
+        # Add vector results with semantic score
+        for i, product in enumerate(vector_products):
             product_id = product.get('id', '')
             product_name = product.get('name', 'Unknown')
             if product_id:
@@ -385,15 +397,15 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
                     merged[product_id]['hybrid_score'] = (keyword_score * 0.4) + (similarity_score * 0.6)
                     print(f"   🔗 Both {i+1}: {product_name} (ID: {product_id}, Combined)")
                 else:
-                    # Only found in ChromaDB
-                    product['search_source'] = 'chroma'
+                    # Only found in vector
+                    product['search_source'] = 'vector'
                     product['keyword_score'] = 0
                     product['semantic_score'] = similarity_score
                     product['hybrid_score'] = similarity_score
                     merged[product_id] = product
-                    print(f"   🧠 Chroma {i+1}: {product_name} (ID: {product_id}, Score: {similarity_score})")
+                    print(f"   🧠 Vector {i+1}: {product_name} (ID: {product_id}, Score: {similarity_score})")
             else:
-                print(f"   ⚠️ Chroma product {i+1} missing ID: {product_name}")
+                print(f"   ⚠️ Vector product {i+1} missing ID: {product_name}")
         
         # Convert back to list and sort by hybrid score
         result = list(merged.values())
@@ -500,7 +512,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'total_products': len(hybrid_results['products']),
                 'total_solutions': len(hybrid_results['solutions']),
                 'search_methods': hybrid_results['search_methods'],
-                'retrieval_method': 'hybrid_elasticsearch_chroma',
+                'retrieval_method': 'hybrid_elasticsearch_vector',
                 'success': True
             }
             
@@ -573,8 +585,6 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         }
 
 # Async helper to avoid import issues
-import asyncio
-
 async def run_async(coro):
     """Helper to run async code"""
     return await coro 
