@@ -66,6 +66,10 @@ async def transcribe_audio(
                     audio.file,
                     language=language
                 )
+                # Log STT provider used
+                stt_provider = result.get('provider', 'unknown')
+                fallback_used = result.get('fallback_used', False)
+                logger.info(f"🎤 Transcription completed using {stt_provider} {'(fallback)' if fallback_used else '(primary)'}")
                 return result
             except Exception as e:
                 logger.error(f"Error processing file upload: {str(e)}")
@@ -85,6 +89,10 @@ async def transcribe_audio(
                     audio_bytes,
                     language=audio_data.language or language
                 )
+                # Log STT provider used
+                stt_provider = result.get('provider', 'unknown')
+                fallback_used = result.get('fallback_used', False)
+                logger.info(f"🎤 Transcription completed using {stt_provider} {'(fallback)' if fallback_used else '(primary)'}")
                 return result
             except Exception as e:
                 logger.error(f"Error processing base64 audio: {str(e)}")
@@ -106,6 +114,123 @@ async def transcribe_audio(
         raise HTTPException(
             status_code=500,
             detail=f"Error processing audio: {str(e)}"
+        )
+
+@router.post("/transcribe-detailed")
+async def transcribe_audio_detailed(
+    audio: UploadFile = File(None),
+    language: Optional[str] = None,
+    audio_data: Optional[AudioData] = None,
+    speech_service: SpeechService = Depends(get_speech_service)
+):
+    """
+    Enhanced transcription with detailed ElevenLabs response including language detection and word timing.
+    
+    Accepts either:
+    1. A file upload (multipart/form-data)
+    2. A JSON payload with base64 encoded audio data
+    
+    Args:
+        audio: The audio file to transcribe (for file upload)
+        language: Optional language code (e.g., "en", "ja", "es")
+        audio_data: JSON payload with base64 encoded audio data
+        speech_service: Initialized speech service instance
+        
+    Returns:
+        dict: Contains detailed transcription with language detection, confidence, and word timing
+    """
+    try:
+        logger.info(f"Received detailed transcription request: file={audio is not None}, audio_data={audio_data is not None}")
+        
+        # Handle file upload
+        if audio:
+            logger.info(f"Processing file upload for detailed transcription: filename={audio.filename}, content_type={audio.content_type}")
+            if not audio.content_type.startswith(('audio/', 'video/')):
+                raise HTTPException(
+                    status_code=400,
+                    detail="File must be an audio file"
+                )
+            try:
+                result = await speech_service.transcribe_audio(
+                    audio.file,
+                    language=language
+                )
+                # Enhanced logging for detailed transcription
+                stt_provider = result.get('provider', 'unknown')
+                fallback_used = result.get('fallback_used', False)
+                language_detected = result.get('language', 'unknown')
+                confidence = result.get('language_probability', 0)
+                words_count = result.get('words_count', 0)
+                
+                logger.info(f"🎤 Detailed transcription using {stt_provider} {'(fallback)' if fallback_used else '(primary)'} - "
+                           f"Language: {language_detected} (confidence: {confidence:.2f}), Words: {words_count}")
+                
+                return {
+                    **result,
+                    "enhanced_features": {
+                        "language_detection": result.get('language') != 'unknown',
+                        "confidence_scoring": result.get('language_probability') > 0,
+                        "word_timing": len(result.get('segments', [])) > 0 and len(result.get('segments', [{}])[0].get('words', [])) > 0,
+                        "segments_available": len(result.get('segments', [])) > 0
+                    }
+                }
+            except Exception as e:
+                logger.error(f"Error processing file upload for detailed transcription: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error processing audio file: {str(e)}"
+                )
+        
+        # Handle byte array input
+        elif audio_data:
+            logger.info("Processing base64 audio data for detailed transcription")
+            try:
+                # Decode base64 audio data
+                audio_bytes = base64.b64decode(audio_data.audio_bytes)
+                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 for detailed transcription")
+                result = await speech_service.transcribe_audio(
+                    audio_bytes,
+                    language=audio_data.language or language
+                )
+                # Enhanced logging for detailed transcription
+                stt_provider = result.get('provider', 'unknown')
+                fallback_used = result.get('fallback_used', False)
+                language_detected = result.get('language', 'unknown')
+                confidence = result.get('language_probability', 0)
+                words_count = result.get('words_count', 0)
+                
+                logger.info(f"🎤 Detailed transcription using {stt_provider} {'(fallback)' if fallback_used else '(primary)'} - "
+                           f"Language: {language_detected} (confidence: {confidence:.2f}), Words: {words_count}")
+                
+                return {
+                    **result,
+                    "enhanced_features": {
+                        "language_detection": result.get('language') != 'unknown',
+                        "confidence_scoring": result.get('language_probability') > 0,
+                        "word_timing": len(result.get('segments', [])) > 0 and len(result.get('segments', [{}])[0].get('words', [])) > 0,
+                        "segments_available": len(result.get('segments', [])) > 0
+                    }
+                }
+            except Exception as e:
+                logger.error(f"Error processing base64 audio for detailed transcription: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid audio data: {str(e)}"
+                )
+        else:
+            logger.error("No audio data provided for detailed transcription")
+            raise HTTPException(
+                status_code=400,
+                detail="Either file upload or audio data is required"
+            )
+        
+    except Exception as e:
+        logger.error(f"Error in detailed transcription endpoint: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing detailed transcription: {str(e)}"
         )
 
 @router.post("/chat/voice")
@@ -135,6 +260,11 @@ async def handle_voice_message(
             audio.file,
             language=language
         )
+        
+        # Log STT provider used
+        stt_provider = transcription_result.get('provider', 'unknown')
+        stt_fallback_used = transcription_result.get('fallback_used', False)
+        logger.info(f"🎤 Voice transcription using {stt_provider} {'(fallback)' if stt_fallback_used else '(primary)'}")
         
         if not transcription_result or not transcription_result.get('text'):
             raise HTTPException(
@@ -253,6 +383,11 @@ async def handle_voice_message(
             language=language or "en"
         )
         
+        # Log TTS provider used
+        tts_provider = speech_result.get('provider', 'unknown')
+        tts_fallback_used = speech_result.get('fallback_used', False)
+        logger.info(f"🔊 Voice synthesis using {tts_provider} {'(fallback)' if tts_fallback_used else '(primary)'}")
+        
         # Save assistant response
         response_metadata = {
             "model": response.model,
@@ -316,10 +451,10 @@ async def text_to_speech(
     speech_service: SpeechService = Depends(get_speech_service)
 ):
     """
-    Convert text to speech using gTTS.
+    Convert text to speech with ElevenLabs (primary) and gTTS (fallback)
     
     Args:
-        request: TextToSpeechRequest containing text and optional language
+        request: Text-to-speech request parameters
         speech_service: Initialized speech service instance
         
     Returns:
@@ -330,13 +465,93 @@ async def text_to_speech(
             text=request.text,
             language=request.language
         )
+        logger.info(f"✅ Text-to-speech completed using {result.get('provider', 'unknown')} provider")
         return result
-        
     except Exception as e:
         logger.error(f"Error in text-to-speech endpoint: {str(e)}")
-        if isinstance(e, HTTPException):
-            raise
         raise HTTPException(
             status_code=500,
             detail=f"Error converting text to speech: {str(e)}"
+        )
+
+@router.get("/voices")
+async def get_available_voices(
+    speech_service: SpeechService = Depends(get_speech_service)
+):
+    """
+    Get available voices from ElevenLabs
+    
+    Returns:
+        dict: Available voices information
+    """
+    try:
+        voices = await speech_service.get_available_voices()
+        return voices
+    except Exception as e:
+        logger.error(f"Error getting available voices: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving voices: {str(e)}"
+        )
+
+@router.get("/status")
+async def get_speech_service_status(
+    speech_service: SpeechService = Depends(get_speech_service)
+):
+    """
+    Get status of all speech services (ElevenLabs, Whisper, gTTS)
+    
+    Returns:
+        dict: Status information for all services
+    """
+    try:
+        status = await speech_service.get_service_status()
+        return status
+    except Exception as e:
+        logger.error(f"Error getting speech service status: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving service status: {str(e)}"
+        )
+
+class VoiceConfigRequest(BaseModel):
+    voice_id: str
+    stability: Optional[float] = None
+    similarity_boost: Optional[float] = None
+    style: Optional[float] = None
+    use_speaker_boost: Optional[bool] = None
+
+@router.post("/configure-voice")
+async def configure_elevenlabs_voice(
+    request: VoiceConfigRequest,
+    speech_service: SpeechService = Depends(get_speech_service)
+):
+    """
+    Configure ElevenLabs voice settings (this would require updating settings)
+    
+    Args:
+        request: Voice configuration parameters
+        
+    Returns:
+        dict: Configuration status
+    """
+    try:
+        # For now, this is informational - real implementation would need
+        # to update the settings or allow per-request voice configuration
+        return {
+            "message": "Voice configuration received",
+            "voice_id": request.voice_id,
+            "settings": {
+                "stability": request.stability,
+                "similarity_boost": request.similarity_boost,
+                "style": request.style,
+                "use_speaker_boost": request.use_speaker_boost
+            },
+            "note": "Configuration would be applied to future TTS requests"
+        }
+    except Exception as e:
+        logger.error(f"Error configuring voice: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error configuring voice: {str(e)}"
         ) 

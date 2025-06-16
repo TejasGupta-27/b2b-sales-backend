@@ -48,5 +48,8 @@ requests
 # Added from the code block
 gTTS==2.5.1
 
+# ElevenLabs integration
+elevenlabs>=1.0.0
+
 # PowerPoint generation
 python-pptx>=0.6.21

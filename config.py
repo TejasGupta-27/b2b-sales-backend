@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     huggingface_api_key: Optional[str] = os.getenv("HUGGINGFACE_API_KEY")
     huggingface_model: str = os.getenv("HUGGINGFACE_MODEL", "microsoft/DialoGPT-medium")
     
+    # Eleven Labs Configuration
+    elevenlabs_api_key: Optional[str] = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")  # Default voice (Adam)
+    elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "eleven_multilingual_v1")
+    elevenlabs_stability: float = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    elevenlabs_similarity_boost: float = float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.5"))
+    elevenlabs_style: float = float(os.getenv("ELEVENLABS_STYLE", "0.0"))
+    elevenlabs_use_speaker_boost: bool = os.getenv("ELEVENLABS_USE_SPEAKER_BOOST", "True").lower() == "true"
+    
+    # Speech Service Configuration
+    speech_primary_provider: str = os.getenv("SPEECH_PRIMARY_PROVIDER", "elevenlabs")  # elevenlabs or whisper
+    speech_fallback_enabled: bool = os.getenv("SPEECH_FALLBACK_ENABLED", "True").lower() == "true"
+    
     # Data loading configuration
     force_reload_data: bool = os.getenv("FORCE_RELOAD_DATA", "False").lower() == "true"
     skip_data_loading: bool = os.getenv("SKIP_DATA_LOADING", "False").lower() == "true"
