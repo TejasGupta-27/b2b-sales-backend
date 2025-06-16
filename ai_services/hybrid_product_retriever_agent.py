@@ -4,12 +4,9 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from .base import AIProvider, AIMessage, AIResponse
 from services.elasticsearch_service import get_elasticsearch_service
-<<<<<<< HEAD
 from services.chroma_service import ChromaDBService
 from services.realtime_ingestor import get_products # Adjust if path differs
-=======
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
->>>>>>> 51044012ac0cbae799ecb6a3ca39553db1231e1e
 from .function_models import RequirementExtraction, ProductAnalysis
 
 logger = logging.getLogger(__name__)
@@ -261,7 +258,6 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             'merged_products': len(merged_products)
         }
         
-<<<<<<< HEAD
         # Use only products with decent hybrid scores
         quality_products = [p for p in merged_products if p.get('hybrid_score', 0) >= 25]
 
@@ -292,12 +288,10 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
                 print(f"❌ Realtime fallback retrieval failed: {e}")
 
         print(f"🎯 Hybrid search results: {search_methods}")
-=======
         print(f"🎯 Hybrid search complete:")
         print(f"   Final merged products: {len(merged_products)}")
         print(f"   Vector solutions: {len(vector_solutions)}")
         print(f"   Search methods: {search_methods}")
->>>>>>> 51044012ac0cbae799ecb6a3ca39553db1231e1e
         
         return {
             'products': merged_products,
