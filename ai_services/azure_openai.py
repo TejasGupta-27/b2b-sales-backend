@@ -15,6 +15,7 @@ if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
 # Create a file handler
+os.makedirs(log_dir, exist_ok=True)
 file_handler = logging.FileHandler(os.path.join(log_dir, 'azure_openai.log'))
 file_handler.setLevel(logging.DEBUG)
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Main B2B Sales Backend Application
   b2b-sales-backend:
@@ -11,18 +9,18 @@ services:
     environment:
       # Database Configuration
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/b2b_sales
-      
+
       # AI Service Configuration
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
       - AZURE_EMBEDDING_ENDPOINT=${AZURE_EMBEDDING_ENDPOINT}
       - AZURE_EMBEDDING_API_KEY=${AZURE_EMBEDDING_API_KEY}
-      
+
       # Elasticsearch Configuration
       - ELASTICSEARCH_HOST=elasticsearch
       - ELASTICSEARCH_PORT=9200
       - ELASTICSEARCH_SCHEME=http
-      
+
       # Application Configuration
       - API_HOST=0.0.0.0
       - API_PORT=3001
@@ -30,27 +28,18 @@ services:
       - USE_HYBRID_RETRIEVER=true
       - FORCE_RELOAD_DATA=false
       - SKIP_DATA_LOADING=false
-      
+
       # CORS Configuration
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
-      
+
     volumes:
-      
-
-
-      # Persist logs
-      - ./logs:/app/logs
-      # Persist admin configuration (prompts, data sources)
       - ./Data/admin_config:/app/Data/admin_config
-      # Persist uploaded data
       - ./Data/uploads:/app/Data/uploads
-      # Persist generated quotes and pitch decks
       - ./Data/quotes:/app/Data/quotes
       - ./Data/pitch_decks:/app/Data/pitch_decks
-      # Persist JSON data files
       - ./Data/json:/app/Data/json
-      # Persist ChromaDB data
       - ./chroma_db:/app/chroma_db
+
     depends_on:
       - postgres
       - elasticsearch
@@ -61,6 +50,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    networks:
+      - b2b-sales-network
 
   # PostgreSQL Database
   postgres:
@@ -73,7 +64,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Initialize with extensions
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
@@ -81,6 +71,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - b2b-sales-network
 
   # Elasticsearch for Product Search
   elasticsearch:
@@ -100,6 +92,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - b2b-sales-network
 
   # Kibana for Elasticsearch Management (Optional)
   kibana:
@@ -114,6 +108,8 @@ services:
     restart: unless-stopped
     profiles:
       - monitoring
+    networks:
+      - b2b-sales-network
 
   # Adminer for Database Management (Optional)
   adminer:
@@ -125,6 +121,8 @@ services:
     restart: unless-stopped
     profiles:
       - monitoring
+    networks:
+      - b2b-sales-network
 
 volumes:
   postgres_data:
@@ -133,5 +131,5 @@ volumes:
     driver: local
 
 networks:
-  default:
-    name: b2b-sales-network
+  b2b-sales-network:
+    driver: bridge
