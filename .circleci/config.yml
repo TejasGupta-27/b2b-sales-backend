@@ -88,15 +88,19 @@ jobs:
       - run:
           name: Deploy to Azure VM
           command: |
-            # Copy files to Azure VM
-            scp -r . $AZURE_VM_USER@$AZURE_VM_HOST:~/b2b-sales-backend/
-            
             # Connect to Azure VM and deploy
             ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
               cd ~/b2b-sales-backend
               
-              # Pull latest changes (if using git)
-              git pull origin main
+              # Pull latest changes from git
+              git fetch origin
+              git reset --hard origin/master
+              
+              # Copy environment file if it doesn't exist
+              if [ ! -f .env ]; then
+                cp docker.env.example .env
+                echo "Please update .env with production values!"
+              fi
               
               # Stop existing containers
               docker-compose down
@@ -104,8 +108,9 @@ jobs:
               # Build and start new containers
               docker-compose up --build -d
               
-              # Clean up old images
+              # Clean up old images and volumes
               docker image prune -f
+              docker volume prune -f
             EOF
       - run:
           name: Health check
@@ -128,5 +133,5 @@ workflows:
             - build
           filters:
             branches:
-              only: main  # Only deploy from main branch
+              only: master # Only deploy from main branch
  
