@@ -86,12 +86,16 @@ jobs:
           command: |
             echo "AZURE_VM_HOST: $AZURE_VM_HOST"
             echo "AZURE_VM_USER: $AZURE_VM_USER"
-            echo "Checking if host is reachable..."
-            ping -c 1 $AZURE_VM_HOST || echo "Host not reachable via ping"
+            echo "Testing SSH connectivity..."
+            ssh-keyscan -T 10 $AZURE_VM_HOST || echo "ssh-keyscan failed, but continuing..."
       - run:
           name: Add Azure VM to known hosts
           command: |
-            ssh-keyscan -H $AZURE_VM_HOST >> ~/.ssh/known_hosts
+            ssh-keyscan -H -T 30 $AZURE_VM_HOST >> ~/.ssh/known_hosts || {
+              echo "ssh-keyscan failed, trying with IP resolution..."
+              nslookup $AZURE_VM_HOST || echo "DNS lookup failed"
+              exit 1
+            }
       - run:
           name: Deploy to Azure VM
           command: |
