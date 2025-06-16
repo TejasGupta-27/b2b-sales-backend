@@ -82,6 +82,13 @@ jobs:
           fingerprints:
             - "SHA256:EQxGGD9fpAsUzA3Bzl7eyDu2H/muW2OdrrTc3IvfHHE"  # Replace with your actual fingerprint from CircleCI
       - run:
+          name: Debug environment variables
+          command: |
+            echo "AZURE_VM_HOST: $AZURE_VM_HOST"
+            echo "AZURE_VM_USER: $AZURE_VM_USER"
+            echo "Checking if host is reachable..."
+            ping -c 1 $AZURE_VM_HOST || echo "Host not reachable via ping"
+      - run:
           name: Add Azure VM to known hosts
           command: |
             ssh-keyscan -H $AZURE_VM_HOST >> ~/.ssh/known_hosts
@@ -133,5 +140,5 @@ workflows:
             - build
           filters:
             branches:
-              only: master # Only deploy from main branch
+              only: master 
  
