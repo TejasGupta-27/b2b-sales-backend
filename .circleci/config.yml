@@ -89,6 +89,13 @@ jobs:
             echo "Testing SSH connectivity..."
             ssh-keyscan -T 10 $AZURE_VM_HOST || echo "ssh-keyscan failed, but continuing..."
       - run:
+          name: Debug SSH key setup
+          command: |
+            echo "Checking SSH agent and keys..."
+            ssh-add -l || echo "No keys in SSH agent"
+            echo "Testing SSH connection with verbose output..."
+            ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no $AZURE_VM_USER@$AZURE_VM_HOST echo "SSH test successful" || echo "SSH connection failed"
+      - run:
           name: Add Azure VM to known hosts
           command: |
             ssh-keyscan -H -T 30 $AZURE_VM_HOST >> ~/.ssh/known_hosts || {
