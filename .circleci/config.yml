@@ -121,10 +121,10 @@ jobs:
               fi
               
               # Stop existing containers
-              docker-compose down
+              docker compose down
               
               # Build and start new containers
-              docker-compose up --build -d
+              docker compose up --build -d
               
               # Clean up old images and volumes
               docker image prune -f
