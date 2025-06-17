@@ -1,9 +1,6 @@
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-import asyncio
-import os
-import uuid
 
 from .base import AIProvider, AIMessage, AIResponse
 from .quote_generation_agent import QuoteGenerationAgent
@@ -13,6 +10,10 @@ from .conversation_flow_manager import ConversationFlowAgent
 from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
 from config import settings
+
+from .quick_response_generator import QuickResponseGenerator
+from services.prompt_manager import get_prompt_manager
+
 
 class EnhancedB2BSalesAgent(AIProvider):
     """Enhanced B2B Sales Agent with hybrid retrieval capabilities"""
@@ -61,7 +62,7 @@ class EnhancedB2BSalesAgent(AIProvider):
         
         # Choose retriever based on configuration
         if use_hybrid_retriever and settings.azure_embedding_endpoint and settings.azure_embedding_api_key:
-            print("🔧 Using Hybrid Product Retriever (Elasticsearch keyword + vector search)")
+            print("🔧 Using Hybrid Product Retriever (Elasticsearch + ChromaDB)")
             self.retriever_agent = HybridProductRetrieverAgent(
                 base_provider=base_provider,
                 azure_embedding_endpoint=settings.azure_embedding_endpoint,
@@ -798,7 +799,8 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
         self, 
         response: AIResponse, 
         recommendation_context: Dict[str, Any],
-        flow_analysis: Dict[str, Any]
+        flow_analysis: Dict[str, Any],
+        customer_context: Optional[Dict]
     ) -> AIResponse:
         """Enhanced collaboration with quote agent using flow analysis"""
         
@@ -959,8 +961,8 @@ APPROACH:
         if search_methods:
             context += "=== HYBRID SEARCH RESULTS ===\n"
             context += f"🔍 Elasticsearch (keyword): {search_methods.get('elasticsearch_products', 0)} products\n"
-            context += f"🧠 Elasticsearch (vector): {search_methods.get('vector_products', 0)} products\n"
-            context += f"💡 Solutions (vector): {search_methods.get('vector_solutions', 0)} solutions\n"
+            context += f"🧠 ChromaDB (semantic): {search_methods.get('chroma_products', 0)} products\n"
+            context += f"💡 Solutions (semantic): {search_methods.get('chroma_solutions', 0)} solutions\n"
             context += f"🎯 Total merged: {search_methods.get('merged_products', 0)} products\n\n"
         
         if products:
@@ -999,7 +1001,7 @@ APPROACH:
         elif confidence > 0.8:
             context += "✅ High confidence - Excellent keyword + semantic match!\n"
         
-        context += "\n💡 **Use these REAL products found through hybrid search (keyword + AI vector) to provide specific recommendations!**"
+        context += "\n💡 **Use these REAL products found through hybrid search (keyword + AI semantic) to provide specific recommendations!**"
         
         return context
     
@@ -1310,7 +1312,7 @@ APPROACH:
                     else:
                         price = 0.0
 
-                    # Safely handle hybrid score (from Elasticsearch keyword + vector scoring)
+                    # Safely handle hybrid score (from ChromaDB/Elasticsearch scoring)
                     hybrid_score = 0.0
                     for score_field in ['hybrid_score', 'score', 'relevance_score', 'elasticsearch_score']:
                         if score_field in product:

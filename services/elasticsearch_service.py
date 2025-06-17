@@ -23,6 +23,7 @@ class ElasticsearchService:
                 retry_on_timeout=True,
                 max_retries=3
             )
+            
             cls._instance.products_index = settings.elasticsearch_index_products
             cls._instance.solutions_index = settings.elasticsearch_index_solutions
             cls._instance.health_checked = False
@@ -90,7 +91,18 @@ class ElasticsearchService:
                 }
             }
         }
-        
+
+
+        '''
+        self.es = self.client
+        if not await self.es.indices.exists(index="products"):
+            # Only create the index if it doesn't exist
+            await self.es.indices.create(index="products", body=products_mapping)
+            print("Index 'products' created with mapping.")
+        else:
+            print("Index 'products' already exists, skipping delete and create.")'''
+
+
         # Solutions index mapping  
         solutions_mapping = {
             "mappings": {
@@ -106,7 +118,8 @@ class ElasticsearchService:
                     "total_price": {"type": "float"},
                     "implementation_time": {"type": "text"},
                     "benefits": {"type": "text", "analyzer": "standard"},
-                    "requirements": {"type": "text", "analyzer": "standard"}
+                    "requirements": {"type": "text", "analyzer": "standard"},
+                    "form_factor": {"type": "keyword"}
                 }
             }
         }
@@ -612,45 +625,69 @@ class ElasticsearchService:
         """Load products from JSON files in data directory with enhanced processing"""
         product_files = list(data_dir.glob("*.json"))
         loaded_count = 0
-        
+
         print(f"📁 Found {len(product_files)} JSON files to process")
-        
+
         for file_path in product_files:
             try:
                 print(f"📄 Processing file: {file_path}")
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                
+
                 file_loaded = 0
-                # Handle different JSON structures
+                product_list = []
+
                 if isinstance(data, list):
-                    for item in data:
-                        if self._is_valid_product(item):
-                            processed_product = self._process_product_data(item)
-                            await self.index_product(processed_product)
-                            loaded_count += 1
-                            file_loaded += 1
+                    product_list = data
                 elif isinstance(data, dict):
-                    if self._is_valid_product(data):
-                        processed_product = self._process_product_data(data)
+                    if 'products' in data and isinstance(data['products'], list):
+                        product_list = data['products']
+                    else:
+                        product_list = [data]  # Single product dict
+
+                for item in product_list:
+                    if self._is_valid_product(item):
+                        # Automatically wrap unknown fields into specifications
+                        processed_product = self._process_product_data(item)
+                        processed_product = self._wrap_specifications(processed_product)
+                        
                         await self.index_product(processed_product)
                         loaded_count += 1
                         file_loaded += 1
-                    elif 'products' in data:
-                        # Handle nested structure like {"products": [...]}
-                        for item in data['products']:
-                            if self._is_valid_product(item):
-                                processed_product = self._process_product_data(item)
-                                await self.index_product(processed_product)
-                                loaded_count += 1
-                                file_loaded += 1
-                            
+                        if file_loaded>=50: break
+
                 print(f"✅ Loaded {file_loaded} products from {file_path}")
             except Exception as e:
                 print(f"❌ Failed to load products from {file_path}: {e}")
-        
+
         print(f"📊 Total products loaded: {loaded_count}")
         return loaded_count
+
+    
+    def _wrap_specifications(self, product: dict) -> dict:
+        """
+        Moves all unknown technical fields into the 'specifications' field.
+        Keeps known top-level keys intact.
+        """
+        known_fields = {
+            "id", "name", "category", "subcategory", "description",
+            "price", "currency", "availability", "tags", "features",
+            "use_cases", "target_industries", "compatibility",
+            "warranty", "support_level", "form_factor"
+        }
+
+        specifications = {}
+        rest = {}
+
+        for key, value in product.items():
+            if key in known_fields:
+                rest[key] = value
+            else:
+                specifications[key] = value
+
+        rest["specifications"] = specifications
+        return rest
+
 
     def _is_valid_product(self, item: Dict[str, Any]) -> bool:
         """Check if item has minimum required fields for a product"""

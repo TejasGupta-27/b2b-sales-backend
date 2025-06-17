@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     # Disable .env file loading
     class Config:
         env_file = ".env"
+        extra='ignore'
     
     # API Configuration
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
@@ -45,7 +46,10 @@ class Settings(BaseSettings):
     azure_embedding_endpoint: Optional[str] = os.getenv("AZURE_EMBEDDING_ENDPOINT")
     azure_embedding_api_key: Optional[str] = os.getenv("AZURE_EMBEDDING_API_KEY")
     azure_embedding_deployment_name: str = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "text-embedding-3-large")
-    
+    gmail_address: str | None = None
+    gmail_app_password: str | None = None
+    azure_embedding_deployment: str | None = None
+
     # Hugging Face
     huggingface_api_key: Optional[str] = os.getenv("HUGGINGFACE_API_KEY")
     huggingface_model: str = os.getenv("HUGGINGFACE_MODEL", "microsoft/DialoGPT-medium")
