@@ -8,18 +8,20 @@ services:
       - "3001:3001"
     expose:
       - "3001"
+    env_file:
+      - ../.env
     environment:
       # Database Configuration
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/b2b_sales
 
       # AI Service Configuration
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
-      - AZURE_EMBEDDING_ENDPOINT=${AZURE_EMBEDDING_ENDPOINT}
-      - AZURE_EMBEDDING_API_KEY=${AZURE_EMBEDDING_API_KEY}
+      #- AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      #- AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      #- AZURE_EMBEDDING_ENDPOINT=${AZURE_EMBEDDING_ENDPOINT}
+      #- AZURE_EMBEDDING_API_KEY=${AZURE_EMBEDDING_API_KEY}
       
       # ElevenLabs Configuration
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      #- ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       
       # Elasticsearch Configuration
       - ELASTICSEARCH_HOST=elasticsearch
@@ -35,8 +37,8 @@ services:
       - SKIP_DATA_LOADING=false
 
       # CORS Configuration
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
-
+      - CORS_ORIGINS=http://74.176.202.10:3000,http://74.176.202.10:3001,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
+      
     volumes:
       # Persist logs
       # - ./logs:/app/logs
@@ -52,7 +54,7 @@ services:
       - elasticsearch
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-f", "http://74.176.202.10:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -95,7 +97,7 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://74.176.202.10:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

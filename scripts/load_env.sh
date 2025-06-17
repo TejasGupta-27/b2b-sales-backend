@@ -4,7 +4,7 @@
 export API_HOST="0.0.0.0"
 export API_PORT="3001"
 export DEBUG="true"
-export CORS_ORIGINS="http://localhost:3000"
+export CORS_ORIGINS="http://74.176.202.10:3000"
 
 # Database Configuration
 export POSTGRES_USER="myuser"
@@ -13,7 +13,7 @@ export POSTGRES_DB="chat_db"
 export DATABASE_URL="postgresql://myuser:mypassword@db:5432/chat_db"
 
 # Elasticsearch Configuration
-export ELASTICSEARCH_URL="http://localhost:9200"
+export ELASTICSEARCH_URL="http://74.176.202.10:9200"
 export ELASTICSEARCH_INDEX_PRODUCTS="products"
 export ELASTICSEARCH_INDEX_SOLUTIONS="solutions"
 

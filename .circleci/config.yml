@@ -18,7 +18,7 @@ jobs:
       FORCE_RELOAD_DATA: "false"
       
       # CORS Configuration
-      CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+      CORS_ORIGINS: "http://localhost:3000,http://74.176.202.10:3000,http://74.176.202.10:3001,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
       
       # Database Configuration
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/b2b_sales"
@@ -139,7 +139,7 @@ jobs:
             
             # Check if the application is running
             ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
-              curl -f http://localhost:3001/health || exit 1
+              curl -f http://74.176.202.10:3001/health || exit 1
             EOF
 
 workflows:

@@ -13,6 +13,7 @@ from .function_models import *
 log_dir = "logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
+os.makedirs(log_dir, exist_ok=True)
 
 # Create a file handler
 os.makedirs(log_dir, exist_ok=True)

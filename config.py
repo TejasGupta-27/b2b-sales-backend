@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
     api_port: int = int(os.getenv("API_PORT", "3001"))
     debug: bool = os.getenv("DEBUG", "True").lower() == "true"
-    cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+    cors_origins: str = os.getenv("CORS_ORIGINS", "http://74.176.202.10:3000")
     
     # Database Configuration
     postgres_user: str = os.getenv("POSTGRES_USER", "myuser")
