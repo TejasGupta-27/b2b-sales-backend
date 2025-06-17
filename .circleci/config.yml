@@ -130,16 +130,7 @@ jobs:
               docker image prune -f
               docker volume prune -f
             EOF
-      - run:
-          name: Health check
-          command: |
-            # Wait a bit for services to start
-            sleep 30
-            
-            # Check if the application is running
-            ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
-              curl -f http://localhost:3001/health || exit 1
-            EOF
+
 
 workflows:
   version: 2

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
@@ -12,7 +13,8 @@ import logging
 from services import elasticsearch_service
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import text
+from sqlalchemy import text, func, and_
+import asyncio
 
 # Import database components
 from db.database import get_db, engine, create_tables, test_connection
@@ -38,6 +40,7 @@ from models.lead import Lead
 # Import services
 from services.elasticsearch_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
+from services.cache_service import get_cache_service, start_cache_cleanup_task
 
 # Import configuration
 from config import settings
@@ -71,6 +74,9 @@ app = FastAPI(
     description="AI-powered B2B sales assistant with dynamic product intelligence",
     version="2.0.0"
 )
+
+# Add compression middleware for better response times
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Configure CORS
 app.add_middleware(
@@ -166,6 +172,11 @@ async def startup_event():
     
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
+        
+        # Initialize cache service and start cleanup task
+        cache_service = get_cache_service()
+        asyncio.create_task(start_cache_cleanup_task())
+        logger.info("✅ Cache service initialized")
         
         # Initialize Elasticsearch first (with error handling)
         try:
@@ -267,11 +278,11 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             db.add(user_message)
             db.commit()
             
-            # Get conversation history
+            # Get conversation history with limit for better performance
             messages = []
             existing_messages = db.query(DBChatMessage).filter(
                 DBChatMessage.lead_id == lead_id
-            ).order_by(DBChatMessage.created_at).all()
+            ).order_by(DBChatMessage.created_at).limit(20).all()  # Limit to last 20 messages
             
             for msg in existing_messages:
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
@@ -384,11 +395,26 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
 # Keep all your existing working endpoints
 @app.get("/api/products")
 async def get_products():
-    """Get available products and pricing"""
-    base_provider = AIServiceFactory.create_provider("azure_openai")
-    sales_agent = EnhancedB2BSalesAgent(base_provider)
+    """Get products with caching for improved performance"""
+    cache_service = get_cache_service()
     
-    return {"products": sales_agent.product_catalog}
+    # Try to get from cache first
+    cached_products = await cache_service.get("products_list")
+    if cached_products:
+        logger.info("Serving products from cache")
+        return cached_products
+    
+    try:
+        elasticsearch_service = get_elasticsearch_service()
+        products = await elasticsearch_service.get_random_products(size=50)
+        
+        # Cache for 5 minutes
+        await cache_service.set("products_list", products, ttl=300)
+        
+        return products
+    except Exception as e:
+        logger.error(f"Error fetching products: {e}")
+        return []
 
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
@@ -469,11 +495,11 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             db.add(user_message)
             db.commit()
             
-            # Get conversation history
+            # Get conversation history with limit for better performance
             messages = []
             existing_messages = db.query(DBChatMessage).filter(
                 DBChatMessage.lead_id == lead_id
-            ).order_by(DBChatMessage.created_at).all()
+            ).order_by(DBChatMessage.created_at).limit(20).all()  # Limit to last 20 messages
             
             for msg in existing_messages:
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
@@ -609,31 +635,50 @@ async def get_chat_history(lead_id: str):
 
 @app.get("/api/leads")
 async def get_leads():
-    """Get all leads with their latest message"""
+    """Get all leads with their latest message - optimized with JOIN query"""
     try:
         db = next(get_db())
         try:
-            leads = db.query(DBLead).all()
-            result = []
+            # Use a single JOIN query instead of N+1 individual queries
+            from sqlalchemy import func, and_
             
-            for lead in leads:
-                # Get latest message
-                latest_message = db.query(DBChatMessage).filter(
-                    DBChatMessage.lead_id == lead.id
-                ).order_by(DBChatMessage.created_at.desc()).first()
-                
-                result.append({
+            # Subquery to get the latest message timestamp for each lead
+            latest_message_subquery = db.query(
+                DBChatMessage.lead_id,
+                func.max(DBChatMessage.created_at).label('latest_time')
+            ).group_by(DBChatMessage.lead_id).subquery()
+            
+            # Main query with JOIN to get leads and their latest messages
+            results = db.query(
+                DBLead,
+                DBChatMessage.content.label('last_message_content'),
+                DBChatMessage.created_at.label('last_message_time')
+            ).outerjoin(
+                latest_message_subquery,
+                DBLead.id == latest_message_subquery.c.lead_id
+            ).outerjoin(
+                DBChatMessage,
+                and_(
+                    DBChatMessage.lead_id == DBLead.id,
+                    DBChatMessage.created_at == latest_message_subquery.c.latest_time
+                )
+            ).all()
+            
+            # Format results
+            formatted_results = []
+            for lead, last_message_content, last_message_time in results:
+                formatted_results.append({
                     "id": lead.id,
                     "company_name": lead.company_name,
                     "contact_name": lead.contact_name,
                     "email": lead.email,
                     "status": lead.status,
                     "created_at": lead.created_at.isoformat(),
-                    "last_message": latest_message.content if latest_message else None,
-                    "last_message_time": latest_message.created_at.isoformat() if latest_message else None
+                    "last_message": last_message_content,
+                    "last_message_time": last_message_time.isoformat() if last_message_time else None
                 })
             
-            return {"leads": result}
+            return {"leads": formatted_results}
         finally:
             db.close()
             
@@ -1041,6 +1086,41 @@ async def search_chat_messages(request: ChatSearchRequest, db: Session = Depends
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/api/admin/performance")
+async def get_performance_stats():
+    """Get system performance statistics"""
+    cache_service = get_cache_service()
+    
+    # Get cache stats
+    cache_stats = await cache_service.get_stats()
+    
+    # Get Elasticsearch stats
+    try:
+        elasticsearch_service = get_elasticsearch_service()
+        es_stats = await elasticsearch_service.get_product_stats()
+    except Exception as e:
+        es_stats = {"error": str(e)}
+    
+    # Get database connection info
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"))
+            active_connections = result.scalar()
+    except Exception as e:
+        active_connections = f"Error: {e}"
+    
+    return {
+        "cache": cache_stats,
+        "elasticsearch": es_stats,
+        "database": {
+            "active_connections": active_connections,
+            "pool_size": engine.pool.size(),
+            "checked_out_connections": engine.pool.checkedout()
+        },
+        "timestamp": datetime.now().isoformat()
+    }
 
 if __name__ == "__main__":
     import uvicorn

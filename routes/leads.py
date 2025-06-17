@@ -4,93 +4,74 @@ from datetime import datetime
 import uuid
 import json
 from pathlib import Path
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
 
 from models.lead import Lead, LeadCreate, LeadUpdate, LeadStatus
+from db.database import get_db
+from db.models import Lead as DBLead
 from ai_services.factory import AIServiceFactory
 from ai_services.sales_agent import SalesAgentProvider
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
-# Simple file-based storage (replace with database in production)
-LEADS_FILE = Path("Data/leads.json")
-
-async def load_leads() -> List[Lead]:
-    """Load leads from storage"""
-    if not LEADS_FILE.exists():
-        return []
-    
-    try:
-        with open(LEADS_FILE, 'r') as f:
-            leads_data = json.load(f)
-        return [Lead(**lead_data) for lead_data in leads_data]
-    except Exception:
-        return []
-
-async def save_leads(leads: List[Lead]):
-    """Save leads to storage"""
-    LEADS_FILE.parent.mkdir(exist_ok=True)
-    
-    leads_data = [lead.dict() for lead in leads]
-    with open(LEADS_FILE, 'w') as f:
-        json.dump(leads_data, f, indent=2, default=str)
-
 @router.get("/", response_model=List[Lead])
 async def get_leads(
     status: Optional[LeadStatus] = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000)
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db)
 ):
-    """Get all leads with optional filtering"""
-    leads = await load_leads()
+    """Get all leads with optional filtering - optimized with database queries"""
+    query = db.query(DBLead)
     
     if status:
-        leads = [lead for lead in leads if lead.status == status]
+        query = query.filter(DBLead.status == status.value)
     
-    return leads[skip:skip + limit]
+    # Use database pagination instead of loading all and slicing
+    leads = query.offset(skip).limit(limit).all()
+    
+    return [Lead.from_orm(lead) for lead in leads]
 
 @router.post("/", response_model=Lead)
-async def create_lead(lead_data: LeadCreate):
-    """Create a new lead"""
-    leads = await load_leads()
-    
-    # Check if lead already exists
-    existing_lead = next((l for l in leads if l.email == lead_data.email), None)
+async def create_lead(lead_data: LeadCreate, db: Session = Depends(get_db)):
+    """Create a new lead - optimized database operation"""
+    # Check if lead already exists using database query
+    existing_lead = db.query(DBLead).filter(DBLead.email == lead_data.email).first()
     if existing_lead:
         raise HTTPException(status_code=400, detail="Lead with this email already exists")
     
     # Create new lead
-    new_lead = Lead(
+    db_lead = DBLead(
         id=str(uuid.uuid4()),
         **lead_data.dict()
     )
     
-    leads.append(new_lead)
-    await save_leads(leads)
+    db.add(db_lead)
+    db.commit()
+    db.refresh(db_lead)
     
-    return new_lead
+    return Lead.from_orm(db_lead)
 
 @router.get("/{lead_id}", response_model=Lead)
-async def get_lead(lead_id: str):
-    """Get a specific lead"""
-    leads = await load_leads()
-    lead = next((l for l in leads if l.id == lead_id), None)
+async def get_lead(lead_id: str, db: Session = Depends(get_db)):
+    """Get a specific lead - database optimized"""
+    lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    return lead
+    return Lead.from_orm(lead)
 
 @router.put("/{lead_id}", response_model=Lead)
-async def update_lead(lead_id: str, lead_update: LeadUpdate):
-    """Update a lead"""
-    leads = await load_leads()
-    lead_index = next((i for i, l in enumerate(leads) if l.id == lead_id), None)
+async def update_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_db)):
+    """Update a lead - database optimized"""
+    lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
     
-    if lead_index is None:
+    if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
     # Update lead
-    lead = leads[lead_index]
     update_data = lead_update.dict(exclude_unset=True)
     
     for field, value in update_data.items():
@@ -98,20 +79,21 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate):
     
     lead.updated_at = datetime.now()
     
-    await save_leads(leads)
-    return lead
+    db.commit()
+    db.refresh(lead)
+    
+    return Lead.from_orm(lead)
 
 @router.delete("/{lead_id}")
-async def delete_lead(lead_id: str):
-    """Delete a lead"""
-    leads = await load_leads()
-    lead_index = next((i for i, l in enumerate(leads) if l.id == lead_id), None)
+async def delete_lead(lead_id: str, db: Session = Depends(get_db)):
+    """Delete a lead - database optimized"""
+    lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
     
-    if lead_index is None:
+    if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    leads.pop(lead_index)
-    await save_leads(leads)
+    db.delete(lead)
+    db.commit()
     
     return {"message": "Lead deleted successfully"}
 

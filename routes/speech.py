@@ -266,14 +266,31 @@ async def handle_voice_message(
         stt_fallback_used = transcription_result.get('fallback_used', False)
         logger.info(f"🎤 Voice transcription using {stt_provider} {'(fallback)' if stt_fallback_used else '(primary)'}")
         
+        # Check for transcription results with better error handling
         if not transcription_result or not transcription_result.get('text'):
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to transcribe audio"
-            )
+            # Check if this was detected as empty/silent audio
+            if transcription_result and transcription_result.get('empty_audio_detected'):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No speech detected in audio. Please ensure your microphone is working and speak clearly."
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to transcribe audio. Please check audio format and quality."
+                )
         
         # Get the transcribed text
-        text_message = transcription_result['text']
+        text_message = transcription_result['text'].strip()
+        
+        # Additional validation for very short transcriptions that might be noise
+        if len(text_message) < 2:
+            logger.warning(f"Very short transcription detected: '{text_message}' - might be noise")
+            raise HTTPException(
+                status_code=400,
+                detail="Transcription too short - please speak more clearly or check audio quality."
+            )
+            
         logger.info(f"Transcribed text: {text_message}")
         
         # Handle lead management

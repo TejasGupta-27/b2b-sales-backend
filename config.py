@@ -14,11 +14,21 @@ class Settings(BaseSettings):
     debug: bool = os.getenv("DEBUG", "True").lower() == "true"
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
     
+    # Performance Configuration
+    enable_response_caching: bool = os.getenv("ENABLE_RESPONSE_CACHING", "True").lower() == "true"
+    cache_ttl: int = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes default
+    max_concurrent_requests: int = int(os.getenv("MAX_CONCURRENT_REQUESTS", "100"))
+    request_timeout: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
+    
     # Database Configuration
     postgres_user: str = os.getenv("POSTGRES_USER", "myuser")
     postgres_password: str = os.getenv("POSTGRES_PASSWORD", "mypassword")
     postgres_db: str = os.getenv("POSTGRES_DB", "chat_db")
     database_url: str = os.getenv("DATABASE_URL", "postgresql://myuser:mypassword@db:5432/chat_db")
+    
+    # Database Performance Settings
+    db_echo_sql: bool = os.getenv("DB_ECHO_SQL", "False").lower() == "true"  # Disable SQL logging by default
+    conversation_history_limit: int = int(os.getenv("CONVERSATION_HISTORY_LIMIT", "20"))  # Limit chat history
     
     # Elasticsearch Configuration
     elasticsearch_url: str = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
@@ -54,7 +64,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: Optional[str] = os.getenv("ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")  # Default voice (Adam)
     elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
-    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "eleven_multilingual_v1")
+    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "scribe_v1")
     elevenlabs_stability: float = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
     elevenlabs_similarity_boost: float = float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.5"))
     elevenlabs_style: float = float(os.getenv("ELEVENLABS_STYLE", "0.0"))
