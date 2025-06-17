@@ -10,30 +10,52 @@ jobs:
   build:
     executor: python-executor
     environment:
+      # Application Configuration
       API_HOST: "0.0.0.0"
       API_PORT: "3001"
       DEBUG: "true"
-      CORS_ORIGINS: "http://localhost:3000"
-      POSTGRES_USER: "myuser"
-      POSTGRES_PASSWORD: "mypassword"
-      POSTGRES_DB: "chat_db"
-      DATABASE_URL: "postgresql://myuser:mypassword@db:5432/chat_db"
-      ELASTICSEARCH_URL: "http://elasticsearch:9200"
-      ELASTICSEARCH_INDEX_PRODUCTS: "products"
-      ELASTICSEARCH_INDEX_SOLUTIONS: "solutions"
+      USE_HYBRID_RETRIEVER: "true"
+      FORCE_RELOAD_DATA: "false"
+      
+      # CORS Configuration
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+      
+      # Database Configuration
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/b2b_sales"
+      
+      # Elasticsearch Configuration
+      ELASTICSEARCH_HOST: "elasticsearch"
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: "http"
+      ELASTICSEARCH_WEIGHT: "0.4"
+      
+      # AI Service Configuration
+      DEFAULT_AI_PROVIDER: "azure_openai"
+      AZURE_OPENAI_API_VERSION: "2025-01-01-preview"
+      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4.1-mini"
+      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-3-large"
+      # ChromaDB Configuration
       CHROMA_DB_PATH: "/app/chroma_db"
       CHROMA_MAX_ITEMS_PER_FILE: "50"
-      DATA_DIR: "Data/json"
-      DEFAULT_AI_PROVIDER: "azure_openai"
-      AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
-      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4"
-      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-ada-002"
-      HUGGINGFACE_MODEL: "microsoft/DialoGPT-medium"
-      FORCE_RELOAD_DATA: "false"
-      SKIP_DATA_LOADING: "false"
-      USE_HYBRID_RETRIEVER: "true"
-      ELASTICSEARCH_WEIGHT: "0.4"
       SEMANTIC_WEIGHT: "0.6"
+      
+      # Data Configuration
+      DATA_DIR: "Data/json"
+      SKIP_DATA_LOADING: "false"
+      
+      # ElevenLabs Configuration
+      ELEVENLABS_API_KEY: "your-elevenlabs-api-key"
+      ELEVENLABS_VOICE_ID: "pNInz6obpgDQGcFmaJgB"
+      ELEVENLABS_MODEL_ID: "eleven_multilingual_v2"
+      ELEVENLABS_STT_MODEL_ID: "eleven_multilingual_v1"
+      ELEVENLABS_STABILITY: "0.5"
+      ELEVENLABS_SIMILARITY_BOOST: "0.5"
+      ELEVENLABS_STYLE: "0.0"
+      ELEVENLABS_USE_SPEAKER_BOOST: "true"
+      
+      # Speech Service Configuration
+      SPEECH_PRIMARY_PROVIDER: "elevenlabs"
+      SPEECH_FALLBACK_ENABLED: "true"
     steps:
       - checkout
       - setup_remote_docker:
@@ -53,55 +75,84 @@ jobs:
             ls -l
             find . -name main.py
 
-
-=======
-            docker exec project-backend-1 ls -l /app
-      - run:
-          name: Run tests
-          command: |
-            docker exec backend pytest
-
   deploy:
     executor: python-executor
-    environment:
-      API_HOST: "0.0.0.0"
-      API_PORT: "3001"
-      DEBUG: "false"
-      CORS_ORIGINS: "http://localhost:3000"
-      POSTGRES_USER: "myuser"
-      POSTGRES_PASSWORD: "mypassword"
-      POSTGRES_DB: "chat_db"
-      DATABASE_URL: "postgresql://myuser:mypassword@db:5432/chat_db"
-      ELASTICSEARCH_URL: "http://elasticsearch:9200"
-      ELASTICSEARCH_INDEX_PRODUCTS: "products"
-      ELASTICSEARCH_INDEX_SOLUTIONS: "solutions"
-      CHROMA_DB_PATH: "/app/chroma_db"
-      CHROMA_MAX_ITEMS_PER_FILE: "50"
-      DATA_DIR: "Data/json"
-      DEFAULT_AI_PROVIDER: "azure_openai"
-      AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
-      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4"
-      AZURE_EMBEDDING_DEPLOYMENT_NAME: "text-embedding-ada-002"
-      HUGGINGFACE_MODEL: "microsoft/DialoGPT-medium"
-      FORCE_RELOAD_DATA: "false"
-      SKIP_DATA_LOADING: "false"
-      USE_HYBRID_RETRIEVER: "true"
-      ELASTICSEARCH_WEIGHT: "0.4"
-      SEMANTIC_WEIGHT: "0.6"
     steps:
       - checkout
+      - add_ssh_keys:
+          fingerprints:
+            - "SHA256:EQxGGD9fpAsUzA3Bzl7eyDu2H/muW2OdrrTc3IvfHHE"  # Replace with your actual fingerprint from CircleCI
       - run:
-          name: Deploy your app (customize as needed)
+          name: Debug environment variables
           command: |
-            docker-compose -f docker-compose.yml up -d
->>>>>>> f8d21e94a96f7d78f5b7eeaa756e077f14f37a52
+            echo "AZURE_VM_HOST: $AZURE_VM_HOST"
+            echo "AZURE_VM_USER: $AZURE_VM_USER"
+            echo "Testing SSH connectivity..."
+            ssh-keyscan -T 10 $AZURE_VM_HOST || echo "ssh-keyscan failed, but continuing..."
+      - run:
+          name: Debug SSH key setup
+          command: |
+            echo "Checking SSH agent and keys..."
+            ssh-add -l || echo "No keys in SSH agent"
+            echo "Testing SSH connection with verbose output..."
+            ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no $AZURE_VM_USER@$AZURE_VM_HOST echo "SSH test successful" || echo "SSH connection failed"
+      - run:
+          name: Add Azure VM to known hosts
+          command: |
+            ssh-keyscan -H -T 30 $AZURE_VM_HOST >> ~/.ssh/known_hosts || {
+              echo "ssh-keyscan failed, trying with IP resolution..."
+              nslookup $AZURE_VM_HOST || echo "DNS lookup failed"
+              exit 1
+            }
+      - run:
+          name: Deploy to Azure VM
+          command: |
+            # Connect to Azure VM and deploy
+            ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
+              cd ~/b2b-sales-backend
+              
+              # Pull latest changes from git
+              git fetch origin
+              git reset --hard origin/master
+              
+              # Copy environment file if it doesn't exist
+              if [ ! -f .env ]; then
+                cp docker.env.example .env
+                echo "Please update .env with production values!"
+              fi
+              
+              # Stop existing containers
+              docker compose down
+              
+              # Build and start new containers
+              docker compose up --build -d
+              
+              # Clean up old images and volumes
+              docker image prune -f
+              docker volume prune -f
+            EOF
+      - run:
+          name: Health check
+          command: |
+            # Wait a bit for services to start
+            sleep 30
+            
+            # Check if the application is running
+            ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
+              curl -f http://localhost:3001/health || exit 1
+            EOF
 
 workflows:
   version: 2
   build_and_deploy:
     jobs:
       - build
-<<<<<<< HEAD
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master 
  
 =======
       - deploy:
