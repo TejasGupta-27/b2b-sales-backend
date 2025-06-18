@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=forking
 PIDFile=/var/run/nginx.pid
-ExecStartPre=/usr/sbin/nginx -t -c /home/tron2703/Otsuka/b2b-sales-backend/nginx.conf
-ExecStart=/usr/sbin/nginx -c /home/tron2703/Otsuka/b2b-sales-backend/nginx.conf
+ExecStartPre=/usr/sbin/nginx -t -c /home/azureuser/b2b-sales-backend/nginx.conf
+ExecStart=/usr/sbin/nginx -c /home/azureuser/b2b-sales-backend/nginx.conf
 ExecReload=/bin/sh -c "/bin/kill -s HUP $(/bin/cat /var/run/nginx.pid)"
 ExecStop=/bin/sh -c "/bin/kill -s TERM $(/bin/cat /var/run/nginx.pid)"
 PrivateTmp=true
