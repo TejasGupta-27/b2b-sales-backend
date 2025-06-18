@@ -52,14 +52,20 @@ setup_nginx_config() {
     # Stop default nginx if running
     sudo systemctl stop nginx 2>/dev/null || true
     
+    # Create nginx directories with proper permissions
+    print_status "Creating nginx directories..."
+    sudo mkdir -p /var/log/nginx
+    sudo chown www-data:www-data /var/log/nginx
+    sudo chmod 755 /var/log/nginx
+    
     # Backup original nginx config
     if [ -f /etc/nginx/nginx.conf ]; then
         sudo cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.backup.$(date +%Y%m%d_%H%M%S)
         print_status "Backed up original nginx configuration"
     fi
     
-    # Test our custom configuration
-    if nginx -t -c $(pwd)/nginx.conf; then
+    # Test our custom configuration with sudo
+    if sudo nginx -t -c $(pwd)/nginx.conf; then
         print_status "Nginx configuration test passed"
     else
         print_error "Nginx configuration test failed"
@@ -160,12 +166,11 @@ show_status() {
     
     echo ""
     print_status "Access URLs:"
-    echo "Backend API: http://your-azure-vm-ip/api/"
-    echo "Health Check: http://your-azure-vm-ip/health"
-    echo "Elasticsearch: http://your-azure-vm-ip/elasticsearch/"
+    echo "Backend API: http://48.210.58.7/api/"
+    echo "Health Check: http://48.210.58.7/health"
+    echo "Elasticsearch: http://48.210.58.7/elasticsearch/"
     echo ""
-    print_warning "Remember to replace 'your-azure-vm-ip' with your actual Azure VM IP address"
-    print_warning "Don't forget to update the server_name in nginx.conf with your domain/IP"
+    print_status "Your services are now accessible from the internet!"
 }
 
 # Main function
