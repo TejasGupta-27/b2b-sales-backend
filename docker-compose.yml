@@ -143,4 +143,3 @@ networks:
   b2b-sales-network:
     driver: bridge
   
-env_file: .env
