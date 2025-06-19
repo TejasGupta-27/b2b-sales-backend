@@ -21,7 +21,7 @@ jobs:
       CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
       
       # Database Configuration
-      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/b2b_sales"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/chat_db"
       
       # Elasticsearch Configuration
       ELASTICSEARCH_HOST: "elasticsearch"
