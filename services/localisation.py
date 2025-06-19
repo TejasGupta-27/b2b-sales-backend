@@ -1,3 +1,5 @@
+# services/localisation.py
+
 quote_translations = {
     "en": {
         "intro": "🎯 **Excellent! Based on our thorough discussion and your specific requirements, I've prepared a comprehensive, customized quote using our intelligent product matching system.**",
@@ -27,7 +29,30 @@ quote_translations = {
             "3. I can arrange product demos or technical consultations if helpful",
             "4. We can finalize implementation timeline and support arrangements"
         ],
-        "confidence_note": "This quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
+        "confidence_note": "This quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀",
+        # PDF Labels
+        "pdf_labels": {
+            "quote_number": "Quote Number:",
+            "date": "Date:",
+            "valid_until": "Valid Until:",
+            "customer_information": "Customer Information",
+            "company": "Company:",
+            "contact": "Contact:",
+            "email": "Email:",
+            "phone": "Phone:",
+            "quote_details": "Quote Details",
+            "item": "Item",
+            "description": "Description",
+            "qty": "Qty",
+            "unit_price": "Unit Price",
+            "total": "Total",
+            "subtotal": "Subtotal:",
+            "tax": "Tax:",
+            "total_amount": "Total:",
+            "terms_and_conditions": "Terms and Conditions",
+            "implementation_notes": "Implementation Notes",
+            "next_steps": "Next Steps"
+        }
     },
     "ja": {
         "intro": "🎯 **鈴木様との丁寧なヒアリングをもとに、最適な提案書をご用意しました。**",
@@ -35,9 +60,9 @@ quote_translations = {
         "analysis": "✅ **要件整理:** ご要望・課題・技術条件を十分にヒアリングし、必要な項目をすべてカバーしております。",
         "ai_confidence": "🤖 **AIレコメンド:** ご要望に対する一致度: {confidence:.1%}",
         "investment_summary": "💰 **費用サマリー:**",
-        "subtotal": "• 小計: **${subtotal:,.2f}**",
-        "tax": "• 税金: ${tax:,.2f}",
-        "total": "• **合計費用: ${total:,.2f}**",
+        "subtotal": "• 小計: **¥{subtotal:,.0f}**",
+        "tax": "• 税金: ¥{tax:,.0f}",
+        "total": "• **合計費用: ¥{total:,.0f}**",
         "valid_until": "• 有効期限: {date}",
         "pdf_ready": "📄 **[見積PDFをダウンロード]({url})**",
         "pdf_pending": "📄 **見積PDF:** 現在生成中です...",
@@ -57,6 +82,29 @@ quote_translations = {
             "3. 製品デモや技術説明も承ります",
             "4. 導入スケジュールやサポート体制の最終調整を行いましょう"
         ],
-        "confidence_note": "この見積もりは、貴社の課題と技術要件に対する深い理解に基づいています。🚀"
+        "confidence_note": "この見積もりは、貴社の課題と技術要件に対する深い理解に基づいています。🚀",
+        # PDF Labels in Japanese
+        "pdf_labels": {
+            "quote_number": "見積番号:",
+            "date": "発行日:",
+            "valid_until": "有効期限:",
+            "customer_information": "お客様情報",
+            "company": "会社名:",
+            "contact": "ご担当者:",
+            "email": "メールアドレス:",
+            "phone": "電話番号:",
+            "quote_details": "見積詳細",
+            "item": "商品名",
+            "description": "商品説明",
+            "qty": "数量",
+            "unit_price": "単価",
+            "total": "小計",
+            "subtotal": "小計:",
+            "tax": "消費税:",
+            "total_amount": "合計:",
+            "terms_and_conditions": "契約条件",
+            "implementation_notes": "導入に関して",
+            "next_steps": "次のステップ"
+        }
     }
 }

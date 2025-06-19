@@ -13,7 +13,7 @@ from config import settings
 
 from .quick_response_generator import QuickResponseGenerator
 from services.prompt_manager import get_prompt_manager
-from services import localisation
+from services.localisation import quote_translations
 
 
 class EnhancedB2BSalesAgent(AIProvider):
