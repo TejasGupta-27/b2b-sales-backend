@@ -12,7 +12,7 @@ services:
       - "3001"
     environment:
       # Database Configuration
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/chat_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       
       # AI Service Configuration
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
@@ -67,9 +67,9 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: chat_db
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -78,7 +78,7 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
