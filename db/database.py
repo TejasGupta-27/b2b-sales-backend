@@ -6,12 +6,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Create SQLAlchemy engine
+# Create SQLAlchemy engine with optimized settings
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_recycle=300,
-    echo=settings.debug
+    pool_size=20,  # Increased from default 5
+    max_overflow=30,  # Increased from default 10
+    pool_timeout=30,  # Add timeout for getting connections
+    echo=settings.db_echo_sql,  # Use configurable SQL logging
+    connect_args={
+        "connect_timeout": 10
+    }
 )
 
 # Create SessionLocal class

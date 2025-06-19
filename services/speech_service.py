@@ -139,36 +139,94 @@ class SpeechService:
         Returns:
             tuple: (audio_array, sample_rate)
         """
+        temp_file = None
         try:
-            # Create a temporary file to store the audio data
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                if isinstance(audio_data, bytes):
-                    temp_file.write(audio_data)
-                else:
-                    temp_file.write(audio_data.read())
-                temp_file.flush()
-                
-                # Load audio with librosa (handles resampling and mono conversion)
-                audio_array, sr = librosa.load(
-                    temp_file.name,
-                    sr=self.target_sr,  # Resample to 16kHz
-                    mono=True,  # Convert to mono
-                    dtype=np.float32
-                )
-                
-                # Normalize audio
-                if np.abs(audio_array).max() > 1.0:
-                    audio_array = audio_array / np.abs(audio_array).max()
-                
-                logger.info(f"Audio preprocessed: shape={audio_array.shape}, sr={sr}, dtype={audio_array.dtype}")
-                return audio_array, sr
+            # Get audio bytes
+            if isinstance(audio_data, bytes):
+                audio_bytes = audio_data
+            else:
+                audio_bytes = audio_data.read()
+            
+            if len(audio_bytes) == 0:
+                raise Exception("Empty audio data received")
+            
+            logger.info(f"Processing audio data: {len(audio_bytes)} bytes")
+            
+            # Try different file extensions based on audio format detection
+            possible_extensions = ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm']
+            audio_array = None
+            sr = None
+            
+            for ext in possible_extensions:
+                try:
+                    # Create a temporary file with the specific extension
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as temp_file:
+                        temp_file.write(audio_bytes)
+                        temp_file.flush()
+                        temp_path = temp_file.name
+                    
+                    # Try to load audio with librosa
+                    try:
+                        audio_array, sr = librosa.load(
+                            temp_path,
+                            sr=self.target_sr,  # Resample to 16kHz
+                            mono=True,  # Convert to mono
+                            dtype=np.float32
+                        )
+                        logger.info(f"Successfully loaded audio as {ext} format")
+                        break  # Success, exit the loop
+                        
+                    except Exception as librosa_error:
+                        logger.debug(f"Librosa failed for {ext}: {librosa_error}")
+                        # Try soundfile as fallback
+                        try:
+                            audio_array, sr = sf.read(temp_path, dtype=np.float32)
+                            if sr != self.target_sr:
+                                # Manually resample if needed
+                                audio_array = librosa.resample(audio_array, orig_sr=sr, target_sr=self.target_sr)
+                                sr = self.target_sr
+                            # Convert to mono if stereo
+                            if len(audio_array.shape) > 1:
+                                audio_array = np.mean(audio_array, axis=1)
+                            logger.info(f"Successfully loaded audio as {ext} format using soundfile")
+                            break  # Success, exit the loop
+                            
+                        except Exception as sf_error:
+                            logger.debug(f"Soundfile failed for {ext}: {sf_error}")
+                            continue  # Try next extension
+                    
+                    # Clean up this temp file before trying next extension
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    logger.debug(f"Failed to create temp file with {ext}: {e}")
+                    continue
+            
+            # If we still don't have audio data, it means all formats failed
+            if audio_array is None:
+                raise Exception("Unable to decode audio data - format not supported or corrupted data")
+            
+            # Validate audio data
+            if len(audio_array) == 0:
+                raise Exception("Audio data is empty after decoding")
+            
+            # Normalize audio
+            if np.abs(audio_array).max() > 1.0:
+                audio_array = audio_array / np.abs(audio_array).max()
+            
+            logger.info(f"Audio preprocessed successfully: shape={audio_array.shape}, sr={sr}, dtype={audio_array.dtype}, duration={len(audio_array)/sr:.2f}s")
+            return audio_array, sr
                 
         except Exception as e:
-            logger.error(f"Error preprocessing audio: {str(e)}")
-            raise
+            error_msg = f"Error preprocessing audio: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
         finally:
             # Clean up temporary file
-            if 'temp_file' in locals():
+            if temp_file and hasattr(temp_file, 'name'):
                 try:
                     os.unlink(temp_file.name)
                 except Exception as e:
@@ -196,6 +254,12 @@ class SpeechService:
             else:
                 audio_bytes = audio_data.read()
             
+            # Validate audio data
+            if len(audio_bytes) == 0:
+                raise Exception("Empty audio data provided to ElevenLabs STT")
+            
+            logger.info(f"Sending {len(audio_bytes)} bytes to ElevenLabs STT")
+            
             # ElevenLabs STT expects file-like object
             from io import BytesIO
             audio_file = BytesIO(audio_bytes)
@@ -205,7 +269,7 @@ class SpeechService:
             result = await loop.run_in_executor(
                 None,
                 lambda: self.elevenlabs_client.speech_to_text.convert(
-                    audio=audio_file,
+                    file=audio_file,
                     model_id=settings.elevenlabs_stt_model_id
                 )
             )
@@ -216,10 +280,18 @@ class SpeechService:
             language_confidence = getattr(result, 'language_probability', 1.0)
             words_list = getattr(result, 'words', [])
             
-            # Log ElevenLabs response details
+            # Log ElevenLabs response details with better formatting
             logger.info(f"ElevenLabs STT response: text_length={len(transcription_text)}, "
+                       f"text_content='{transcription_text[:100]}{'...' if len(transcription_text) > 100 else ''}', "
                        f"language={detected_language}, confidence={language_confidence:.2f}, "
                        f"words_count={len(words_list)}")
+            
+            # If transcription is empty, log additional debug info
+            if not transcription_text.strip():
+                logger.warning(f"ElevenLabs returned empty transcription for {len(audio_bytes)} bytes of audio data")
+                # Check if result has any debug information
+                if hasattr(result, '__dict__'):
+                    logger.debug(f"Full ElevenLabs result: {result.__dict__}")
             
             # Convert ElevenLabs words format to Whisper-compatible format
             processed_words = []
@@ -370,8 +442,10 @@ class SpeechService:
             }
             
         except Exception as e:
-            logger.error(f"Whisper STT error: {str(e)}")
-            raise
+            # Improve error logging to show actual error instead of empty message
+            error_msg = str(e) if str(e) else f"Unknown error: {type(e).__name__}"
+            logger.error(f"Whisper STT error: {error_msg}")
+            raise Exception(f"Whisper STT error: {error_msg}")
 
     async def transcribe_audio(
         self,
@@ -400,8 +474,16 @@ class SpeechService:
                 try:
                     logger.info(f"Attempting ElevenLabs STT (attempt {attempt + 1}/{max_retries})")
                     result = await self._elevenlabs_speech_to_text(audio_data, language)
-                    logger.info("✅ ElevenLabs STT successful")
-                    return result
+                    
+                    # Check if we got meaningful transcription results
+                    transcription_text = result.get('text', '').strip()
+                    if transcription_text:  # Non-empty transcription
+                        logger.info("✅ ElevenLabs STT successful")
+                        return result
+                    else:
+                        logger.warning(f"ElevenLabs STT returned empty transcription (attempt {attempt + 1}/{max_retries})")
+                        # Don't retry for empty results, fall back to Whisper immediately
+                        break
                     
                 except Exception as e:
                     logger.error(f"ElevenLabs STT failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
@@ -411,6 +493,9 @@ class SpeechService:
                         retry_delay *= 2  # Exponential backoff
                     else:
                         logger.warning("ElevenLabs STT failed after all retries, falling back to Whisper")
+            
+            # If we reach here, either ElevenLabs failed or returned empty results
+            logger.warning("ElevenLabs STT failed or returned empty results, falling back to Whisper")
         
         # Fallback to Whisper if ElevenLabs failed or not configured
         if settings.speech_fallback_enabled:
@@ -418,9 +503,21 @@ class SpeechService:
                 try:
                     logger.info(f"Using Whisper STT fallback (attempt {attempt + 1}/{max_retries})")
                     result = await self._whisper_speech_to_text(audio_data, language)
-                    logger.info("✅ Whisper STT fallback successful")
-                    result["fallback_used"] = True
-                    return result
+                    
+                    # Check Whisper results too
+                    transcription_text = result.get('text', '').strip()
+                    if transcription_text:  # Non-empty transcription
+                        logger.info("✅ Whisper STT fallback successful")
+                        result["fallback_used"] = True
+                        return result
+                    else:
+                        logger.warning(f"Whisper STT also returned empty transcription (attempt {attempt + 1}/{max_retries})")
+                        if attempt == max_retries - 1:
+                            # On the last attempt, return the empty result with metadata
+                            result["fallback_used"] = True
+                            result["empty_audio_detected"] = True
+                            logger.warning("All STT services returned empty transcription - likely silent audio")
+                            return result
                     
                 except Exception as e:
                     logger.error(f"Whisper STT fallback failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
