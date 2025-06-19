@@ -20,7 +20,7 @@ $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 -- Note: Tables will be created by SQLAlchemy/Alembic, we're just setting up the database environment
 
 -- Grant permissions to the application user
-GRANT ALL PRIVILEGES ON DATABASE chat_db TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE b2b_sales TO postgres;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO postgres;
