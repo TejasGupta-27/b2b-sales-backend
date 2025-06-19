@@ -188,7 +188,8 @@ Return your response as valid JSON:
     async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx"):
         """Generate a PowerPoint presentation from the structured data"""
         # Load template if it exists, otherwise create new presentation
-        if os.path.exists('template.pptx'):
+        template_path = "../Data/assets/template.pptx"
+        if os.path.exists(template_path):
             logger.info("Using template.pptx")
             prs = Presentation('template.pptx')
         else:

@@ -13,6 +13,7 @@ from config import settings
 
 from .quick_response_generator import QuickResponseGenerator
 from services.prompt_manager import get_prompt_manager
+from services import localisation
 
 
 class EnhancedB2BSalesAgent(AIProvider):
@@ -1062,83 +1063,51 @@ APPROACH:
             "objectives": ["Understand customer needs"],
             "avoid": ["Rushing the process"]
         })
-    
-    def _enhance_response_with_dynamic_quote(self, response: AIResponse, quote: Dict[str, Any], deck_id: str) -> AIResponse:
+    def _enhance_response_with_dynamic_quote(self, response: AIResponse, quote: Dict[str, Any], deck_id: str, language: str = "en") -> AIResponse:
         """Enhanced response with dynamic quote and pitch deck information"""
-        
-        print(f"🔍 Debug - Enhancing response with quote info:")
-        print(f"   Quote keys: {list(quote.keys())}")
-        print(f"   PDF generated: {quote.get('pdf_generated', 'Not set')}")
-        print(f"   PDF URL: {quote.get('pdf_url', 'Not set')}")
-        print(f"   Pitch deck generated: {quote.get('pitch_deck_generated', 'Not set')}")
-        print(f"   Pitch deck URL: {quote.get('pitch_deck_url', 'Not set')}")
-        
-        # Always enhance the response if we have a quote, regardless of PDF status
+
+        t = quote_translations.get(language, quote_translations["en"])
+
         if quote:
-            # Add professional quote presentation with dynamic context
-            response.content += f"\n\n🎯 **Excellent! Based on our thorough discussion and your specific requirements, I've prepared a comprehensive, customized quote using our intelligent product matching system.**"
-            response.content += f"\n\n📋 **Quote #{quote.get('quote_number', 'N/A')}**"
-            
-            # Highlight the thorough discovery process
-            response.content += f"\n\n✅ **Complete Requirements Analysis:** Our conversation covered all the essential areas needed for an accurate quote - your business context, technical requirements, operational needs, and specific challenges."
-            
-            # Highlight the intelligent matching
-            if self.product_recommendations.get('retrieval_confidence', 0) > 0.7:
-                response.content += f"\n\n🤖 **AI-Powered Recommendations:** Our system identified a {self.product_recommendations.get('retrieval_confidence', 0):.1%} match with your requirements based on our comprehensive product intelligence!"
-            
-            # Add pricing summary
-            if 'financials' in quote:
-                financials = quote['financials']
-                response.content += f"\n\n💰 **Investment Summary:**"
-                response.content += f"\n• Subtotal: **${financials['subtotal']:,.2f}**"
-                response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
-                response.content += f"\n• **Total Investment: ${financials['total']:,.2f}**"
-                if quote.get('valid_until'):
+            response.content += f"\n\n{t['intro']}"
+            response.content += f"\n\n{t['quote_number'].format(quote_number=quote.get('quote_number', 'N/A'))}"
+            response.content += f"\n\n{t['analysis']}"
+
+            confidence = self.product_recommendations.get("retrieval_confidence", 0)
+            if confidence > 0.7:
+                response.content += f"\n\n{t['ai_confidence'].format(confidence=confidence)}"
+
+            financials = quote.get("financials") or quote.get("pricing")
+            if financials:
+                response.content += f"\n\n{t['investment_summary']}"
+                response.content += f"\n{t['subtotal'].format(subtotal=financials['subtotal'])}"
+                response.content += f"\n{t['tax'].format(tax=financials['tax_amount'])}"
+                response.content += f"\n{t['total'].format(total=financials['total'])}"
+                if quote.get("valid_until"):
                     try:
-                        response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
-                    except:
-                        response.content += f"\n• Quote valid until: {quote['valid_until']}"
-            elif 'pricing' in quote:
-                # Support legacy format
-                pricing = quote['pricing']
-                response.content += f"\n\n💰 **Investment Summary:**"
-                response.content += f"\n• Subtotal: **${pricing['subtotal']:,.2f}**"
-                response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
-                response.content += f"\n• **Total Investment: ${pricing['total']:,.2f}**"
-                if quote.get('valid_until'):
-                    try:
-                        response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
-                    except:
-                        response.content += f"\n• Quote valid until: {quote['valid_until']}"
-            
-            # Add PDF download link if available
-            if quote.get('pdf_generated', False) and quote.get('pdf_url'):
-                response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
+                        valid_until = datetime.fromisoformat(quote["valid_until"]).strftime("%B %d, %Y")
+                    except Exception:
+                        valid_until = quote["valid_until"]
+                    response.content += f"\n{t['valid_until'].format(date=valid_until)}"
+
+            if quote.get("pdf_generated") and quote.get("pdf_url"):
+                response.content += f"\n\n{t['pdf_ready'].format(url=quote['pdf_url'])}"
             else:
-                response.content += f"\n\n📄 **Quote PDF:** Currently being generated..."
-                if quote.get('pdf_error'):
-                    response.content += f" (Note: PDF generation encountered an issue - please contact support if needed)"
-            
-            # Add pitch deck download link only if it was generated successfully
-            if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
-                response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
-            
-            # Enhanced next steps
-            response.content += f"\n\n**Next Steps:**"
-            response.content += f"\n1. Review the detailed quote with all selected products and solutions"
-            if quote.get('pitch_deck_generated', False):
-                response.content += f"\n2. Check out the pitch deck for a visual overview of the solution"
-                response.content += f"\n3. Let me know if you'd like to discuss any aspects in more detail"
-                response.content += f"\n4. I can arrange product demos or technical consultations if helpful"
-                response.content += f"\n5. We can finalize implementation timeline and support arrangements"
-            else:
-                response.content += f"\n2. Let me know if you'd like to discuss any aspects in more detail"
-                response.content += f"\n3. I can arrange product demos or technical consultations if helpful"
-                response.content += f"\n4. We can finalize implementation timeline and support arrangements"
-            
-            response.content += f"\n\nThis quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
-            
+                response.content += f"\n\n{t['pdf_pending']}"
+                if quote.get("pdf_error"):
+                    response.content += f"{t['pdf_error']}"
+
+            if quote.get("pitch_deck_generated") and quote.get("pitch_deck_url"):
+                response.content += f"\n\n{t['ppt_ready'].format(url=quote['pitch_deck_url'])}"
+
+            response.content += f"\n\n{t['next_steps']}"
+            next_steps = t["next_with_ppt"] if quote.get("pitch_deck_generated") else t["next_without_ppt"]
+            response.content += "\n" + "\n".join(next_steps)
+
+            response.content += f"\n\n{t['confidence_note']}"
+
         return response
+
     
     def _enhanced_quote_readiness_check(self, messages: List[AIMessage], flow_analysis: Dict[str, Any]) -> bool:
         """Enhanced logic to detect when customer is truly ready for a quote - considers both explicit requests and AI analysis"""

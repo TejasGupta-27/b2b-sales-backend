@@ -50,8 +50,11 @@ services:
       - ./Data/json:/app/Data/json
       # Note: ChromaDB volume removed - using Elasticsearch for all search functionality
     depends_on:
-      - postgres
-      - elasticsearch
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://74.176.202.10:3001/health"]
@@ -106,8 +109,8 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://74.176.202.10:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 5
     networks:
       - b2b-sales-network
