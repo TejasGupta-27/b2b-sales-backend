@@ -1122,6 +1122,74 @@ async def get_performance_stats():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/api/debug/conversation-state/{lead_id}")
+async def debug_conversation_state(lead_id: str, db: Session = Depends(get_db)):
+    """Debug endpoint to check conversation state for a specific lead"""
+    try:
+        # Get conversation messages
+        messages = db.query(DBChatMessage).filter(
+            DBChatMessage.lead_id == lead_id
+        ).order_by(DBChatMessage.created_at).all()
+        
+        # Get lead information
+        lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
+        
+        # Analyze conversation state
+        conversation_text = "\n".join([f"{msg.message_type}: {msg.content}" for msg in messages])
+        
+        # Check for potential stuck patterns
+        stuck_indicators = {
+            "repeated_questions": 0,
+            "same_stage_messages": 0,
+            "no_progress": False,
+            "last_stage": None,
+            "message_count": len(messages)
+        }
+        
+        # Analyze message patterns
+        if len(messages) > 5:
+            recent_messages = messages[-5:]
+            stages = [msg.stage for msg in recent_messages if msg.stage]
+            if len(set(stages)) == 1 and len(stages) > 3:
+                stuck_indicators["same_stage_messages"] = len(stages)
+                stuck_indicators["last_stage"] = stages[0]
+                stuck_indicators["no_progress"] = True
+        
+        # Check for repeated questions
+        question_patterns = ["what", "could you", "can you", "please tell", "help me"]
+        question_count = sum(1 for msg in messages if any(pattern in msg.content.lower() for pattern in question_patterns))
+        stuck_indicators["repeated_questions"] = question_count
+        
+        return {
+            "lead_id": lead_id,
+            "lead_info": {
+                "company_name": lead.company_name if lead else "Unknown",
+                "contact_name": lead.contact_name if lead else "Unknown",
+                "status": lead.status.value if lead else "Unknown"
+            },
+            "conversation_stats": {
+                "total_messages": len(messages),
+                "user_messages": len([m for m in messages if m.message_type == MessageType.USER.value]),
+                "assistant_messages": len([m for m in messages if m.message_type == MessageType.ASSISTANT.value]),
+                "last_message_time": messages[-1].created_at.isoformat() if messages else None
+            },
+            "stuck_analysis": stuck_indicators,
+            "recent_messages": [
+                {
+                    "id": msg.id,
+                    "type": msg.message_type,
+                    "content": msg.content[:100] + "..." if len(msg.content) > 100 else msg.content,
+                    "stage": msg.stage,
+                    "timestamp": msg.created_at.isoformat()
+                }
+                for msg in messages[-10:]  # Last 10 messages
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in debug conversation state: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing conversation state: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

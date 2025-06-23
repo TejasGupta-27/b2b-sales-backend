@@ -78,6 +78,17 @@ class EnhancedB2BSalesAgent(AIProvider):
         self.conversation_context = []
         self.customer_requirements = {}
         
+        # SIMPLE CONVERSATION STATE TRACKER - prevent infinite loops
+        self.conversation_state = {
+            'current_stage': 'initial_discovery',
+            'message_count': 0,
+            'last_stage_change': None,
+            'repeated_responses': 0,
+            'quote_generated': False,
+            'recommendations_presented': False,
+            'last_response_type': None
+        }
+    
     @property
     def provider_name(self) -> str:
         return f"enhanced_b2b_sales_agent_{self.base_provider.provider_name}"
@@ -104,6 +115,9 @@ class EnhancedB2BSalesAgent(AIProvider):
     ) -> AIResponse:
         """Generate sales-focused responses with intelligent conversation flow management"""
         
+        # Update conversation state tracker
+        self.conversation_state['message_count'] += 1
+        
         # Store conversation for agent collaboration
         self.conversation_context = messages
         
@@ -129,6 +143,40 @@ class EnhancedB2BSalesAgent(AIProvider):
         
         # Step 1: Use AI-powered flow analysis
         flow_analysis = await self.conversation_analyzer.analyze_conversation_state(messages, customer_context)
+        
+        # Update conversation state with flow analysis
+        new_stage = flow_analysis.get('current_stage', 'initial_discovery')
+        if new_stage != self.conversation_state['current_stage']:
+            self.conversation_state['last_stage_change'] = datetime.now()
+            self.conversation_state['current_stage'] = new_stage
+            self.conversation_state['repeated_responses'] = 0
+            print(f"🔄 Stage transition: {self.conversation_state['current_stage']} -> {new_stage}")
+        else:
+            self.conversation_state['repeated_responses'] += 1
+        
+        # Check for potential infinite loop (same response type repeated too many times)
+        if self.conversation_state['repeated_responses'] > 3:
+            print("⚠️ Potential infinite loop detected - forcing stage progression")
+            if self.conversation_state['current_stage'] == 'initial_discovery':
+                flow_analysis['current_stage'] = 'deep_discovery'
+            elif self.conversation_state['current_stage'] == 'deep_discovery':
+                flow_analysis['current_stage'] = 'solution_presentation'
+            elif self.conversation_state['current_stage'] == 'solution_presentation':
+                flow_analysis['current_stage'] = 'quote_ready'
+            self.conversation_state['repeated_responses'] = 0
+        
+        # Check for timeout on current stage (if stuck for more than 10 messages)
+        if (self.conversation_state['message_count'] > 10 and 
+            self.conversation_state['repeated_responses'] > 5):
+            print("⚠️ Stage timeout detected - forcing progression to next stage")
+            if self.conversation_state['current_stage'] == 'initial_discovery':
+                flow_analysis['current_stage'] = 'deep_discovery'
+            elif self.conversation_state['current_stage'] == 'deep_discovery':
+                flow_analysis['current_stage'] = 'solution_presentation'
+            elif self.conversation_state['current_stage'] == 'solution_presentation':
+                flow_analysis['current_stage'] = 'quote_ready'
+            self.conversation_state['repeated_responses'] = 0
+            self.conversation_state['message_count'] = 0  # Reset counter
         
         # Generate quick responses based on current context
         quick_responses = await self.quick_response_generator.generate_quick_responses(
@@ -178,22 +226,31 @@ class EnhancedB2BSalesAgent(AIProvider):
         
         print(f"🔍 Processing current_stage: '{current_stage}' -> normalized: '{current_stage_str}'")
         
-        # Priority 1: Handle quote-ready conversations (AI determined OR explicit request)
-        if (enhanced_quote_ready or 
-            (flow_analysis.get('quote_ready', False) and flow_analysis.get('should_generate_quote', False)) or
-            (current_stage_str == 'quote_ready' and flow_analysis.get('decision_readiness_score', 0) >= 70)):
-            print("🎯 Handling quote-ready conversation (AI-determined or explicit request)")
-            # Go directly to quote generation without checking for recommendation context
+        # SIMPLIFIED FLOW CONTROL - prevent getting stuck
+        # Priority 1: Handle explicit quote requests immediately
+        if is_explicit_quote_request:
+            print("🎯 Handling explicit quote request")
+            self.conversation_state['last_response_type'] = 'quote_generation'
             response = await self._handle_quote_ready_conversation(messages, customer_context, flow_analysis)
         
-        # Priority 2: Handle solution presentation and recommendation stage
-        elif current_stage_str == 'solution_presentation' or (current_stage_str == 'deep_discovery' and flow_analysis.get('technical_requirements_score', 0) > 60):
+        # Priority 2: Handle quote-ready conversations (AI determined)
+        elif (enhanced_quote_ready or 
+              flow_analysis.get('quote_ready', False) or
+              current_stage_str == 'quote_ready'):
+            print("🎯 Handling quote-ready conversation (AI-determined)")
+            self.conversation_state['last_response_type'] = 'quote_generation'
+            response = await self._handle_quote_ready_conversation(messages, customer_context, flow_analysis)
+        
+        # Priority 3: Handle solution presentation stage
+        elif current_stage_str == 'solution_presentation':
             print("🎯 Routing to recommendation stage for solution presentation")
+            self.conversation_state['last_response_type'] = 'recommendation'
             response = await self._handle_recommendation_stage(messages, customer_context, flow_analysis)
         
-        # Priority 3: Handle discovery stages
+        # Priority 4: Handle all discovery stages (simplified)
         else:
             print(f"🎯 Routing to discovery stage: {current_stage_str}")
+            self.conversation_state['last_response_type'] = 'discovery'
             response = await self._handle_discovery_conversation(messages, customer_context, flow_analysis)
         
         # Step 5: Add intelligent flow analysis to metadata
@@ -207,6 +264,7 @@ class EnhancedB2BSalesAgent(AIProvider):
             'enhanced_quote_check': enhanced_quote_ready,
             'current_stage': current_stage,
             'quick_responses': quick_responses,
+            'conversation_state': self.conversation_state,
             'quick_response_templates': [
                 {
                     'text': resp['text'],

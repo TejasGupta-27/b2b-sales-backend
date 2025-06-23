@@ -152,41 +152,36 @@ Analyze the conversation comprehensively to understand:
                 'solution', 'system', 'setup', 'configuration'  # Added solution terms
             ])
             
-            # Enhanced stage transition logic
-            if (business_context_score >= 70 and 
-                technical_score >= 70 and 
-                (solution_interest or implicit_interest) and 
-                analysis_dict['current_stage'] == 'deep_discovery'):
-                print("🔄 Transitioning to solution presentation stage based on sufficient context and solution interest")
-                analysis_dict['current_stage'] = 'solution_presentation'
-                analysis_dict['should_retrieve_products'] = True
+            # SIMPLIFIED stage transition logic to prevent getting stuck
+            current_stage = analysis_dict.get('current_stage', 'initial_discovery')
             
-            # Enforce strict stage progression with robust checks
-            if analysis_dict['current_stage'] == 'solution_presentation':
-                # Ensure we have presented recommendations
-                if not analysis_dict.get('recommendations_presented', False):
+            # Allow more flexible transitions based on conversation content
+            if current_stage == 'initial_discovery' and business_context_score >= 60:
+                analysis_dict['current_stage'] = 'deep_discovery'
+                print("🔄 Transitioning from initial_discovery to deep_discovery")
+            
+            elif current_stage == 'deep_discovery' and business_context_score >= 70 and technical_score >= 70:
+                if solution_interest or implicit_interest:
+                    analysis_dict['current_stage'] = 'solution_presentation'
                     analysis_dict['should_retrieve_products'] = True
-                    analysis_dict['quote_ready'] = False
-                    analysis_dict['should_generate_quote'] = False
-                # Check if recommendations have been selected
-                elif not analysis_dict.get('recommendation_selected', False):
-                    analysis_dict['quote_ready'] = False
-                    analysis_dict['should_generate_quote'] = False
-                    # Force staying in solution presentation until selection
-                    analysis_dict['current_stage'] = 'solution_presentation'
-                # Only allow quote_ready if we have both recommendations and selection
-                elif (analysis_dict.get('recommendations_presented', False) and 
-                      analysis_dict.get('recommendation_selected', False) and
-                      business_context_score >= 80 and 
-                      technical_score >= 80):
-                    analysis_dict['current_stage'] = 'quote_ready'
-                    analysis_dict['quote_ready'] = True
-                    analysis_dict['should_generate_quote'] = True
+                    print("🔄 Transitioning to solution_presentation stage")
                 else:
-                    # Stay in solution presentation if any conditions aren't met
-                    analysis_dict['current_stage'] = 'solution_presentation'
-                    analysis_dict['quote_ready'] = False
-                    analysis_dict['should_generate_quote'] = False
+                    # Stay in deep_discovery but allow quote generation if customer explicitly requests it
+                    analysis_dict['current_stage'] = 'deep_discovery'
+            
+            # Check for explicit quote requests and allow immediate quote generation
+            explicit_quote_request = any(phrase in conversation_text.lower() for phrase in [
+                'prepare a quote', 'generate a quote', 'send me a quote', 'i need a quote',
+                'quote me', 'quotation please', 'detailed proposal', 'pricing proposal',
+                'can you quote', 'get me a quote', 'provide a quote'
+            ])
+            
+            if explicit_quote_request:
+                analysis_dict['current_stage'] = 'quote_ready'
+                analysis_dict['quote_ready'] = True
+                analysis_dict['should_generate_quote'] = True
+                analysis_dict['should_retrieve_products'] = True
+                print("🔄 Explicit quote request detected - transitioning to quote_ready")
             
             # Add confidence scores to the analysis
             analysis_dict['confidence_scores'] = {
