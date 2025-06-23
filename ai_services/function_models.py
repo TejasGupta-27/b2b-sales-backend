@@ -6,6 +6,8 @@ class RequirementExtraction(BaseModel):
     """Model for extracting customer requirements from conversation"""
     technical_requirements: List[str] = Field(description="List of technical requirements mentioned")
     business_requirements: List[str] = Field(description="List of business requirements mentioned")
+    product_categories: List[str] = Field(description="List of product categories needed (storage, server, workstation, networking, etc.)", default_factory=list)
+    search_terms: List[str] = Field(description="Key search terms for product discovery", default_factory=list)
     budget_range: Optional[str] = Field(description="Budget range if mentioned")
     timeline: Optional[str] = Field(description="Timeline if mentioned")
     company_size: Optional[str] = Field(description="Company size if mentioned")

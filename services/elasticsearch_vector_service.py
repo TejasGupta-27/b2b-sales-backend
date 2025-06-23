@@ -483,6 +483,9 @@ class ElasticsearchVectorService:
                 try:
                     logger.info(f"Processing file: {json_file.name}")
                     
+                    # Extract category from filename
+                    category_from_file = self._extract_category_from_filename(json_file.name)
+                    
                     with open(json_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     
@@ -495,7 +498,7 @@ class ElasticsearchVectorService:
                         for item in items:
                             if self._is_product_data(item):
                                 # Process through main elasticsearch service first for enrichment
-                                enriched_product = await self._enrich_product_data(item)
+                                enriched_product = await self._enrich_product_data_with_category(item, category_from_file)
                                 await self.index_product(enriched_product)
                                 file_products += 1
                             elif self._is_solution_data(item):
@@ -508,7 +511,7 @@ class ElasticsearchVectorService:
                             for product in products:
                                 if self._is_valid_product(product):
                                     # Process through main elasticsearch service first for enrichment
-                                    enriched_product = await self._enrich_product_data(product)
+                                    enriched_product = await self._enrich_product_data_with_category(product, category_from_file)
                                     await self.index_product(enriched_product)
                                     file_products += 1
                         
@@ -561,23 +564,116 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to load data with vectors: {e}")
             raise
     
+    def _extract_category_from_filename(self, filename: str) -> str:
+        """Extract category from filename more intelligently"""
+        # Remove .json extension and convert to lowercase
+        name = filename.replace('.json', '').lower()
+        
+        # Map filename patterns to categories
+        if any(term in name for term in ['internal-hard-drive', 'external-hard-drive', 'storage']):
+            return 'storage'
+        elif any(term in name for term in ['cpu', 'processor']):
+            return 'cpu'
+        elif any(term in name for term in ['video-card', 'graphics']):
+            return 'graphics'
+        elif any(term in name for term in ['motherboard']):
+            return 'motherboard'
+        elif any(term in name for term in ['memory', 'ram']):
+            return 'memory'
+        elif any(term in name for term in ['monitor', 'display']):
+            return 'monitor'
+        elif any(term in name for term in ['keyboard', 'mouse', 'headphone', 'speaker']):
+            return 'peripheral'
+        elif any(term in name for term in ['case', 'chassis']):
+            return 'case'
+        elif any(term in name for term in ['power-supply', 'psu']):
+            return 'power'
+        elif any(term in name for term in ['cpu-cooler', 'fan', 'thermal']):
+            return 'cooling'
+        elif any(term in name for term in ['wireless-network-card', 'wired-network-card']):
+            return 'networking'
+        elif any(term in name for term in ['sound-card', 'audio']):
+            return 'audio'
+        elif any(term in name for term in ['optical-drive']):
+            return 'optical'
+        elif any(term in name for term in ['webcam', 'camera']):
+            return 'peripheral'
+        elif any(term in name for term in ['ups', 'uninterruptible']):
+            return 'power'
+        elif any(term in name for term in ['os', 'operating-system']):
+            return 'software'
+        
+        return 'general'
+    
     def _is_product_data(self, item: Dict[str, Any]) -> bool:
-        """Check if item is product data"""
-        product_indicators = ['product_name', 'category', 'price', 'specifications']
-        return any(key in item for key in product_indicators)
+        """Check if item is product data - improved validation"""
+        # Check for required fields that indicate a product
+        required_fields = ['name']
+        if not all(field in item for field in required_fields):
+            return False
+        
+        # Check for product-specific indicators
+        product_indicators = [
+            'price', 'capacity', 'type', 'form_factor', 'interface', 
+            'cache', 'specifications', 'category'
+        ]
+        
+        # Must have at least 2 product indicators
+        indicator_count = sum(1 for indicator in product_indicators if indicator in item)
+        return indicator_count >= 2
     
     def _is_solution_data(self, item: Dict[str, Any]) -> bool:
-        """Check if item is solution data"""
-        solution_indicators = ['solution_name', 'use_case', 'industry', 'components']
-        return any(key in item for key in solution_indicators)
+        """Check if item is solution data - improved validation"""
+        # Check for required fields that indicate a solution
+        required_fields = ['name']
+        if not all(field in item for field in required_fields):
+            return False
+        
+        # Check for solution-specific indicators
+        solution_indicators = [
+            'use_case', 'industry', 'components', 'total_price', 
+            'implementation_time', 'benefits', 'requirements'
+        ]
+        
+        # Must have at least 2 solution indicators
+        indicator_count = sum(1 for indicator in solution_indicators if indicator in item)
+        return indicator_count >= 2
     
     def _is_valid_product(self, product: Dict[str, Any]) -> bool:
-        """Validate product data"""
-        return bool(product.get('name') or product.get('product_name'))
+        """Validate product data - improved validation"""
+        # Must have a name
+        if not product.get('name'):
+            return False
+        
+        # Must have at least one of: price, capacity, type, specifications
+        core_fields = ['price', 'capacity', 'type', 'specifications']
+        if not any(field in product for field in core_fields):
+            return False
+        
+        return True
     
     def _is_valid_solution(self, solution: Dict[str, Any]) -> bool:
-        """Validate solution data"""
-        return bool(solution.get('name') or solution.get('solution_name'))
+        """Validate solution data - improved validation"""
+        # Must have a name and description
+        if not solution.get('name') or not solution.get('description'):
+            return False
+        
+        return True
+
+    async def _enrich_product_data_with_category(self, raw_product: Dict[str, Any], category: str) -> Dict[str, Any]:
+        """Enrich raw product data with explicit category"""
+        from services.elasticsearch_service import get_elasticsearch_service
+        
+        # Get the main elasticsearch service
+        es_service = get_elasticsearch_service()
+        
+        # Set the category explicitly
+        raw_product['category'] = category
+        
+        # Use the main service's data processing logic
+        enriched_product = es_service._process_product_data(raw_product.copy(), category)
+        
+        return enriched_product
     
     async def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about vector indices"""
@@ -618,18 +714,6 @@ class ElasticsearchVectorService:
     async def close(self):
         """Close Elasticsearch connection"""
         await self.client.close()
-
-    async def _enrich_product_data(self, raw_product: Dict[str, Any]) -> Dict[str, Any]:
-        """Enrich raw product data using the main elasticsearch service logic"""
-        from services.elasticsearch_service import get_elasticsearch_service
-        
-        # Get the main elasticsearch service
-        es_service = get_elasticsearch_service()
-        
-        # Use the main service's data processing logic
-        enriched_product = es_service._process_product_data(raw_product.copy())
-        
-        return enriched_product
 
     async def sync_with_main_service(self):
         """Sync vector index with enriched data from main elasticsearch service"""

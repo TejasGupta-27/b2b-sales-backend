@@ -625,6 +625,12 @@ class ElasticsearchService:
         for file_path in product_files:
             try:
                 print(f"📄 Processing file: {file_path}")
+                
+                # Extract category from filename (remove .json extension)
+                category_from_file = file_path.stem.lower()
+                # Clean up category name (replace hyphens with spaces, etc.)
+                category = self._normalize_category_name(category_from_file)
+                
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 
@@ -633,13 +639,13 @@ class ElasticsearchService:
                 if isinstance(data, list):
                     for item in data:
                         if self._is_valid_product(item):
-                            processed_product = self._process_product_data(item)
+                            processed_product = self._process_product_data(item, category)
                             await self.index_product(processed_product)
                             loaded_count += 1
                             file_loaded += 1
                 elif isinstance(data, dict):
                     if self._is_valid_product(data):
-                        processed_product = self._process_product_data(data)
+                        processed_product = self._process_product_data(data, category)
                         await self.index_product(processed_product)
                         loaded_count += 1
                         file_loaded += 1
@@ -647,32 +653,61 @@ class ElasticsearchService:
                         # Handle nested structure like {"products": [...]}
                         for item in data['products']:
                             if self._is_valid_product(item):
-                                processed_product = self._process_product_data(item)
+                                processed_product = self._process_product_data(item, category)
                                 await self.index_product(processed_product)
                                 loaded_count += 1
                                 file_loaded += 1
                             
-                print(f"✅ Loaded {file_loaded} products from {file_path}")
+                print(f"✅ Loaded {file_loaded} products from {file_path} as category '{category}'")
             except Exception as e:
                 print(f"❌ Failed to load products from {file_path}: {e}")
         
         print(f"📊 Total products loaded: {loaded_count}")
         return loaded_count
 
+    def _normalize_category_name(self, filename: str) -> str:
+        """Convert filename to a normalized category name"""
+        # Convert filename to readable category
+        category_mapping = {
+            'internal-hard-drive': 'storage',
+            'external-hard-drive': 'storage',
+            'video-card': 'graphics',
+            'cpu-cooler': 'cooling',
+            'case-fan': 'cooling',
+            'fan-controller': 'cooling',
+            'thermal-paste': 'cooling',
+            'power-supply': 'power',
+            'case-accessory': 'case',
+            'wireless-network-card': 'networking',
+            'wired-network-card': 'networking',
+            'sound-card': 'audio',
+            'os': 'software'
+        }
+        
+        # Use mapping if available, otherwise clean up the filename
+        if filename in category_mapping:
+            return category_mapping[filename]
+        else:
+            # Replace hyphens with spaces and return as-is
+            return filename.replace('-', ' ')
+
     def _is_valid_product(self, item: Dict[str, Any]) -> bool:
         """Check if item has minimum required fields for a product"""
         required_fields = ['name']  # Minimum requirement
         return all(field in item for field in required_fields)
 
-    def _process_product_data(self, raw_product: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_product_data(self, raw_product: Dict[str, Any], category: str = None) -> Dict[str, Any]:
         """Process and normalize product data for Elasticsearch"""
         
         # Generate ID if missing
         if 'id' not in raw_product:
             raw_product['id'] = self._generate_product_id(raw_product)
         
-        # Normalize category
-        if 'category' not in raw_product:
+        # Set category from file-based detection (much more reliable)
+        if category:
+            raw_product['category'] = category
+        elif 'category' not in raw_product:
+            # Fallback to inference only if no category provided
             raw_product['category'] = self._infer_category(raw_product)
         
         # Ensure price is float
@@ -926,24 +961,35 @@ class ElasticsearchService:
         return f"{text}-{hash_suffix}"
 
     def _infer_category(self, product: Dict[str, Any]) -> str:
-        """Infer product category from name and description"""
+        """Infer product category from product data as fallback"""
         name = product.get('name', '').lower()
         description = product.get('description', '').lower()
-        text = f"{name} {description}"
+        product_type = str(product.get('type', '')).lower()
         
-        # Category mapping
-        category_keywords = {
-            'workstation': ['workstation', 'desktop', 'pc', 'computer'],
-            'server': ['server', 'rack', 'blade'],
-            'storage': ['storage', 'nas', 'san', 'disk', 'drive', 'raid'],
-            'networking': ['switch', 'router', 'firewall', 'network', 'ethernet'],
-            'monitor': ['monitor', 'display', 'screen'],
-            'software': ['software', 'license', 'application', 'program']
-        }
+        # Combine available text for simple keyword matching
+        text = f"{name} {description} {product_type}"
         
-        for category, keywords in category_keywords.items():
-            if any(keyword in text for keyword in keywords):
-                return category
+        # Simple keyword-based detection for fallback cases
+        if any(term in text for term in ['ssd', 'hdd', 'drive', 'storage', 'nas', 'raid']):
+            return 'storage'
+        elif any(term in text for term in ['cpu', 'processor', 'intel', 'amd']):
+            return 'cpu'
+        elif any(term in text for term in ['gpu', 'graphics', 'video', 'rtx', 'gtx']):
+            return 'graphics'
+        elif any(term in text for term in ['motherboard', 'mainboard', 'mobo']):
+            return 'motherboard'
+        elif any(term in text for term in ['memory', 'ram', 'ddr']):
+            return 'memory'
+        elif any(term in text for term in ['monitor', 'display', 'screen']):
+            return 'monitor'
+        elif any(term in text for term in ['keyboard', 'mouse', 'headphone', 'speaker']):
+            return 'peripheral'
+        elif any(term in text for term in ['case', 'chassis', 'tower']):
+            return 'case'
+        elif any(term in text for term in ['power', 'psu', 'supply']):
+            return 'power'
+        elif any(term in text for term in ['cooler', 'cooling', 'fan']):
+            return 'cooling'
         
         return 'general'
 
