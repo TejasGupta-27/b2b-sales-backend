@@ -230,7 +230,7 @@ class HybridProductRetrieverAgent(AIProvider):
         messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Extract requirements using the base provider"""
+        """Extract requirements using the base provider, and auto-fill technical requirements if missing or too generic"""
         
         try:
             conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
@@ -261,7 +261,44 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             )
             
             requirements_dict = requirements.model_dump()
-            
+
+            # --- AUTO-FILL TECHNICAL REQUIREMENTS IF MISSING OR TOO GENERIC ---
+            tech_reqs = requirements_dict.get('technical_requirements', [])
+            generic_terms = {'standard performance', 'basic specifications', 'standard', 'basic', 'default', 'none', ''}
+            needs_autofill = (
+                not tech_reqs or
+                all(str(req).strip().lower() in generic_terms for req in tech_reqs)
+            )
+            if needs_autofill:
+                # Build a prompt to infer technical specs from use case and conversation
+                use_case = requirements_dict.get('use_case', '')
+                autofill_prompt = f"""You are a technical solutions expert. The user was unable to specify detailed technical requirements. Based on the following use case and conversation, infer the most appropriate technical specifications (CPU, GPU, RAM, storage, PSU, etc.) for a system that would fully satisfy the user's needs. Be as specific as possible.
+
+USE CASE: {use_case or 'Not specified'}
+
+CONVERSATION:
+{conversation_text}
+
+Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA RTX 4080 or better')."""
+                print("🤖 Auto-filling technical requirements using LLM...")
+                autofill_response = await self.base_provider.generate_response([
+                    AIMessage(role="user", content=autofill_prompt)
+                ])
+                # Parse the response into a list
+                import re
+                lines = [line.strip('-•* 	') for line in autofill_response.content.split('\n') if line.strip()]
+                # Only keep lines that look like specs
+                filled_tech_reqs = [line for line in lines if ':' in line or re.search(r'\d', line)]
+                if filled_tech_reqs:
+                    requirements_dict['technical_requirements'] = filled_tech_reqs
+                    requirements_dict['technical_requirements_autofilled'] = True
+                    print(f"✅ Auto-filled technical requirements: {filled_tech_reqs}")
+                else:
+                    print("⚠️ LLM did not return detailed technical requirements. Keeping original.")
+                    requirements_dict['technical_requirements_autofilled'] = False
+            else:
+                requirements_dict['technical_requirements_autofilled'] = False
+
             # Build search query for semantic search
             semantic_query = self._build_semantic_search_query(requirements_dict)
             requirements_dict['semantic_query'] = semantic_query

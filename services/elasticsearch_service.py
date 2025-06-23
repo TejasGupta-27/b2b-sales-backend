@@ -1254,7 +1254,7 @@ class ElasticsearchService:
         if categories:
             # Add categories as search terms with high boost, not as filters
             for category in categories:
-                search_body["query"]["bool"]["should"].append({
+            search_body["query"]["bool"]["should"].append({
                     "multi_match": {
                         "query": category,
                         "fields": [
@@ -1266,8 +1266,8 @@ class ElasticsearchService:
                         ],
                         "type": "best_fields",
                         "boost": 2.0  # High boost for category matches
-                    }
-                })
+                }
+            })
         
         # Filter out products with zero price (likely incomplete data)
         search_body["query"]["bool"]["must_not"].append({
@@ -1389,13 +1389,13 @@ class ElasticsearchService:
             
             print(f"🔄 Broader search query: {search_query}")
             
-            search_body = {
-                "query": {
+                search_body = {
+                    "query": {
                     "bool": {
                         "should": [
                             # Multi-match across all relevant fields
                             {
-                                "multi_match": {
+                        "multi_match": {
                                     "query": search_query,
                                     "fields": [
                                         "name^3",
@@ -1406,10 +1406,10 @@ class ElasticsearchService:
                                         "use_cases^1.2"
                                     ],
                                     "type": "best_fields",
-                                    "fuzziness": "AUTO",
-                                    "operator": "or"
-                                }
-                            },
+                            "fuzziness": "AUTO",
+                            "operator": "or"
+                        }
+                    },
                             # Also try phrase matching for better precision
                             {
                                 "multi_match": {
@@ -1433,31 +1433,31 @@ class ElasticsearchService:
                     {"_score": {"order": "desc"}},
                     {"price": {"order": "asc"}}  # Prefer lower prices when scores are similar
                 ]
-            }
-            
-            response = await self.client.search(
-                index=self.products_index,
-                body=search_body,
-                ignore_unavailable=True
-            )
-            
-            results = []
-            for hit in response.get('hits', {}).get('hits', []):
-                product = hit['_source']
-                if product.get('price', 0) > 0:  # Only include products with prices
-                    product['_score'] = hit['_score']
-                    results.append(product)
-            
+                }
+                
+                response = await self.client.search(
+                    index=self.products_index,
+                    body=search_body,
+                    ignore_unavailable=True
+                )
+                
+                results = []
+                for hit in response.get('hits', {}).get('hits', []):
+                    product = hit['_source']
+                    if product.get('price', 0) > 0:  # Only include products with prices
+                        product['_score'] = hit['_score']
+                        results.append(product)
+                
             # Take top results based on original size
             results = results[:size]
             
-            print(f"✅ Broader search found {len(results)} products")
+                print(f"✅ Broader search found {len(results)} products")
             if results:
                 print("🔍 Top broader search results:")
                 for i, product in enumerate(results[:3]):
                     print(f"  {i+1}. {product.get('name')} (Category: {product.get('category')}, Price: ${product.get('price', 0)}, Score: {product.get('_score', 0):.2f})")
             
-            return results
+                return results
             
         except Exception as e:
             print(f"❌ Broader fallback search failed: {e}")

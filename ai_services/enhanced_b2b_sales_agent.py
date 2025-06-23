@@ -1025,7 +1025,7 @@ APPROACH:
                     if features and isinstance(features, list):
                         key_features = features[:3]  # Show top 3 features
                         context += f"     ✨ Features: {', '.join(key_features)}\n"
-                    
+                
                     context += "\n"
         
         # Add confidence and method info
