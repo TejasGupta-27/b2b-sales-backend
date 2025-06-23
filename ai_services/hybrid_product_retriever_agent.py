@@ -17,6 +17,8 @@ class HybridProductRetrieverAgent(AIProvider):
         base_provider: AIProvider,
         azure_embedding_endpoint: str,
         azure_embedding_key: str,
+        rrf_k: int = 60,  # RRF parameter - lower values favor top-ranked results more
+        rrf_weights: Dict[str, float] = None,  # Optional weights for different search methods
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -26,6 +28,8 @@ class HybridProductRetrieverAgent(AIProvider):
             azure_embedding_endpoint, 
             azure_embedding_key
         )
+        self.rrf_k = rrf_k
+        self.rrf_weights = rrf_weights or {"elasticsearch": 1.0, "vector": 1.0}
         
     @property
     def provider_name(self) -> str:
@@ -61,9 +65,9 @@ class HybridProductRetrieverAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Analyze conversation and retrieve products using hybrid approach"""
+        """Analyze conversation and retrieve products using hybrid approach with RRF"""
         
-        print("🔍 Hybrid Retriever Agent: Starting hybrid analysis...")
+        print("🔍 Hybrid Retriever Agent: Starting hybrid analysis with RRF...")
         
         # Step 1: Extract requirements
         requirements = await self._extract_requirements_from_conversation(
@@ -73,7 +77,11 @@ class HybridProductRetrieverAgent(AIProvider):
         # Step 2: Perform hybrid search
         hybrid_results = await self._perform_hybrid_search(requirements)
         
-        # Step 3: Analyze and rank results
+        # Step 3: Analyze RRF performance
+        rrf_analysis = self.analyze_rrf_performance(hybrid_results["products"])
+        rrf_tuning = self.suggest_rrf_tuning(rrf_analysis)
+        
+        # Step 4: Analyze and rank results
         analysis = await self._analyze_hybrid_recommendations(
             hybrid_results["products"], 
             hybrid_results["solutions"], 
@@ -86,6 +94,8 @@ class HybridProductRetrieverAgent(AIProvider):
             "solutions": hybrid_results["solutions"],
             "analysis": analysis,
             "search_methods": hybrid_results["search_methods"],
+            "rrf_analysis": rrf_analysis,
+            "rrf_tuning_suggestions": rrf_tuning,
             "retrieval_confidence": self._calculate_hybrid_confidence(hybrid_results, requirements)
         }
     
@@ -280,64 +290,121 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             print(f"❌ Elasticsearch vector solution search failed: {e}")
             return []
     
+    def _merge_product_results_with_rrf(
+        self, 
+        elasticsearch_products: List[Dict], 
+        vector_products: List[Dict],
+        k: int = None,  # RRF parameter - controls the balance between rank and score
+        weights: Dict[str, float] = None  # Optional weights for different search methods
+    ) -> List[Dict]:
+        """Merge product results using Reciprocal Rank Fusion (RRF) with optional weighting"""
+        
+        # Use instance defaults if not provided
+        k = k or self.rrf_k
+        weights = weights or self.rrf_weights
+        
+        print(f"🔀 Starting RRF merge process...")
+        print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
+        print(f"   RRF parameter k: {k}")
+        print(f"   Weights: ES={weights.get('elasticsearch', 1.0):.2f}, Vector={weights.get('vector', 1.0):.2f}")
+        
+        # Step 1: Create rank mappings for each search method
+        es_ranks = {}  # product_id -> rank (1-based)
+        vector_ranks = {}  # product_id -> rank (1-based)
+        
+        # Build Elasticsearch rank mapping
+        for rank, product in enumerate(elasticsearch_products, 1):
+            product_id = product.get('id', '')
+            if product_id:
+                es_ranks[product_id] = rank
+                print(f"   📋 ES Rank {rank}: {product.get('name', 'Unknown')} (Score: {product.get('_score', 0):.3f})")
+        
+        # Build Vector search rank mapping
+        for rank, product in enumerate(vector_products, 1):
+            product_id = product.get('id', '')
+            if product_id:
+                vector_ranks[product_id] = rank
+                print(f"   🧠 Vector Rank {rank}: {product.get('name', 'Unknown')} (Score: {product.get('_similarity_score', 0):.3f})")
+        
+        # Step 2: Collect all unique products
+        all_products = {}
+        
+        # Add Elasticsearch products
+        for product in elasticsearch_products:
+            product_id = product.get('id', '')
+            if product_id:
+                product_copy = product.copy()
+                product_copy['search_source'] = 'elasticsearch'
+                product_copy['keyword_score'] = product.get('_score', 0)
+                product_copy['semantic_score'] = 0
+                product_copy['es_rank'] = es_ranks[product_id]
+                product_copy['vector_rank'] = None
+                all_products[product_id] = product_copy
+        
+        # Add/merge Vector products
+        for product in vector_products:
+            product_id = product.get('id', '')
+            if product_id:
+                similarity_score = product.get('_similarity_score', product.get('_score', 0))
+                
+                if product_id in all_products:
+                    # Product found in both sources
+                    all_products[product_id]['search_source'] = 'both'
+                    all_products[product_id]['semantic_score'] = similarity_score
+                    all_products[product_id]['vector_rank'] = vector_ranks[product_id]
+                    print(f"   🔗 Found in both: {product.get('name', 'Unknown')}")
+                else:
+                    # Only found in vector search
+                    product_copy = product.copy()
+                    product_copy['search_source'] = 'vector'
+                    product_copy['keyword_score'] = 0
+                    product_copy['semantic_score'] = similarity_score
+                    product_copy['es_rank'] = None
+                    product_copy['vector_rank'] = vector_ranks[product_id]
+                    all_products[product_id] = product_copy
+        
+        # Step 3: Calculate weighted RRF scores
+        print(f"\n🧮 Calculating weighted RRF scores (k={k})...")
+        
+        for product_id, product in all_products.items():
+            rrf_score = 0.0
+            score_components = []
+            
+            # Add Elasticsearch contribution with weight
+            if product['es_rank'] is not None:
+                es_contribution = weights.get('elasticsearch', 1.0) / (k + product['es_rank'])
+                rrf_score += es_contribution
+                score_components.append(f"ES: {weights.get('elasticsearch', 1.0):.2f}/({k}+{product['es_rank']}) = {es_contribution:.4f}")
+            
+            # Add Vector search contribution with weight
+            if product['vector_rank'] is not None:
+                vector_contribution = weights.get('vector', 1.0) / (k + product['vector_rank'])
+                rrf_score += vector_contribution
+                score_components.append(f"Vector: {weights.get('vector', 1.0):.2f}/({k}+{product['vector_rank']}) = {vector_contribution:.4f}")
+            
+            product['rrf_score'] = rrf_score
+            product['rrf_components'] = score_components
+            
+            print(f"   📊 {product.get('name', 'Unknown')[:30]}: RRF={rrf_score:.4f} [{', '.join(score_components)}]")
+        
+        # Step 4: Sort by RRF score and return results
+        result = sorted(all_products.values(), key=lambda x: x['rrf_score'], reverse=True)
+        
+        print(f"\n🎯 RRF merge complete: {len(result)} unique products")
+        print(f"   Top 10 RRF results:")
+        for i, product in enumerate(result[:10]):
+            source_icon = {"elasticsearch": "📋", "vector": "🧠", "both": "🔗"}.get(product['search_source'], "❓")
+            print(f"     {i+1}. {source_icon} {product.get('name', 'Unknown')[:40]} (RRF: {product['rrf_score']:.4f})")
+        
+        return result[:20]  # Top 20 results
+    
     def _merge_product_results(
         self, 
         elasticsearch_products: List[Dict], 
         vector_products: List[Dict]
     ) -> List[Dict]:
-        """Merge and deduplicate product results from both sources"""
-        
-        print(f"🔀 Starting merge process...")
-        print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
-        
-        merged = {}
-        
-        # Add Elasticsearch results with keyword score
-        for i, product in enumerate(elasticsearch_products):
-            product_id = product.get('id', '')
-            product_name = product.get('name', 'Unknown')
-            if product_id:
-                product['search_source'] = 'elasticsearch'
-                product['keyword_score'] = product.get('_score', 0)
-                product['semantic_score'] = 0
-                merged[product_id] = product
-                print(f"   📋 ES {i+1}: {product_name} (ID: {product_id}, Score: {product.get('_score', 0)})")
-        
-        # Add vector results with semantic score
-        for i, product in enumerate(vector_products):
-            product_id = product.get('id', '')
-            product_name = product.get('name', 'Unknown')
-            if product_id:
-                similarity_score = product.get('_similarity_score', 0)
-                if product_id in merged:
-                    # Product found in both sources - combine scores
-                    merged[product_id]['search_source'] = 'both'
-                    merged[product_id]['semantic_score'] = similarity_score
-                    # Calculate combined score
-                    keyword_score = merged[product_id].get('keyword_score', 0)
-                    merged[product_id]['hybrid_score'] = (keyword_score * 0.4) + (similarity_score * 0.6)
-                    print(f"   🔗 Both {i+1}: {product_name} (ID: {product_id}, Combined)")
-                else:
-                    # Only found in vector
-                    product['search_source'] = 'vector'
-                    product['keyword_score'] = 0
-                    product['semantic_score'] = similarity_score
-                    product['hybrid_score'] = similarity_score
-                    merged[product_id] = product
-                    print(f"   🧠 Vector {i+1}: {product_name} (ID: {product_id}, Score: {similarity_score})")
-            else:
-                print(f"   ⚠️ Vector product {i+1} missing ID: {product_name}")
-        
-        # Convert back to list and sort by hybrid score
-        result = list(merged.values())
-        result.sort(key=lambda x: x.get('hybrid_score', x.get('_score', 0)), reverse=True)
-        
-        print(f"🎯 Merge complete: {len(result)} unique products")
-        print(f"   Top 5 results:")
-        for i, product in enumerate(result[:5]):
-            print(f"     {i+1}. {product.get('name', 'Unknown')} (Score: {product.get('hybrid_score', product.get('_score', 0)):.3f})")
-        
-        return result[:20]  # Top 20 results
+        """Merge and deduplicate product results using RRF (wrapper for backward compatibility)"""
+        return self._merge_product_results_with_rrf(elasticsearch_products, vector_products)
     
     async def _analyze_hybrid_recommendations(
         self, 
@@ -378,34 +445,156 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 "total_estimated_value": 0
             }
     
+    def analyze_rrf_performance(self, merged_results: List[Dict]) -> Dict[str, Any]:
+        """Analyze the performance and distribution of RRF results"""
+        
+        if not merged_results:
+            return {"error": "No results to analyze"}
+        
+        # Count by search source
+        source_counts = {"elasticsearch": 0, "vector": 0, "both": 0}
+        rrf_scores = []
+        
+        for result in merged_results:
+            source = result.get('search_source', 'unknown')
+            if source in source_counts:
+                source_counts[source] += 1
+            rrf_scores.append(result.get('rrf_score', 0))
+        
+        # Calculate statistics
+        avg_rrf_score = sum(rrf_scores) / len(rrf_scores) if rrf_scores else 0
+        max_rrf_score = max(rrf_scores) if rrf_scores else 0
+        min_rrf_score = min(rrf_scores) if rrf_scores else 0
+        
+        # Calculate diversity (how well RRF is combining different sources)
+        diversity_score = source_counts['both'] / len(merged_results) if merged_results else 0
+        
+        analysis = {
+            "total_results": len(merged_results),
+            "source_distribution": source_counts,
+            "diversity_score": diversity_score,  # Higher is better (more overlap)
+            "rrf_score_stats": {
+                "average": avg_rrf_score,
+                "max": max_rrf_score,
+                "min": min_rrf_score,
+                "range": max_rrf_score - min_rrf_score
+            },
+            "top_3_results": [
+                {
+                    "name": result.get('name', 'Unknown'),
+                    "source": result.get('search_source'),
+                    "rrf_score": result.get('rrf_score', 0),
+                    "es_rank": result.get('es_rank'),
+                    "vector_rank": result.get('vector_rank')
+                }
+                for result in merged_results[:3]
+            ]
+        }
+        
+        return analysis
+    
+    def suggest_rrf_tuning(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Suggest RRF parameter tuning based on performance analysis"""
+        
+        suggestions = []
+        
+        diversity_score = analysis.get('diversity_score', 0)
+        source_dist = analysis.get('source_distribution', {})
+        
+        # Analyze diversity
+        if diversity_score < 0.1:
+            suggestions.append({
+                "issue": "Low diversity - results mostly from single source",
+                "suggestion": "Consider adjusting search parameters or RRF weights to get more overlap",
+                "current_k": self.rrf_k,
+                "suggested_k": max(30, self.rrf_k - 20)  # Lower k gives more weight to top results
+            })
+        elif diversity_score > 0.8:
+            suggestions.append({
+                "issue": "Very high overlap - might be missing unique results",
+                "suggestion": "Consider increasing search size or adjusting filters",
+                "current_k": self.rrf_k,
+                "suggested_k": min(100, self.rrf_k + 20)  # Higher k spreads weight more evenly
+            })
+        
+        # Analyze source balance
+        total_results = analysis.get('total_results', 0)
+        if total_results > 0:
+            es_ratio = source_dist.get('elasticsearch', 0) / total_results
+            vector_ratio = source_dist.get('vector', 0) / total_results
+            
+            if es_ratio > 0.7:
+                suggestions.append({
+                    "issue": "Elasticsearch results dominating",
+                    "suggestion": "Increase vector search weight",
+                    "current_weights": self.rrf_weights,
+                    "suggested_weights": {
+                        "elasticsearch": max(0.5, self.rrf_weights.get('elasticsearch', 1.0) - 0.3),
+                        "vector": min(2.0, self.rrf_weights.get('vector', 1.0) + 0.5)
+                    }
+                })
+            elif vector_ratio > 0.7:
+                suggestions.append({
+                    "issue": "Vector search results dominating",
+                    "suggestion": "Increase elasticsearch search weight",
+                    "current_weights": self.rrf_weights,
+                    "suggested_weights": {
+                        "elasticsearch": min(2.0, self.rrf_weights.get('elasticsearch', 1.0) + 0.5),
+                        "vector": max(0.5, self.rrf_weights.get('vector', 1.0) - 0.3)
+                    }
+                })
+        
+        return {
+            "suggestions": suggestions,
+            "current_config": {
+                "rrf_k": self.rrf_k,
+                "rrf_weights": self.rrf_weights
+            }
+        }
+    
     def _calculate_hybrid_confidence(
         self, 
         hybrid_results: Dict[str, Any], 
         requirements: Dict[str, Any]
     ) -> float:
-        """Calculate confidence based on hybrid search results"""
+        """Calculate confidence based on RRF hybrid search results"""
         
         score = 0.0
         
         products = hybrid_results.get('products', [])
         solutions = hybrid_results.get('solutions', [])
-        search_methods = hybrid_results.get('search_methods', {})
         
         # Base score for finding results
         if products:
-            score += 0.4
+            score += 0.3
         if solutions:
-            score += 0.2
+            score += 0.1
         
-        # Bonus for hybrid matches (found in both sources)
-        hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
-        if hybrid_matches > 0:
-            score += 0.3 * min(hybrid_matches / 5, 1.0)  # Up to 30% bonus
-        
-        # Bonus for high semantic similarity
-        high_semantic_products = len([p for p in products if p.get('semantic_score', 0) > 0.8])
-        if high_semantic_products > 0:
-            score += 0.2 * min(high_semantic_products / 3, 1.0)  # Up to 20% bonus
+        if products:
+            # Analyze RRF performance
+            rrf_analysis = self.analyze_rrf_performance(products)
+            
+            # Bonus for diversity (products found in both sources)
+            diversity_score = rrf_analysis.get('diversity_score', 0)
+            score += 0.3 * diversity_score
+            
+            # Bonus for high RRF scores (indicates strong ranking agreement)
+            avg_rrf_score = rrf_analysis.get('rrf_score_stats', {}).get('average', 0)
+            if avg_rrf_score > 0.02:  # Threshold for "good" RRF scores
+                score += 0.2 * min(avg_rrf_score / 0.05, 1.0)  # Up to 20% bonus
+            
+            # Bonus for balanced source distribution
+            source_dist = rrf_analysis.get('source_distribution', {})
+            total_results = rrf_analysis.get('total_results', 0)
+            if total_results > 0:
+                # Calculate balance score (closer to 0.5 is better for each source)
+                es_ratio = source_dist.get('elasticsearch', 0) / total_results
+                vector_ratio = source_dist.get('vector', 0) / total_results
+                both_ratio = source_dist.get('both', 0) / total_results
+                
+                # Reward balanced distribution
+                balance_score = 1.0 - abs(es_ratio - vector_ratio)
+                score += 0.1 * balance_score * both_ratio  # Weighted by overlap
         
         return min(score, 1.0)
     

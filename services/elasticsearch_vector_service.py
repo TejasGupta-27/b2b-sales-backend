@@ -200,6 +200,20 @@ class ElasticsearchVectorService:
             if item.get("target_industries"):
                 industries = item["target_industries"] if isinstance(item["target_industries"], list) else [item["target_industries"]]
                 text_parts.append(f"Industries: {', '.join(industries)}")
+            
+            # Add specifications if they exist
+            specs = item.get("specifications", {})
+            if specs and isinstance(specs, dict):
+                spec_texts = []
+                for key, value in specs.items():
+                    if value:
+                        spec_texts.append(f"{key}: {value}")
+                if spec_texts:
+                    text_parts.append(f"Specifications: {', '.join(spec_texts)}")
+            
+            # Add search_text if it exists (from main elasticsearch service)
+            if item.get("search_text"):
+                text_parts.append(f"Additional info: {item['search_text']}")
                 
         else:  # solution
             if item.get("name"):
@@ -472,7 +486,9 @@ class ElasticsearchVectorService:
                         items = data[:max_per_file]
                         for item in items:
                             if self._is_product_data(item):
-                                await self.index_product(item)
+                                # Process through main elasticsearch service first for enrichment
+                                enriched_product = await self._enrich_product_data(item)
+                                await self.index_product(enriched_product)
                                 file_products += 1
                             elif self._is_solution_data(item):
                                 await self.index_solution(item)
@@ -483,7 +499,9 @@ class ElasticsearchVectorService:
                             products = data['products'][:max_per_file]
                             for product in products:
                                 if self._is_valid_product(product):
-                                    await self.index_product(product)
+                                    # Process through main elasticsearch service first for enrichment
+                                    enriched_product = await self._enrich_product_data(product)
+                                    await self.index_product(enriched_product)
                                     file_products += 1
                         
                         if 'solutions' in data:
@@ -592,6 +610,55 @@ class ElasticsearchVectorService:
     async def close(self):
         """Close Elasticsearch connection"""
         await self.client.close()
+
+    async def _enrich_product_data(self, raw_product: Dict[str, Any]) -> Dict[str, Any]:
+        """Enrich raw product data using the main elasticsearch service logic"""
+        from services.elasticsearch_service import get_elasticsearch_service
+        
+        # Get the main elasticsearch service
+        es_service = get_elasticsearch_service()
+        
+        # Use the main service's data processing logic
+        enriched_product = es_service._process_product_data(raw_product.copy())
+        
+        return enriched_product
+
+    async def sync_with_main_service(self):
+        """Sync vector index with enriched data from main elasticsearch service"""
+        try:
+            from services.elasticsearch_service import get_elasticsearch_service
+            
+            logger.info("🔄 Syncing vector index with main elasticsearch service...")
+            
+            es_service = get_elasticsearch_service()
+            
+            # Get all products from main service
+            search_body = {"query": {"match_all": {}}, "size": 1000}
+            response = await es_service.client.search(index=es_service.products_index, body=search_body)
+            
+            products = [hit["_source"] for hit in response["hits"]["hits"]]
+            
+            logger.info(f"Found {len(products)} products in main service to sync")
+            
+            # Index each product with vector embeddings
+            synced_count = 0
+            for product in products:
+                try:
+                    await self.index_product(product)
+                    synced_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to sync product {product.get('id', 'unknown')}: {e}")
+            
+            # Refresh vector index
+            await self.client.indices.refresh(index=self.products_index)
+            
+            logger.info(f"✅ Successfully synced {synced_count} products to vector index")
+            
+            return {"synced_products": synced_count}
+            
+        except Exception as e:
+            logger.error(f"Failed to sync with main service: {e}")
+            raise
 
 # Global instance
 _elasticsearch_vector_service = None

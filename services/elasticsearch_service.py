@@ -674,6 +674,9 @@ class ElasticsearchService:
             except (ValueError, TypeError):
                 raw_product['price'] = 0.0
         
+        # Generate rich descriptive content for vector search
+        raw_product = self._enrich_product_content(raw_product)
+        
         # Normalize tags
         if 'tags' not in raw_product:
             raw_product['tags'] = self._generate_tags(raw_product)
@@ -690,6 +693,219 @@ class ElasticsearchService:
         raw_product['search_text'] = self._build_search_text(raw_product)
         
         return raw_product
+
+    def _enrich_product_content(self, product: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate rich descriptive content for better vector search"""
+        
+        name = product.get('name', '')
+        category = product.get('category', 'general')
+        specs = product.get('specifications', {})
+        
+        # Generate description if missing
+        if not product.get('description'):
+            product['description'] = self._generate_description(name, category, specs)
+        
+        # Generate features if missing
+        if not product.get('features'):
+            product['features'] = self._generate_features(name, category, specs)
+        
+        # Generate use cases if missing
+        if not product.get('use_cases'):
+            product['use_cases'] = self._generate_use_cases(name, category, specs)
+        
+        # Generate target industries if missing
+        if not product.get('target_industries'):
+            product['target_industries'] = self._generate_target_industries(category, specs)
+        
+        return product
+
+    def _generate_description(self, name: str, category: str, specs: Dict[str, Any]) -> str:
+        """Generate a descriptive description from product specs"""
+        
+        name_lower = name.lower()
+        description_parts = []
+        
+        # Base description based on category
+        if category == 'cpu' or 'cpu' in name_lower or 'processor' in name_lower:
+            core_count = specs.get('core_count', '')
+            clock_speed = specs.get('core_clock', specs.get('boost_clock', ''))
+            
+            if 'ryzen' in name_lower:
+                description_parts.append("High-performance AMD Ryzen processor")
+            elif 'intel' in name_lower:
+                description_parts.append("Advanced Intel processor")
+            else:
+                description_parts.append("High-performance processor")
+            
+            if core_count:
+                description_parts.append(f"featuring {core_count} cores")
+            if clock_speed:
+                description_parts.append(f"with {clock_speed}GHz performance")
+                
+            description_parts.append("designed for demanding computing tasks")
+            
+        elif category == 'workstation' or 'workstation' in name_lower:
+            description_parts.append("Professional workstation computer designed for high-performance computing tasks")
+            
+        elif category == 'server' or 'server' in name_lower:
+            description_parts.append("Enterprise-grade server solution for business applications and data processing")
+            
+        elif category == 'storage' or any(word in name_lower for word in ['storage', 'nas', 'drive']):
+            description_parts.append("Reliable storage solution for data management and backup")
+            
+        elif category == 'monitor' or 'monitor' in name_lower:
+            description_parts.append("High-quality display monitor for professional and gaming applications")
+            
+        else:
+            description_parts.append(f"Professional {category} component for computing systems")
+        
+        # Add technical specifications to description
+        if specs:
+            tech_details = []
+            for key, value in specs.items():
+                if value and key not in ['core_count', 'core_clock', 'boost_clock']:  # Already handled above
+                    tech_details.append(f"{key.replace('_', ' ')}: {value}")
+            
+            if tech_details:
+                description_parts.append(f"Technical specifications include {', '.join(tech_details[:3])}")
+        
+        return '. '.join(description_parts) + '.'
+
+    def _generate_features(self, name: str, category: str, specs: Dict[str, Any]) -> str:
+        """Generate features list from product specs"""
+        
+        name_lower = name.lower()
+        features = []
+        
+        # Category-specific features
+        if category == 'cpu' or 'cpu' in name_lower:
+            if specs.get('core_count'):
+                features.append(f"{specs['core_count']}-core architecture")
+            if specs.get('smt'):
+                features.append("Multi-threading support")
+            if specs.get('graphics'):
+                features.append(f"Integrated {specs['graphics']} graphics")
+            if specs.get('tdp'):
+                features.append(f"{specs['tdp']}W thermal design power")
+            
+            # Brand-specific features
+            if 'ryzen' in name_lower:
+                features.extend(["AMD Zen architecture", "Advanced power efficiency", "Precision Boost technology"])
+            elif 'intel' in name_lower:
+                features.extend(["Intel Turbo Boost", "Advanced instruction sets", "Enhanced security features"])
+        
+        elif category == 'workstation':
+            features.extend([
+                "Professional-grade components",
+                "High-performance computing capabilities",
+                "Optimized for productivity applications",
+                "Enterprise reliability and support"
+            ])
+        
+        elif category == 'server':
+            features.extend([
+                "Enterprise-class reliability",
+                "Scalable architecture",
+                "Remote management capabilities",
+                "High availability design"
+            ])
+        
+        # Add spec-based features
+        for key, value in specs.items():
+            if key == 'price' or not value:
+                continue
+            elif 'ssd' in str(value).lower():
+                features.append("Solid-state storage technology")
+            elif 'raid' in str(value).lower():
+                features.append("RAID storage protection")
+            elif 'ecc' in str(value).lower():
+                features.append("Error-correcting memory")
+        
+        return ', '.join(features) if features else f"High-quality {category} component"
+
+    def _generate_use_cases(self, name: str, category: str, specs: Dict[str, Any]) -> str:
+        """Generate use cases from product specs"""
+        
+        name_lower = name.lower()
+        use_cases = []
+        
+        # Category-specific use cases
+        if category == 'cpu' or 'cpu' in name_lower:
+            core_count = specs.get('core_count', 0)
+            
+            if isinstance(core_count, (int, str)) and str(core_count).isdigit():
+                core_count = int(core_count)
+                
+                if core_count >= 16:
+                    use_cases.extend([
+                        "High-end workstations",
+                        "Content creation and video editing",
+                        "3D rendering and CAD applications",
+                        "Server and virtualization workloads"
+                    ])
+                elif core_count >= 8:
+                    use_cases.extend([
+                        "Gaming and multimedia",
+                        "Professional workstations",
+                        "Software development",
+                        "Data analysis and processing"
+                    ])
+                elif core_count >= 4:
+                    use_cases.extend([
+                        "Office productivity",
+                        "Web browsing and media consumption",
+                        "Light gaming",
+                        "Small business applications"
+                    ])
+                else:
+                    use_cases.extend([
+                        "Basic computing tasks",
+                        "Office applications",
+                        "Web browsing",
+                        "Budget-friendly builds"
+                    ])
+        
+        elif category == 'workstation':
+            use_cases.extend([
+                "CAD and engineering design",
+                "Video editing and post-production",
+                "3D modeling and animation",
+                "Scientific computing and analysis"
+            ])
+        
+        elif category == 'server':
+            use_cases.extend([
+                "Database hosting and management",
+                "Web server applications",
+                "Virtualization platforms",
+                "Enterprise application hosting"
+            ])
+        
+        elif category == 'storage':
+            use_cases.extend([
+                "Data backup and archival",
+                "File sharing and collaboration",
+                "Media storage and streaming",
+                "Database storage"
+            ])
+        
+        return ', '.join(use_cases) if use_cases else f"Professional {category} applications"
+
+    def _generate_target_industries(self, category: str, specs: Dict[str, Any]) -> List[str]:
+        """Generate target industries based on category and specs"""
+        
+        industries = []
+        
+        if category in ['workstation', 'cpu']:
+            industries.extend(['engineering', 'media', 'architecture', 'software_development'])
+        elif category == 'server':
+            industries.extend(['enterprise', 'healthcare', 'finance', 'education'])
+        elif category == 'storage':
+            industries.extend(['general', 'media', 'healthcare', 'finance'])
+        else:
+            industries.extend(['general', 'business'])
+        
+        return industries
 
     def _generate_product_id(self, product: Dict[str, Any]) -> str:
         """Generate a unique ID for products without one"""
