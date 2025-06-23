@@ -317,13 +317,22 @@ class ElasticsearchVectorService:
                 }
             }
             
-            # Add text search for hybrid approach
+            # Add text search for hybrid approach with improved field matching
             text_query = {
                 "multi_match": {
                     "query": query,
-                    "fields": ["name^3", "description^2", "features", "use_cases", "searchable_content"],
+                    "fields": [
+                        "name^4",                    # Highest boost for name
+                        "description^3",             # High boost for description
+                        "features^2",                # Medium boost for features
+                        "use_cases^2",               # Medium boost for use cases
+                        "tags^2",                    # Medium boost for tags
+                        "category^1.5",              # Lower boost for category
+                        "searchable_content^1.5"     # Lower boost for searchable content
+                    ],
                     "type": "best_fields",
-                    "fuzziness": "AUTO"
+                    "fuzziness": "AUTO",
+                    "operator": "or"  # Use OR for better recall
                 }
             }
             
@@ -399,13 +408,22 @@ class ElasticsearchVectorService:
                 }
             }
             
-            # Add text search for hybrid approach
+            # Add text search for hybrid approach with improved field matching
             text_query = {
                 "multi_match": {
                     "query": query,
-                    "fields": ["name^3", "description^2", "use_case", "benefits", "searchable_content"],
+                    "fields": [
+                        "name^4",                    # Highest boost for name
+                        "description^3",             # High boost for description
+                        "features^2",                # Medium boost for features
+                        "use_cases^2",               # Medium boost for use cases
+                        "tags^2",                    # Medium boost for tags
+                        "category^1.5",              # Lower boost for category
+                        "searchable_content^1.5"     # Lower boost for searchable content
+                    ],
                     "type": "best_fields",
-                    "fuzziness": "AUTO"
+                    "fuzziness": "AUTO",
+                    "operator": "or"  # Use OR for better recall
                 }
             }
             

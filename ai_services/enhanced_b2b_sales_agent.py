@@ -967,59 +967,82 @@ APPROACH:
         return enhanced_messages
     
     def _build_dynamic_product_context(self, retrieval_result: Dict[str, Any]) -> str:
-        """Build enhanced product context including hybrid search info"""
+        """Build enhanced product context including RRF hybrid search info"""
         
-        context = "🛍️ HYBRID PRODUCT INTELLIGENCE:\n\n"
+        context = "🛍️ RRF HYBRID PRODUCT INTELLIGENCE:\n\n"
         
         products = retrieval_result.get('products', [])
         solutions = retrieval_result.get('solutions', [])
         requirements = retrieval_result.get('requirements', {})
         search_methods = retrieval_result.get('search_methods', {})
+        fusion_method = retrieval_result.get('fusion_method', 'unknown')
+        rrf_parameters = retrieval_result.get('rrf_parameters', {})
         
         if search_methods:
-            context += "=== HYBRID SEARCH RESULTS ===\n"
-            context += f"🔍 Elasticsearch (keyword): {search_methods.get('elasticsearch_products', 0)} products\n"
-            context += f"🧠 Elasticsearch (vector): {search_methods.get('vector_products', 0)} products\n"
-            context += f"💡 Solutions (vector): {search_methods.get('vector_solutions', 0)} solutions\n"
-            context += f"🎯 Total merged: {search_methods.get('merged_products', 0)} products\n\n"
+            context += "=== RRF HYBRID SEARCH RESULTS ===\n"
+            context += f"🔍 Elasticsearch: {search_methods.get('elasticsearch_count', 0)} products\n"
+            context += f"🧠 Vector Search: {search_methods.get('vector_count', 0)} products\n"
+            context += f"🔄 RRF Fusion: {len(products)} final products\n"
+            context += f"🎯 Fusion Method: {fusion_method}\n"
+            
+            if rrf_parameters:
+                context += f"⚙️ RRF Parameters: k={rrf_parameters.get('k', 'N/A')}\n"
+            
+            context += "\n"
         
+        # Show top products with better categorization
         if products:
-            context += "=== TOP HYBRID RECOMMENDATIONS ===\n"
-            for i, product in enumerate(products[:3], 1):
-                context += f"{i}. {product.get('name', 'Unknown')}\n"
-                context += f"   Description: {product.get('description', 'No description')}\n"
-                
-                if 'price' in product:
-                    context += f"   Price: ${product['price']:,.2f}\n"
-                
-                # Show search source and scores
-                search_source = product.get('search_source', 'unknown')
-                context += f"   Found in: {search_source}\n"
-                
-                if product.get('keyword_score'):
-                    context += f"   Keyword relevance: {product['keyword_score']:.2f}\n"
-                
-                if product.get('semantic_score'):
-                    context += f"   Semantic similarity: {product['semantic_score']:.2f}\n"
-                
-                if product.get('hybrid_score'):
-                    context += f"   🎯 Hybrid score: {product['hybrid_score']:.2f}\n"
-                
-                context += f"   Product ID: {product.get('id', 'N/A')}\n\n"
+            context += "=== TOP PRODUCT RECOMMENDATIONS ===\n"
+            
+            # Group products by category for better organization
+            products_by_category = {}
+            for product in products[:10]:  # Show top 10
+                category = product.get('category', 'Other')
+                if category not in products_by_category:
+                    products_by_category[category] = []
+                products_by_category[category].append(product)
+            
+            # Display products by category
+            for category, category_products in products_by_category.items():
+                context += f"\n📦 {category.upper()}:\n"
+                for i, product in enumerate(category_products[:5]):  # Max 5 per category
+                    name = product.get('name', 'Unknown Product')
+                    price = product.get('price', 0)
+                    score = product.get('rrf_score', product.get('_score', 0))
+                    source = product.get('search_source', 'unknown')
+                    
+                    # Format price nicely
+                    if price and price > 0:
+                        price_str = f"${price:,.2f}"
+                    else:
+                        price_str = "Price N/A"
+                    
+                    context += f"  {i+1}. {name}\n"
+                    context += f"     💰 {price_str} | 🎯 Score: {score:.3f} | 🔍 Source: {source}\n"
+                    
+                    # Add key features if available
+                    features = product.get('features', [])
+                    if features and isinstance(features, list):
+                        key_features = features[:3]  # Show top 3 features
+                        context += f"     ✨ Features: {', '.join(key_features)}\n"
+                    
+                    context += "\n"
         
         # Add confidence and method info
         confidence = retrieval_result.get('retrieval_confidence', 0)
         retrieval_method = retrieval_result.get('retrieval_method', 'unknown')
         
-        context += f"🎯 HYBRID SEARCH CONFIDENCE: {confidence:.1%}\n"
+        context += f"🎯 RRF HYBRID SEARCH CONFIDENCE: {confidence:.1%}\n"
         context += f"🔧 RETRIEVAL METHOD: {retrieval_method}\n"
         
         if confidence < 0.5:
             context += "⚠️ Low confidence - Ask more discovery questions for better semantic matching\n"
         elif confidence > 0.8:
-            context += "✅ High confidence - Excellent keyword + semantic match!\n"
+            context += "✅ High confidence - Excellent RRF fusion of keyword + semantic search!\n"
+        else:
+            context += "🔄 Moderate confidence - RRF fusion provides balanced results from both search methods\n"
         
-        context += "\n💡 **Use these REAL products found through hybrid search (keyword + AI vector) to provide specific recommendations!**"
+        context += "\n💡 **Use these REAL products found through RRF hybrid search (keyword + AI vector fusion) to provide specific recommendations!**"
         
         return context
     
