@@ -681,7 +681,19 @@ class ElasticsearchService:
             'wireless-network-card': 'networking',
             'wired-network-card': 'networking',
             'sound-card': 'audio',
-            'os': 'software'
+            'os': 'software',
+            'memory': 'memory',
+            'cpu': 'cpu',
+            'motherboard': 'motherboard',
+            'monitor': 'monitor',
+            'keyboard': 'peripheral',
+            'mouse': 'peripheral',
+            'headphones': 'peripheral',
+            'speakers': 'peripheral',
+            'case': 'case',
+            'ups': 'power',
+            'optical-drive': 'optical',
+            'webcam': 'peripheral'
         }
         
         # Use mapping if available, otherwise clean up the filename
@@ -692,9 +704,17 @@ class ElasticsearchService:
             return filename.replace('-', ' ')
 
     def _is_valid_product(self, item: Dict[str, Any]) -> bool:
-        """Check if item has minimum required fields for a product"""
-        required_fields = ['name']  # Minimum requirement
-        return all(field in item for field in required_fields)
+        """Check if item has minimum required fields for a product - improved validation"""
+        # Must have a name
+        if not item.get('name'):
+            return False
+        
+        # Must have at least one of: price, capacity, type, specifications
+        core_fields = ['price', 'capacity', 'type', 'specifications']
+        if not any(field in item for field in core_fields):
+            return False
+        
+        return True
 
     def _process_product_data(self, raw_product: Dict[str, Any], category: str = None) -> Dict[str, Any]:
         """Process and normalize product data for Elasticsearch"""
