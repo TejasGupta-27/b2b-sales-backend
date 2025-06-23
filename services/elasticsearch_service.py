@@ -85,7 +85,15 @@ class ElasticsearchService:
                     "target_industries": {"type": "keyword"},
                     "compatibility": {"type": "text"},
                     "warranty": {"type": "text"},
-                    "support_level": {"type": "keyword"}
+                    "support_level": {"type": "keyword"},
+                    "form_factor": {
+                        "type": "text",
+                        "fields": {
+                            "keyword": {
+                                "type": "keyword"
+                            }
+                        }
+                    }
                 }
             }
         }

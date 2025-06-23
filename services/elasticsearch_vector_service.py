@@ -72,6 +72,14 @@ class ElasticsearchVectorService:
                     "compatibility": {"type": "text"},
                     "warranty": {"type": "text"},
                     "support_level": {"type": "keyword"},
+                    "form_factor": {
+                        "type": "text",
+                        "fields": {
+                            "keyword": {
+                                "type": "keyword"
+                            }
+                        }
+                    },
                     # Vector fields
                     "content_vector": {
                         "type": "dense_vector",
