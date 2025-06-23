@@ -1244,6 +1244,30 @@ class ElasticsearchService:
             logger.error(f"Failed to reindex data: {e}")
             raise
 
+    async def fix_mapping_issues(self):
+        """Fix mapping issues by forcing index recreation"""
+        try:
+            logger.info("🔧 Fixing Elasticsearch mapping issues...")
+            
+            # Delete existing indices to fix mapping problems
+            logger.info("🗑️ Deleting existing indices...")
+            await self.client.indices.delete(index=self.products_index, ignore=[404])
+            await self.client.indices.delete(index=self.solutions_index, ignore=[404])
+            
+            # Recreate indices with correct mappings
+            logger.info("🔨 Recreating indices with correct mappings...")
+            await self.create_indices()
+            
+            # Reload data
+            logger.info("📥 Reloading data...")
+            await self.load_initial_data()
+            
+            logger.info("✅ Mapping issues fixed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to fix mapping issues: {e}")
+            raise
+
     async def update_existing_data(self):
         """Update existing Elasticsearch data without destroying it"""
         try:
