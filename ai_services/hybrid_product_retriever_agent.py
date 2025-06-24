@@ -66,7 +66,7 @@ class RRFHybridFusion:
         max_results: int = None
     ) -> List[Dict]:
         """
-        Fuse product rankings using RRF
+        Fuse product rankings using RRF with requirement-based diversity selection
         
         Args:
             elasticsearch_products: Products from keyword search with _score
@@ -74,7 +74,7 @@ class RRFHybridFusion:
             max_results: Maximum number of results to return
             
         Returns:
-            Fused and ranked product list
+            Fused and ranked product list with requirement diversity
         """
         max_results = max_results or settings.final_result_limit
         
@@ -156,16 +156,197 @@ class RRFHybridFusion:
                 product['keyword_score'] = 0
                 product['semantic_score'] = product.get('_similarity_score', 0)
         
-        # Sort by RRF score (descending)
-        fused_products = list(all_products.values())
-        fused_products.sort(key=lambda x: x['rrf_score'], reverse=True)
+        # Apply requirement-based diversity selection
+        fused_products = self._apply_requirement_diversity_selection(all_products, rrf_scores, max_results)
         
         print(f"🎯 RRF Fusion complete: {len(fused_products)} unique products")
         print(f"   Top 5 RRF results:")
         for i, product in enumerate(fused_products[:5]):
             print(f"     {i+1}. {product.get('name', 'Unknown')} (RRF: {product['rrf_score']:.4f}, Source: {product['search_source']})")
         
-        return fused_products[:max_results]
+        return fused_products
+    
+    def _apply_requirement_diversity_selection(
+        self, 
+        all_products: Dict[str, Dict], 
+        rrf_scores: Dict[str, float], 
+        max_results: int
+    ) -> List[Dict]:
+        """Apply requirement-based diversity selection to ensure coverage of different needs"""
+        
+        print(f"🎯 Applying requirement-based diversity selection for {len(all_products)} products...")
+        
+        # Convert to list and sort by RRF score
+        products_list = list(all_products.values())
+        products_list.sort(key=lambda x: x['rrf_score'], reverse=True)
+        
+        # Define requirement groups based on common patterns
+        requirement_groups = self._identify_requirement_groups(products_list)
+        
+        print(f"📊 Identified {len(requirement_groups)} requirement groups:")
+        for group_name, group_products in requirement_groups.items():
+            print(f"   {group_name}: {len(group_products)} products")
+        
+        # Allocate slots to each requirement group
+        allocation = self._get_requirement_allocation(requirement_groups, max_results)
+        
+        print(f"📊 Requirement allocation:")
+        for group, allocation_count in allocation.items():
+            print(f"   {group}: {allocation_count} products")
+        
+        # Select products from each requirement group
+        selected_products = []
+        for group_name, allocation_count in allocation.items():
+            if group_name in requirement_groups and allocation_count > 0:
+                group_products = requirement_groups[group_name]
+                # Take top products from this group
+                for i in range(min(allocation_count, len(group_products))):
+                    selected_products.append(group_products[i])
+                    print(f"   ✅ Selected {group_products[i].get('name', 'Unknown')} from {group_name} (RRF: {group_products[i]['rrf_score']:.4f})")
+        
+        # If we haven't filled the quota, add remaining high-scoring products
+        remaining_slots = max_results - len(selected_products)
+        if remaining_slots > 0:
+            print(f"📊 Adding {remaining_slots} additional high-scoring products...")
+            
+            # Get all unselected products
+            selected_ids = {p.get('id') for p in selected_products}
+            unselected_products = [p for p in products_list if p.get('id') not in selected_ids]
+            
+            # Add top remaining products
+            for i in range(min(remaining_slots, len(unselected_products))):
+                selected_products.append(unselected_products[i])
+                print(f"   ✅ Added {unselected_products[i].get('name', 'Unknown')} (RRF: {unselected_products[i]['rrf_score']:.4f})")
+        
+        print(f"🎯 Requirement diversity selection complete: {len(selected_products)} products selected")
+        return selected_products
+    
+    def _identify_requirement_groups(self, products: List[Dict]) -> Dict[str, List[Dict]]:
+        """Identify requirement groups based on product characteristics and descriptions"""
+        
+        requirement_groups = {
+            'core_components': [],      # CPU, GPU, motherboard
+            'memory_storage': [],       # RAM, SSD, HDD
+            'power_cooling': [],        # PSU, cooling solutions
+            'peripherals': [],          # Monitor, keyboard, mouse
+            'networking': [],           # Network cards, routers
+            'accessories': [],          # Cables, adapters, etc.
+            'solutions': [],            # Complete solutions/bundles
+            'other': []                 # Everything else
+        }
+        
+        # Keywords for each group
+        group_keywords = {
+            'core_components': [
+                'cpu', 'processor', 'gpu', 'graphics', 'video card', 'motherboard', 'mainboard',
+                'intel', 'amd', 'ryzen', 'core i', 'nvidia', 'rtx', 'gtx', 'radeon'
+            ],
+            'memory_storage': [
+                'ram', 'memory', 'ddr', 'ssd', 'hard drive', 'storage', 'nvme', 'sata',
+                'kingston', 'corsair', 'samsung', 'western digital', 'seagate'
+            ],
+            'power_cooling': [
+                'power supply', 'psu', 'cooler', 'cooling', 'fan', 'liquid', 'aio',
+                'corsair', 'evga', 'seasonic', 'noctua', 'be quiet'
+            ],
+            'peripherals': [
+                'monitor', 'display', 'keyboard', 'mouse', 'headset', 'speaker', 'webcam',
+                'lg', 'samsung', 'logitech', 'razer', 'steelseries'
+            ],
+            'networking': [
+                'network', 'wifi', 'ethernet', 'router', 'switch', 'adapter',
+                'tp-link', 'netgear', 'asus', 'intel'
+            ],
+            'accessories': [
+                'cable', 'adapter', 'mount', 'stand', 'case', 'chassis',
+                'nzxt', 'fractal', 'phanteks', 'lian li'
+            ],
+            'solutions': [
+                'solution', 'bundle', 'kit', 'complete', 'system', 'workstation',
+                'dell', 'hp', 'lenovo', 'acer', 'asus'
+            ]
+        }
+        
+        for product in products:
+            product_text = self._get_product_text(product).lower()
+            assigned = False
+            
+            # Try to assign to specific groups
+            for group_name, keywords in group_keywords.items():
+                if any(keyword in product_text for keyword in keywords):
+                    requirement_groups[group_name].append(product)
+                    assigned = True
+                    break
+            
+            # If not assigned to specific group, put in 'other'
+            if not assigned:
+                requirement_groups['other'].append(product)
+        
+        # Remove empty groups
+        requirement_groups = {k: v for k, v in requirement_groups.items() if v}
+        
+        return requirement_groups
+    
+    def _get_product_text(self, product: Dict) -> str:
+        """Extract searchable text from product"""
+        text_parts = []
+        
+        # Add name
+        if product.get('name'):
+            text_parts.append(product['name'])
+        
+        # Add description
+        if product.get('description'):
+            text_parts.append(product['description'])
+        
+        # Add category
+        if product.get('category'):
+            text_parts.append(product['category'])
+        
+        # Add brand/manufacturer
+        if product.get('brand'):
+            text_parts.append(product['brand'])
+        elif product.get('manufacturer'):
+            text_parts.append(product['manufacturer'])
+        
+        return ' '.join(text_parts)
+    
+    def _get_requirement_allocation(self, requirement_groups: Dict[str, List[Dict]], max_results: int) -> Dict[str, int]:
+        """Get allocation for requirement groups based on importance and availability"""
+        
+        # Define group priorities (higher = more important)
+        group_priorities = {
+            'core_components': 3,      # Most important for any build
+            'memory_storage': 2,       # Essential for performance
+            'power_cooling': 2,        # Essential for stability
+            'peripherals': 1,          # Important for usability
+            'networking': 1,           # Important for connectivity
+            'solutions': 2,            # Complete solutions are valuable
+            'accessories': 1,          # Nice to have
+            'other': 1                 # Catch-all
+        }
+        
+        # Calculate allocation based on priorities and available products
+        total_priority = sum(group_priorities.get(group, 1) for group in requirement_groups.keys())
+        
+        allocation = {}
+        for group_name in requirement_groups.keys():
+            priority = group_priorities.get(group_name, 1)
+            # Allocate based on priority and available products
+            group_allocation = max(1, int((priority / total_priority) * max_results * 0.8))
+            # Don't allocate more than available products
+            group_allocation = min(group_allocation, len(requirement_groups[group_name]))
+            allocation[group_name] = group_allocation
+        
+        # Ensure we don't exceed max_results
+        total_allocated = sum(allocation.values())
+        if total_allocated > max_results:
+            # Reduce allocation proportionally
+            reduction_factor = max_results / total_allocated
+            for group_name in allocation:
+                allocation[group_name] = max(1, int(allocation[group_name] * reduction_factor))
+        
+        return allocation
 
 class HybridProductRetrieverAgent(AIProvider):
     """Hybrid product retriever using Elasticsearch for both keyword and semantic search with RRF fusion"""
@@ -607,7 +788,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             vector_products = await self._elasticsearch_vector_search_products(requirements)
             search_methods.append("vector_semantic")
             print(f"   Found {len(vector_products)} products via vector search")
-        
+            
         # Step 3: Vector search for solutions
         vector_solutions = []
         if self.vector_service:
@@ -618,7 +799,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         
         # Step 4: RRF fusion for products
         print("🎯 Step 4: RRF fusion for products...")
-        if settings.use_rrf_fusion:
+        if settings.use_rrf_merging:
             fused_products = self.rrf_fusion.fuse_rankings(
                 elasticsearch_products, 
                 vector_products,
@@ -643,11 +824,11 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             "elasticsearch_count": len(elasticsearch_products),
             "vector_products_count": len(vector_products),
             "vector_solutions_count": len(vector_solutions),
-            "fusion_method": "rrf" if settings.use_rrf_fusion else "simple"
+            "fusion_method": "rrf" if settings.use_rrf_merging else "simple"
         }
     
     async def _analyze_hybrid_recommendations(
-        self,
+        self, 
         products: List[Dict], 
         solutions: List[Dict], 
         requirements: Dict[str, Any]
@@ -666,7 +847,7 @@ SEMANTIC SOLUTION RESULTS:
 {json.dumps(solutions, indent=2)}
 
 Provide detailed analysis considering both keyword relevance and semantic similarity scores."""
-
+        
         try:
             analysis = await self.base_provider.generate_structured_response(
                 [AIMessage(role="user", content=analysis_prompt)],
@@ -686,7 +867,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             }
     
     async def _analyze_and_rank_results(
-        self,
+        self, 
         search_results: Dict[str, Any],
         context_analysis: ContextAnalysis,
         requirements: Dict[str, Any]

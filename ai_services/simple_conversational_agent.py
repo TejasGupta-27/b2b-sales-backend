@@ -250,6 +250,104 @@ Note: You might want to learn more about their needs as the conversation progres
             'requirements_complete': len(intent_analysis.missing_info) == 0
         })
         
+        # If we have enough information, generate the actual quote
+        if len(intent_analysis.missing_info) == 0:
+            try:
+                print("✅ Requirements complete - generating quote...")
+                quote = await self.generate_quote({
+                    'conversation_messages': messages,
+                    'customer_context': customer_context
+                })
+                
+                if quote and not quote.get('error'):
+                    # Enhance response with quote information
+                    response = self._enhance_response_with_quote_info(response, quote)
+                    
+                    # Update metadata with quote information
+                    response.metadata.update({
+                        'quote_generated': True,
+                        'quote_id': quote.get('quote_id'),
+                        'quote_number': quote.get('quote_number'),
+                        'pdf_generated': quote.get('pdf_generated', False),
+                        'pdf_url': quote.get('pdf_url'),
+                        'pitch_deck_generated': quote.get('pitch_deck_generated', False),
+                        'pitch_deck_url': quote.get('pitch_deck_url'),
+                        'quote_total': quote.get('financials', {}).get('total') if 'financials' in quote else quote.get('total')
+                    })
+                else:
+                    response.metadata['quote_generation_error'] = quote.get('error', 'Unknown error') if quote else 'No quote returned'
+                    
+            except Exception as e:
+                print(f"❌ Quote generation failed: {e}")
+                response.metadata['quote_generation_error'] = str(e)
+        
+        return response
+    
+    def _enhance_response_with_quote_info(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
+        """Enhance response with quote information including PDF and pitch deck"""
+        
+        # Add professional quote presentation with dynamic context
+        response.content += f"\n\n🎯 **Excellent! Based on our thorough discussion and your specific requirements, I've prepared a comprehensive, customized quote using our intelligent product matching system.**"
+        response.content += f"\n\n📋 **Quote #{quote.get('quote_number', 'N/A')}**"
+        
+        # Highlight the thorough discovery process
+        response.content += f"\n\n✅ **Complete Requirements Analysis:** Our conversation covered all the essential areas needed for an accurate quote - your business context, technical requirements, operational needs, and specific challenges."
+        
+        # Add pricing summary
+        if 'financials' in quote:
+            financials = quote['financials']
+            response.content += f"\n\n💰 **Investment Summary:**"
+            response.content += f"\n• Subtotal: **${financials['subtotal']:,.2f}**"
+            response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
+            response.content += f"\n• **Total Investment: ${financials['total']:,.2f}**"
+            if quote.get('valid_until'):
+                try:
+                    response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
+                except:
+                    response.content += f"\n• Quote valid until: {quote['valid_until']}"
+        elif 'pricing' in quote:
+            # Support legacy format
+            pricing = quote['pricing']
+            response.content += f"\n\n💰 **Investment Summary:**"
+            response.content += f"\n• Subtotal: **${pricing['subtotal']:,.2f}**"
+            response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
+            response.content += f"\n• **Total Investment: ${pricing['total']:,.2f}**"
+            if quote.get('valid_until'):
+                try:
+                    response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
+                except:
+                    response.content += f"\n• Quote valid until: {quote['valid_until']}"
+        
+        # Add PDF download link if available
+        if quote.get('pdf_generated', False) and quote.get('pdf_url'):
+            response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
+        else:
+            response.content += f"\n\n📄 **Quote PDF:** Currently being generated..."
+            if quote.get('pdf_error'):
+                response.content += f" (Note: PDF generation encountered an issue - please contact support if needed)"
+        
+        # Add pitch deck download link only if it was generated successfully
+        if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
+            response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
+        
+        # Enhanced next steps
+        response.content += f"\n\n**Next Steps:**"
+        response.content += f"\n1. Review the detailed quote with all selected products and solutions"
+        if quote.get('pitch_deck_generated', False):
+            response.content += f"\n2. Check out the pitch deck for a visual overview of the solution"
+            response.content += f"\n3. Let me know if you'd like to discuss any aspects in more detail"
+            response.content += f"\n4. I can arrange product demos or technical consultations if helpful"
+            response.content += f"\n5. We can finalize implementation timeline and support arrangements"
+        else:
+            response.content += f"\n2. Let me know if you'd like to discuss any aspects in more detail"
+            response.content += f"\n3. I can arrange product demos or technical consultations if helpful"
+            response.content += f"\n4. We can finalize implementation timeline and support arrangements"
+        
+        if quote.get('pitch_deck_generated', False):
+            response.content += f"\n\nThis quote and pitch deck reflect our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
+        else:
+            response.content += f"\n\nThis quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
+        
         return response
     
     async def _generate_product_response(
@@ -545,7 +643,7 @@ Remember: You're having a conversation with a real person, not following a rigid
         return guidelines_text
     
     async def generate_quote(self, quote_request: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate a detailed quote using the QuoteGenerationAgent"""
+        """Generate a detailed quote using the QuoteGenerationAgent with PDF and pitch deck"""
         
         print("💰 SimpleConversationalAgent: Generating quote using QuoteGenerationAgent...")
         
@@ -575,10 +673,15 @@ Remember: You're having a conversation with a real person, not following a rigid
             )
             
             if quote:
+                # Generate pitch deck for the quote
+                await self._generate_pitch_deck_for_quote(quote)
+                
                 # Add metadata to indicate it was generated through SimpleConversationalAgent
                 quote['generated_by'] = 'SimpleConversationalAgent_with_QuoteGenerationAgent'
                 quote['hybrid_retriever_available'] = self.hybrid_retriever is not None
                 print(f"✅ Quote generated successfully: {quote.get('quote_number', 'Unknown')}")
+                print(f"   PDF generated: {quote.get('pdf_generated', False)}")
+                print(f"   Pitch deck generated: {quote.get('pitch_deck_generated', False)}")
                 return quote
             else:
                 print("❌ Quote generation failed - no quote returned")
@@ -596,4 +699,85 @@ Remember: You're having a conversation with a real person, not following a rigid
                 'quote_id': f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 'generated_at': datetime.now().isoformat(),
                 'quote_text': f"Quote generation failed: {str(e)}"
-            } 
+            }
+    
+    async def _generate_pitch_deck_for_quote(self, quote: Dict[str, Any]) -> None:
+        """Generate pitch deck for the quote"""
+        try:
+            print("📊 Generating pitch deck for quote...")
+            print(f"🔍 Debug - Input quote type: {type(quote)}")
+            print(f"🔍 Debug - Input quote keys: {list(quote.keys()) if quote else 'None'}")
+            
+            # Import pitch deck service
+            from services.pitch_deck_service import PitchDeckService
+            print("🔍 Debug - PitchDeckService imported successfully")
+            
+            # Initialize pitch deck service
+            pitch_deck_service = PitchDeckService()
+            print("🔍 Debug - PitchDeckService initialized")
+            
+            # Get quote ID
+            quote_id = quote.get('quote_id', 'unknown')
+            print(f"🔍 Debug - Quote ID: {quote_id}")
+            
+            # Convert quote to string for processing
+            quote_str = str(quote)
+            print(f"🔍 Debug - Quote string length: {len(quote_str)}")
+            print(f"🔍 Debug - Quote string preview: {quote_str[:200]}...")
+            
+            # Generate the pitch deck structure
+            print("🔍 Debug - Calling extract_ppt_structure...")
+            deck_structure = await pitch_deck_service.extract_ppt_structure(quote_str)
+            print(f"🔍 Debug - Deck structure type: {type(deck_structure)}")
+            print(f"🔍 Debug - Deck structure keys: {list(deck_structure.keys()) if isinstance(deck_structure, dict) else 'Not a dict'}")
+            
+            # Generate the pitch deck file
+            deck_path = f"Data/pitch_decks/pitch_deck_{quote_id}.pptx"
+            print(f"🔍 Debug - Target deck path: {deck_path}")
+            
+            # Ensure the directory exists
+            import os
+            pitch_deck_dir = "Data/pitch_decks"
+            if not os.path.exists(pitch_deck_dir):
+                print(f"🔍 Debug - Creating directory: {pitch_deck_dir}")
+                os.makedirs(pitch_deck_dir, exist_ok=True)
+            else:
+                print(f"🔍 Debug - Directory already exists: {pitch_deck_dir}")
+            
+            print("🔍 Debug - Calling generate_ppt...")
+            file_path = await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+            print(f"🔍 Debug - generate_ppt returned: {file_path}")
+            print(f"🔍 Debug - File path type: {type(file_path)}")
+            
+            # Check if file was actually created
+            if file_path and os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+                print(f"🔍 Debug - File created successfully: {file_path}")
+                print(f"🔍 Debug - File size: {file_size} bytes")
+                
+                # Add pitch deck information to quote
+                quote['pitch_deck_generated'] = True
+                quote['pitch_deck_path'] = file_path
+                quote['pitch_deck_url'] = f"/api/quotes/download-pitch-deck/{quote_id}"
+                quote['pitch_deck_id'] = quote_id
+                print(f"✅ Pitch deck generated successfully: {file_path}")
+                print(f"🔍 Debug - Updated quote with pitch deck info")
+            else:
+                print("⚠️ Pitch deck generation returned no path or file doesn't exist")
+                if file_path:
+                    print(f"🔍 Debug - Returned path: {file_path}")
+                    print(f"🔍 Debug - File exists: {os.path.exists(file_path)}")
+                quote['pitch_deck_error'] = "Pitch deck generation failed - no path returned or file not created"
+                quote['pitch_deck_generated'] = False
+                
+        except ImportError as e:
+            print(f"❌ Debug - Import error: {str(e)}")
+            quote['pitch_deck_error'] = f"Import error: {str(e)}"
+            quote['pitch_deck_generated'] = False
+            
+        except Exception as e:
+            print(f"❌ Pitch deck generation failed: {str(e)}")
+            import traceback
+            print(f"❌ Debug - Full traceback: {traceback.format_exc()}")
+            quote['pitch_deck_error'] = f"Pitch deck generation error: {str(e)}"
+            quote['pitch_deck_generated'] = False 
