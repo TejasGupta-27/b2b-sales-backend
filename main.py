@@ -29,8 +29,7 @@ from routes.admin import router as admin_router
 
 # Import AI services
 from ai_services.factory import AIServiceFactory
-from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
-from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
+from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from ai_services.base import AIMessage
 
 # Import models
@@ -165,6 +164,22 @@ vector_service = None
 # Initialize speech service
 speech_service = None
 
+# Add simple context helper function
+def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Dict[str, Any]]) -> List[AIMessage]:
+    """Add simple context without complex analysis"""
+    context_parts = []
+    
+    if customer_context:
+        context_parts.append(f"Customer: {customer_context.get('company_name', 'Unknown')} in {customer_context.get('industry', 'business')}")
+    
+    context_parts.append("You are a helpful B2B sales assistant. Be conversational, friendly, and human-like. Focus on understanding customer needs and providing relevant information.")
+    
+    if context_parts:
+        context_message = AIMessage(role="system", content=" ".join(context_parts))
+        return [context_message] + messages
+    
+    return messages
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
@@ -245,7 +260,7 @@ async def root():
 
 @app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
-    """Enhanced sales chat endpoint with hybrid retrieval"""
+    """Optimized sales chat endpoint with reduced latency"""
     try:
         # Get speech service
         speech_service = SpeechService(model_name="medium")
@@ -282,9 +297,10 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             messages = []
             existing_messages = db.query(DBChatMessage).filter(
                 DBChatMessage.lead_id == lead_id
-            ).order_by(DBChatMessage.created_at).limit(20).all()  # Limit to last 20 messages
+            ).order_by(DBChatMessage.created_at.desc()).limit(10).all()  # Reduced to last 10 messages
             
-            for msg in existing_messages:
+            # Reverse to get chronological order
+            for msg in reversed(existing_messages):
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
             
@@ -302,94 +318,78 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     "timeline": getattr(lead_record, 'decision_timeline', None)
                 }
             
-            # Create Enhanced B2B Sales Agent with better error handling
-            try:
-                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-                enhanced_agent = EnhancedB2BSalesAgent(
-                    base_provider=base_provider,
-                    use_hybrid_retriever=settings.use_hybrid_retriever
-                )
-                
-                # Initialize if needed
-                await enhanced_agent.initialize()
-                
-                # Generate response with error handling
-                response = await enhanced_agent.generate_response(
-                    messages, 
-                    customer_context=customer_context
-                )
-                
-            except Exception as agent_error:
-                logger.error(f"Agent error: {agent_error}")
-                # Fallback to basic response
-                base_provider = AIServiceFactory.create_provider(request.provider)
-                response = await base_provider.generate_response(messages)
-                
-                # Add error metadata
-                if not response.metadata:
-                    response.metadata = {}
-                response.metadata['agent_error'] = str(agent_error)
-                response.metadata['fallback_used'] = True
+            # Check cache first for similar conversations
+            cache_service = get_cache_service()
+            cache_key = f"chat_response:{hash(request.message + str(customer_context))}"
+            cached_response = await cache_service.get(cache_key)
             
-            # Generate speech for the response
-            speech_result = await speech_service.text_to_speech(
-                text=response.content,
-                language="en"  # Default to English for now
+            if cached_response:
+                logger.info("✅ Serving response from cache")
+                response_content = cached_response
+                response_metadata = {"cached": True, "provider": "cache"}
+            else:
+                # Create simple conversational agent for natural responses
+                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+                conversational_agent = SimpleConversationalAgent(base_provider)
+                
+                # Let the conversational agent handle all types of requests naturally
+                # No hardcoded phrase detection - let the AI determine the best response
+                response = await conversational_agent.generate_response(
+                    messages, customer_context
+                )
+                
+                response_content = response.content
+                response_metadata = {
+                    "provider": response.provider,
+                    "model": response.model,
+                    "usage": response.usage,
+                    "agent_type": "simple_conversational",
+                    "cached": False
+                }
+                
+                # Cache the response for 2 minutes
+                await cache_service.set(cache_key, response_content, ttl=120)
+            
+            # Generate speech in parallel (non-blocking)
+            speech_task = asyncio.create_task(
+                speech_service.text_to_speech(text=response_content, language="en")
             )
             
-            # Save assistant response with enhanced metadata
-            response_metadata = {
-                "model": response.model,
-                "provider": response.provider,
-                "usage": response.usage,
-                "enhanced_sales_agent": True,
-                "speech_data": speech_result
-            }
-            
-            # Add product intelligence if available
-            if hasattr(enhanced_agent, 'product_recommendations'):
-                response_metadata['product_recommendations'] = enhanced_agent.product_recommendations
-            
-            # Add quote information if generated
-            if response.metadata and 'quote' in response.metadata:
-                response_metadata['quote'] = response.metadata['quote']
-            
+            # Save assistant response
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
                 message_type=MessageType.ASSISTANT.value,
-                content=response.content,
+                content=response_content,
                 stage=request.conversation_stage or "discovery",
                 message_metadata=response_metadata
             )
             db.add(assistant_message)
             db.commit()
             
+            # Wait for speech generation
+            speech_result = await speech_task
+            
+            # Update metadata with speech data
+            response_metadata['speech_data'] = speech_result
+            
             # Prepare enhanced response
             chat_response = ChatResponse(
-                message=response.content,
+                message=response_content,
                 lead_id=lead_id,
                 conversation_stage=request.conversation_stage or "discovery",
-                metadata={
-                    "enhanced_sales_agent": True,
-                    "provider": response.provider,
-                    "model": response.model,
-                    "usage": response.usage,
-                    "product_intelligence": getattr(enhanced_agent, 'product_recommendations', {}),
-                    "timestamp": datetime.now().isoformat(),
-                    "speech_data": speech_result
-                }
+                metadata=response_metadata
             )
             
-            logger.info(f"✅ Enhanced Sales Chat Response generated for lead: {lead_id}")
+            logger.info(f"✅ Optimized Sales Chat Response generated for lead: {lead_id}")
             return chat_response
             
         finally:
             await speech_service.close()
             
     except Exception as e:
-        logger.exception("Error in sales chat endpoint")
-        db.rollback()  # Add rollback on error
+        logger.exception("Error in optimized sales chat endpoint")
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Keep all your existing working endpoints
@@ -421,7 +421,7 @@ async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation and pitch deck"""
     try:
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        sales_agent = SimpleConversationalAgent(base_provider)
         
         # Generate the quote
         quote = await sales_agent.generate_quote(quote_request)
@@ -1089,38 +1089,66 @@ async def health_check():
 
 @app.get("/api/admin/performance")
 async def get_performance_stats():
-    """Get system performance statistics"""
-    cache_service = get_cache_service()
-    
-    # Get cache stats
-    cache_stats = await cache_service.get_stats()
-    
-    # Get Elasticsearch stats
+    """Get comprehensive performance statistics"""
     try:
-        elasticsearch_service = get_elasticsearch_service()
-        es_stats = await elasticsearch_service.get_product_stats()
-    except Exception as e:
-        es_stats = {"error": str(e)}
-    
-    # Get database connection info
-    try:
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"))
-            active_connections = result.scalar()
-    except Exception as e:
-        active_connections = f"Error: {e}"
-    
-    return {
-        "cache": cache_stats,
-        "elasticsearch": es_stats,
-        "database": {
-            "active_connections": active_connections,
+        # Get cache statistics
+        cache_service = get_cache_service()
+        cache_stats = await cache_service.get_stats()
+        
+        # Get database connection pool stats
+        db_pool_stats = {
             "pool_size": engine.pool.size(),
-            "checked_out_connections": engine.pool.checkedout()
-        },
-        "timestamp": datetime.now().isoformat()
-    }
+            "checked_in": engine.pool.checkedin(),
+            "checked_out": engine.pool.checkedout(),
+            "overflow": engine.pool.overflow(),
+            "invalid": engine.pool.invalid()
+        }
+        
+        # Test Elasticsearch health
+        try:
+            elasticsearch_service = get_elasticsearch_service()
+            es_health = await elasticsearch_service.get_cluster_health()
+        except Exception as e:
+            es_health = {"status": "error", "error": str(e)}
+        
+        # Calculate performance metrics
+        performance_metrics = {
+            "timestamp": datetime.now().isoformat(),
+            "cache": {
+                "hit_rate": f"{(cache_stats['active_entries'] / max(cache_stats['total_entries'], 1)) * 100:.1f}%",
+                "total_entries": cache_stats['total_entries'],
+                "active_entries": cache_stats['active_entries'],
+                "cache_size_mb": f"{cache_stats['cache_size_mb']:.2f}MB"
+            },
+            "database": {
+                "connection_pool": db_pool_stats,
+                "pool_utilization": f"{(db_pool_stats['checked_out'] / max(db_pool_stats['pool_size'], 1)) * 100:.1f}%"
+            },
+            "elasticsearch": es_health,
+            "system": {
+                "optimization_status": "enabled",
+                "conversational_agent": "active",
+                "caching_enabled": settings.enable_response_caching,
+                "hybrid_retriever": settings.use_hybrid_retriever
+            },
+            "recommendations": []
+        }
+        
+        # Add performance recommendations
+        if db_pool_stats['checked_out'] > db_pool_stats['pool_size'] * 0.8:
+            performance_metrics["recommendations"].append("High database connection usage - consider increasing pool size")
+        
+        if cache_stats['total_entries'] > 1000:
+            performance_metrics["recommendations"].append("Large cache size - consider reducing TTL or implementing cache eviction")
+        
+        if es_health.get('status') != 'green':
+            performance_metrics["recommendations"].append("Elasticsearch cluster not healthy - check cluster status")
+        
+        return performance_metrics
+        
+    except Exception as e:
+        logger.error(f"Error getting performance stats: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
