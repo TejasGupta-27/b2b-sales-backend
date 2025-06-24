@@ -45,8 +45,31 @@ def handle_newrelic_interference(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         max_retries = 3
+        self_obj = args[0] if args else None
+        
+        # Helper: ensure the AsyncElasticsearch transport isn't a coroutine
+        async def _resolve_transport():
+            try:
+                from types import CoroutineType  # Local import to avoid issues if types missing
+            except ImportError:
+                CoroutineType = type((lambda: (yield))())
+            try:
+                if self_obj and hasattr(self_obj, 'client'):
+                    transport = getattr(self_obj.client, 'transport', None)
+                    if asyncio.iscoroutine(transport):
+                        logger.debug("Awaiting coroutine transport to resolve New Relic wrapper issue...")
+                        resolved = await transport
+                        # Replace the coroutine with the resolved transport
+                        self_obj.client.transport = resolved
+                        # Also patch the private attribute for safety
+                        if hasattr(self_obj.client, '_transport'):
+                            self_obj.client._transport = resolved
+            except Exception as e:
+                logger.debug(f"Transport resolution not required or failed: {e}")
+        
         for attempt in range(max_retries):
             try:
+                await _resolve_transport()
                 async with disable_newrelic_for_elasticsearch():
                     return await func(*args, **kwargs)
             except AttributeError as attr_error:
@@ -1196,6 +1219,7 @@ class ElasticsearchService:
             logger.error(f"Failed to update existing data: {e}")
             raise
 
+    @handle_newrelic_interference
     async def search_products_with_fallback(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
         """Search products with fallback to random products if search fails"""
         
@@ -1248,6 +1272,7 @@ class ElasticsearchService:
         print("❌ All search strategies failed, returning empty list")
         return []
     
+    @handle_newrelic_interference
     async def _search_by_categories(self, categories: List[str], size: int = 20) -> List[Dict]:
         """Simple category-based search"""
         try:
@@ -1272,6 +1297,7 @@ class ElasticsearchService:
             print(f"❌ Category search failed: {e}")
             return []
     
+    @handle_newrelic_interference
     async def _search_by_keywords(self, keywords: List[str], size: int = 20) -> List[Dict]:
         """Simple keyword-based search"""
         try:
@@ -1300,6 +1326,7 @@ class ElasticsearchService:
             print(f"❌ Keyword search failed: {e}")
             return []
     
+    @handle_newrelic_interference
     async def search_products_by_requirements(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
         """Search products based on Pydantic-extracted requirements with better relevance"""
         
@@ -1493,6 +1520,7 @@ class ElasticsearchService:
             print(traceback.format_exc())
             return await self.get_random_products(size)
 
+    @handle_newrelic_interference
     async def _broader_fallback_search(self, search_terms: List[str], size: int) -> List[Dict]:
         """Broader fallback search when precise search returns no results"""
         try:
@@ -1579,6 +1607,7 @@ class ElasticsearchService:
             print(f"❌ Broader fallback search failed: {e}")
             return []
 
+    @handle_newrelic_interference
     async def get_product_by_id(self, product_id: str) -> Optional[Dict]:
         """Get a product by its ID"""
         try:
@@ -1596,6 +1625,7 @@ class ElasticsearchService:
             print(f"❌ Error getting product by ID {product_id}: {str(e)}")
             return None
 
+    @handle_newrelic_interference
     async def get_solution_by_id(self, solution_id: str) -> Optional[Dict]:
         """Get a solution by its ID"""
         try:
