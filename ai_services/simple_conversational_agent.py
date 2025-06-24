@@ -85,10 +85,13 @@ class SimpleConversationalAgent(AIProvider):
         # Step 2: Retrieve products if needed
         product_data = None
         if intent_analysis.should_retrieve_products and self.hybrid_retriever:
-            print("🔍 Retrieving products using hybrid search...")
+            print("🔍 Retrieving products using LLM-enhanced hybrid search...")
             try:
+                # Use the enhanced LLM-powered context analysis
                 product_data = await self.hybrid_retriever.retrieve_products(messages, customer_context)
                 print(f"✅ Retrieved {len(product_data.get('products', []))} products, {len(product_data.get('solutions', []))} solutions")
+                print(f"   LLM Context: {product_data.get('requirements', {}).get('llm_context', {}).get('primary_need', 'Unknown')}")
+                print(f"   Similar Products Analysis: {product_data.get('similar_products_analysis', False)}")
             except Exception as e:
                 print(f"⚠️ Product retrieval failed: {e}")
                 product_data = {'products': [], 'solutions': [], 'error': str(e)}
@@ -136,38 +139,28 @@ class SimpleConversationalAgent(AIProvider):
         
         conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages[-3:]])  # Last 3 messages
         
-        analysis_prompt = f"""Analyze this conversation to determine the customer's intent and what actions should be taken.
+        analysis_prompt = f"""Analyze this conversation to understand the customer's needs and the natural flow of the discussion.
 
 CONVERSATION:
 {conversation_text}
 
 CUSTOMER CONTEXT: {customer_context or 'None provided'}
 
-IMPORTANT GUIDELINES:
-1. **Discovery First**: Always prioritize gathering requirements over product recommendations
-2. **Product Retrieval**: Only retrieve products if the customer has provided substantial requirements AND explicitly asks for recommendations
-3. **Quote Generation**: Only generate quotes if the customer explicitly requests a quote AND has provided detailed requirements
-4. **Be Conservative**: It's better to ask more questions than to make premature recommendations
+CONVERSATION ANALYSIS:
+1. What is the customer talking about or asking for?
+2. What stage of the conversation are we in? (greeting, discovery, solution discussion, etc.)
+3. What would be the most helpful next step in the conversation?
+4. Do they seem ready for product recommendations or still exploring their needs?
+5. What information would help me provide better assistance?
 
-Determine:
-1. What type of intent this represents
-2. Whether product retrieval is needed (be very conservative - only if customer has provided detailed requirements AND asks for recommendations)
-3. Whether quote generation is needed (only if explicitly requested with detailed requirements)
-4. What information is missing (focus on gathering requirements first)
-5. Suggested follow-up questions to gather more information
+GUIDELINES:
+- Focus on being helpful and natural, not following rigid rules
+- If they're asking about products or solutions, it's okay to provide recommendations
+- If they're still exploring or haven't shared much, focus on learning about their needs
+- Trust your judgment about what would be most helpful to them
+- Don't overthink it - just be genuinely helpful
 
-Examples of when NOT to retrieve products:
-- Customer mentions a product category but no specific requirements
-- Customer asks general questions about technology
-- Customer hasn't provided budget, timeline, or specific use cases
-- Customer is still in early discovery phase
-
-Examples of when to retrieve products:
-- Customer has provided detailed requirements (budget, timeline, specific needs) AND explicitly asks for recommendations
-- Customer has described their use case in detail AND asks for product suggestions
-- Customer is ready for solution presentation phase
-
-Be very conservative about product retrieval - it's better to gather more information first."""
+Remember: This is a natural conversation, not a sales process checklist. Do what feels right to help the customer."""
 
         try:
             intent_analysis = await self.base_provider.generate_structured_response(
@@ -203,16 +196,16 @@ Be very conservative about product retrieval - it's better to gather more inform
         quote_guidance = self.prompt_manager.get_prompt("conversational_agent", "quote_guidance", "")
         
         if not quote_guidance:
-            quote_guidance = """The customer is asking for a quote. However, before providing a detailed quote, ensure you have all necessary information.
+            quote_guidance = """The customer is asking for a quote. Help them get what they need.
 
 APPROACH:
-1. Acknowledge their quote request warmly
-2. Check if you have all required information (budget, timeline, specific requirements, use case details)
-3. If information is missing, ask for it first before proceeding with quote generation
-4. Only proceed with quote generation if you have comprehensive requirements
-5. If you have the information, provide a summary and next steps
+- Acknowledge their quote request warmly
+- Check if you have all the information needed for an accurate quote
+- If you need more details, ask for them naturally
+- If you have enough information, provide a summary and next steps
+- Be helpful and professional, not pushy
 
-Be professional yet conversational. It's better to gather complete information than to provide an inaccurate quote."""
+Remember: You're helping them get what they need, not following a rigid process."""
         
         # Build enhanced context
         enhanced_messages = self._build_conversational_context(messages, customer_context)
@@ -220,12 +213,7 @@ Be professional yet conversational. It's better to gather complete information t
         # Add missing information context - prioritize this
         if intent_analysis.missing_info:
             missing_info_context = f"""
-IMPORTANT: Before generating a quote, we need to gather more information.
-
-Missing Information:
-{chr(10).join([f"- {info}" for info in intent_analysis.missing_info])}
-
-Focus on gathering this information first. Only proceed with quote generation if you have comprehensive requirements.
+Note: You might want to learn more about their needs as the conversation progresses, but don't make this feel like an interrogation. Just be naturally curious and helpful.
 """
             enhanced_messages.append(AIMessage(role="system", content=missing_info_context))
         
@@ -266,16 +254,17 @@ Focus on gathering this information first. Only proceed with quote generation if
         product_guidance = self.prompt_manager.get_prompt("conversational_agent", "product_guidance", "")
         
         if not product_guidance:
-            product_guidance = """The customer is asking about products and you have sufficient requirements to make recommendations.
+            product_guidance = """The customer is asking about products and you have relevant recommendations to share.
 
 APPROACH:
-1. Acknowledge their inquiry and the requirements they've provided
-2. Present relevant product recommendations with clear reasoning
-3. Explain why these products fit their specific needs
-4. Ask if they'd like more details about any specific product
-5. Suggest next steps (demo, quote, etc.)
+- Acknowledge their inquiry naturally
+- Share relevant product recommendations with clear reasoning
+- Explain why these products would be a good fit for their needs
+- Be informative and helpful
+- Ask if they'd like more details about any specific product
+- Suggest next steps naturally (demo, quote, etc.)
 
-Be informative and helpful, but also be ready to gather more information if needed."""
+Be helpful and knowledgeable, not pushy or salesy."""
         
         # Build enhanced context
         enhanced_messages = self._build_conversational_context(messages, customer_context)
@@ -315,26 +304,27 @@ Be informative and helpful, but also be ready to gather more information if need
         enhanced_messages = self._build_conversational_context(messages, customer_context)
         
         # Add discovery-focused guidance
-        discovery_guidance = """You are in discovery mode. Your primary goal is to understand the customer's needs and gather requirements.
+        discovery_guidance = """You're having a natural conversation with a potential customer. Be helpful, informative, and genuinely interested in their needs.
 
 APPROACH:
-1. Be conversational and helpful
-2. Ask follow-up questions to understand their specific needs
-3. Gather information about their business context, challenges, and goals
-4. Don't jump to product recommendations unless they explicitly ask AND you have sufficient information
-5. Focus on understanding their problem before suggesting solutions
+- Be conversational and warm
+- Share relevant insights and information as you learn about them
+- Ask follow-up questions that flow naturally from the conversation
+- Be helpful and informative - don't just gather information
+- Show that you understand their business and challenges
+- Build rapport through knowledgeable, helpful responses
 
-Remember: It's better to ask one more question than to make premature recommendations."""
+Remember: You're a knowledgeable consultant having a conversation, not a sales robot. Be human and helpful."""
         
         enhanced_messages.append(AIMessage(role="system", content=discovery_guidance))
         
         # Add suggested questions if available
         if intent_analysis.suggested_questions:
             questions_context = f"""
-Suggested follow-up questions to gather more information:
+You might find these topics interesting to explore as the conversation flows naturally:
 {chr(10).join([f"- {question}" for question in intent_analysis.suggested_questions])}
 
-Incorporate these questions naturally into your response to better understand their needs.
+But don't feel obligated to ask them all - just let the conversation flow naturally.
 """
             enhanced_messages.append(AIMessage(role="system", content=questions_context))
         
@@ -354,10 +344,12 @@ Incorporate these questions naturally into your response to better understand th
         return response
     
     def _build_product_context(self, product_data: Dict[str, Any]) -> str:
-        """Build context from product data"""
+        """Build context from product data with LLM-powered insights"""
         
         products = product_data.get('products', [])
         solutions = product_data.get('solutions', [])
+        requirements = product_data.get('requirements', {})
+        llm_context = requirements.get('llm_context', {})
         
         context = f"""
 Available Product Recommendations:
@@ -367,6 +359,13 @@ Retrieval Method: {product_data.get('retrieval_method', 'unknown')}
 Fusion Method: {product_data.get('fusion_method', 'unknown')}
 Confidence: {product_data.get('retrieval_confidence', 0):.1%}
 
+LLM Context Analysis:
+Primary Need: {llm_context.get('primary_need', 'Not analyzed')}
+Business Context: {llm_context.get('business_context', 'Not analyzed')}
+Budget Level: {llm_context.get('budget_indicator', 'Not specified')}
+Timeline: {llm_context.get('timeline', 'Not specified')}
+Analysis Confidence: {llm_context.get('confidence', 0):.1%}
+
 """
         
         if products:
@@ -374,7 +373,13 @@ Confidence: {product_data.get('retrieval_confidence', 0):.1%}
             for i, product in enumerate(products[:5]):  # Top 5 products
                 context += f"{i+1}. {product.get('name', 'Unknown')} - ${product.get('price', 0):,.2f}\n"
                 context += f"   Category: {product.get('category', 'Unknown')}\n"
-                context += f"   Description: {product.get('description', 'No description')[:100]}...\n\n"
+                context += f"   Description: {product.get('description', 'No description')[:100]}...\n"
+                # Add LLM insights if available
+                if product.get('search_source') == 'both':
+                    context += f"   Match Quality: High (found in both keyword and semantic search)\n"
+                elif product.get('rrf_score', 0) > 0.02:
+                    context += f"   Match Quality: Strong (RRF score: {product.get('rrf_score', 0):.3f})\n"
+                context += "\n"
         
         if solutions:
             context += "Available Solutions:\n"
@@ -382,6 +387,14 @@ Confidence: {product_data.get('retrieval_confidence', 0):.1%}
                 context += f"{i+1}. {solution.get('name', 'Unknown')}\n"
                 context += f"   Use Case: {solution.get('use_case', 'No use case')}\n"
                 context += f"   Total Price: ${solution.get('total_price', 0):,.2f}\n\n"
+        
+        # Add similar products analysis if available
+        similar_products = requirements.get('similar_products', [])
+        if similar_products:
+            context += f"Similar Products Analysis:\n"
+            for product in similar_products[:3]:
+                context += f"- {product}\n"
+            context += "\n"
         
         return context
     
@@ -399,27 +412,29 @@ Confidence: {product_data.get('retrieval_confidence', 0):.1%}
         discovery_system_guidance = """
 
 IMPORTANT SALES APPROACH:
-You are a consultative B2B sales assistant. Your primary goal is to understand the customer's needs through discovery before making any recommendations.
+You are a friendly, knowledgeable B2B sales consultant having a natural conversation with a potential customer. Be human, conversational, and genuinely helpful.
 
-DISCOVERY-FIRST PRINCIPLES:
-1. **Ask Questions First**: Always gather requirements before suggesting solutions
-2. **Understand the Problem**: Focus on understanding their challenges and goals
-3. **Gather Context**: Learn about their business, budget, timeline, and specific needs
-4. **Be Patient**: Don't rush to product recommendations
-5. **Build Trust**: Show genuine interest in their success
+CONVERSATION STYLE:
+- Be warm and approachable, not robotic or scripted
+- Use natural language and conversational tone
+- Show genuine interest in their business and challenges
+- Ask questions naturally as part of the conversation, not as a checklist
+- Be helpful and informative while gathering information
+- Use humor and personality when appropriate
+
+DISCOVERY APPROACH (NATURAL):
+- Learn about their business and challenges through natural conversation
+- Ask follow-up questions that flow naturally from what they share
+- Don't interrogate them with a list of questions
+- Share relevant insights and information as you learn about their needs
+- Build rapport and trust through helpful, knowledgeable responses
 
 WHEN TO RECOMMEND PRODUCTS:
-- Only after you have comprehensive requirements (budget, timeline, specific needs, use case details)
-- Only when the customer explicitly asks for recommendations
-- Only when you understand their problem well enough to suggest relevant solutions
+- When you have a good understanding of their needs and they ask for suggestions
+- When you can provide genuinely helpful recommendations based on what they've shared
+- When the conversation naturally leads to solution discussion
 
-WHEN TO GATHER MORE INFORMATION:
-- Customer mentions a product category but no specific requirements
-- Customer asks general questions about technology
-- Customer hasn't provided budget, timeline, or specific use cases
-- Customer is still in early discovery phase
-
-Remember: It's better to ask one more question than to make premature recommendations that don't fit their needs."""
+Remember: You're having a conversation with a real person, not following a sales script. Be helpful, be human, and let the conversation flow naturally."""
 
         system_prompt = discovery_system_guidance + system_prompt
         

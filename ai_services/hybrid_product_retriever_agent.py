@@ -2,6 +2,7 @@ import json
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
 from .base import AIProvider, AIMessage, AIResponse
 from services.elasticsearch_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
@@ -9,6 +10,26 @@ from .function_models import RequirementExtraction, ProductAnalysis
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+class ContextAnalysis(BaseModel):
+    """LLM-powered context analysis for better product retrieval"""
+    primary_need: str = Field(description="The main problem or need the customer is trying to solve")
+    business_context: str = Field(description="Business context and industry considerations")
+    technical_requirements: List[str] = Field(description="Technical requirements or constraints")
+    budget_indicator: str = Field(description="Budget level indication (low/medium/high/enterprise)")
+    timeline: str = Field(description="Implementation timeline (immediate/short-term/long-term)")
+    similar_products: List[str] = Field(description="Similar products or solutions they might be interested in")
+    search_keywords: List[str] = Field(description="Keywords to use for product search")
+    semantic_queries: List[str] = Field(description="Semantic search queries for better matching")
+    confidence: float = Field(description="Confidence in the analysis (0.0 to 1.0)")
+
+class SimilarProductSearch(BaseModel):
+    """LLM-powered similar product search analysis"""
+    base_product: str = Field(description="The product they're asking about or similar to")
+    search_criteria: List[str] = Field(description="Criteria for finding similar products")
+    alternative_approaches: List[str] = Field(description="Alternative approaches or categories to consider")
+    complementary_products: List[str] = Field(description="Products that work well together")
+    upgrade_paths: List[str] = Field(description="Potential upgrade paths or next steps")
 
 class RRFHybridFusion:
     """Reciprocal Rank Fusion (RRF) implementation for hybrid search results"""
@@ -216,19 +237,193 @@ class HybridProductRetrieverAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Analyze conversation and retrieve products using hybrid approach"""
+        """
+        Enhanced conversation analysis with LLM-powered context understanding
+        """
+        print("🧠 Hybrid Product Retriever: Starting LLM-powered context analysis...")
         
-        print("🔍 Hybrid Retriever Agent: Starting hybrid analysis...")
+        try:
+            # Step 1: LLM-powered context analysis
+            context_analysis = await self._analyze_conversation_context(conversation_messages, customer_context)
+            print(f"✅ Context Analysis: {context_analysis.primary_need}")
+            print(f"   Keywords: {context_analysis.search_keywords}")
+            print(f"   Semantic Queries: {context_analysis.semantic_queries}")
+            
+            # Step 2: Enhanced requirement extraction with context
+            requirements = await self._extract_requirements_with_context(conversation_messages, customer_context, context_analysis)
+            
+            # Step 3: Similar product analysis if applicable
+            similar_products_analysis = None
+            if context_analysis.similar_products:
+                similar_products_analysis = await self._analyze_similar_products(context_analysis)
+                print(f"🔍 Similar Products Analysis: {len(similar_products_analysis.search_criteria)} criteria")
+            
+            # Step 4: Enhanced hybrid search with LLM insights
+            search_results = await self._perform_enhanced_hybrid_search(requirements, context_analysis, similar_products_analysis)
+            
+            # Step 5: LLM-powered result analysis and ranking
+            final_results = await self._analyze_and_rank_results(search_results, context_analysis, requirements)
+            
+            return final_results
+            
+        except Exception as e:
+            logger.error(f"Enhanced conversation analysis failed: {e}")
+            # Fallback to original method
+            return await self._fallback_analysis(conversation_messages, customer_context)
+    
+    async def _analyze_conversation_context(
+        self, 
+        messages: List[AIMessage], 
+        customer_context: Optional[Dict[str, Any]]
+    ) -> ContextAnalysis:
+        """LLM-powered context analysis for better understanding of customer needs"""
         
-        # Step 1: Extract requirements
-        requirements = await self._extract_requirements_from_conversation(
-            conversation_messages, customer_context
-        )
+        conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages[-5:]])  # Last 5 messages
         
-        # Step 2: Perform hybrid search
+        context_prompt = f"""Analyze this conversation to understand the customer's context and needs for better product matching.
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT: {customer_context or 'None provided'}
+
+ANALYSIS TASK:
+1. Identify the primary problem or need they're trying to solve
+2. Understand their business context and industry considerations
+3. Extract technical requirements and constraints
+4. Determine budget level and timeline indicators
+5. Identify similar products or solutions they might be interested in
+6. Generate effective search keywords and semantic queries
+7. Assess confidence in the analysis
+
+Focus on understanding their real needs, not just what they're asking for. Think about what would be most helpful for them."""
+
+        try:
+            context_analysis = await self.base_provider.generate_structured_response(
+                [AIMessage(role="user", content=context_prompt)],
+                ContextAnalysis
+            )
+            return context_analysis
+        except Exception as e:
+            logger.error(f"Context analysis failed: {e}")
+            # Fallback analysis
+            return ContextAnalysis(
+                primary_need="general business solution",
+                business_context="standard business needs",
+                technical_requirements=[],
+                budget_indicator="medium",
+                timeline="short-term",
+                similar_products=[],
+                search_keywords=["business", "solution"],
+                semantic_queries=["business technology solution"],
+                confidence=0.3
+            )
+    
+    async def _analyze_similar_products(self, context_analysis: ContextAnalysis) -> SimilarProductSearch:
+        """LLM-powered analysis for finding similar products"""
+        
+        similar_prompt = f"""Based on the customer's context, analyze what similar products or solutions they might be interested in.
+
+CONTEXT:
+Primary Need: {context_analysis.primary_need}
+Business Context: {context_analysis.business_context}
+Similar Products Mentioned: {context_analysis.similar_products}
+
+ANALYSIS TASK:
+1. Identify the base product or category they're interested in
+2. Determine search criteria for finding similar products
+3. Suggest alternative approaches or categories
+4. Identify complementary products that work well together
+5. Suggest potential upgrade paths or next steps
+
+Think broadly about their needs and suggest relevant alternatives."""
+
+        try:
+            similar_analysis = await self.base_provider.generate_structured_response(
+                [AIMessage(role="user", content=similar_prompt)],
+                SimilarProductSearch
+            )
+            return similar_analysis
+        except Exception as e:
+            logger.error(f"Similar products analysis failed: {e}")
+            return SimilarProductSearch(
+                base_product="general solution",
+                search_criteria=["business solution"],
+                alternative_approaches=[],
+                complementary_products=[],
+                upgrade_paths=[]
+            )
+    
+    async def _extract_requirements_with_context(
+        self,
+        messages: List[AIMessage],
+        customer_context: Optional[Dict[str, Any]],
+        context_analysis: ContextAnalysis
+    ) -> Dict[str, Any]:
+        """Enhanced requirement extraction using LLM context analysis"""
+        
+        # Use the context analysis to enhance requirement extraction
+        enhanced_requirements = await self._extract_requirements_from_conversation(messages, customer_context)
+        
+        # Enhance with context analysis insights
+        enhanced_requirements.update({
+            'llm_context': {
+                'primary_need': context_analysis.primary_need,
+                'business_context': context_analysis.business_context,
+                'technical_requirements': context_analysis.technical_requirements,
+                'budget_indicator': context_analysis.budget_indicator,
+                'timeline': context_analysis.timeline,
+                'confidence': context_analysis.confidence
+            },
+            'search_keywords': context_analysis.search_keywords,
+            'semantic_queries': context_analysis.semantic_queries,
+            'similar_products': context_analysis.similar_products
+        })
+        
+        return enhanced_requirements
+    
+    async def _perform_enhanced_hybrid_search(
+        self,
+        requirements: Dict[str, Any],
+        context_analysis: ContextAnalysis,
+        similar_products_analysis: Optional[SimilarProductSearch]
+    ) -> Dict[str, Any]:
+        """Perform enhanced hybrid search using LLM insights"""
+        
+        print("🔍 Enhanced Hybrid Search: Using LLM-powered context analysis...")
+        
+        # Use LLM-generated search keywords and semantic queries
+        search_keywords = context_analysis.search_keywords
+        semantic_queries = context_analysis.semantic_queries
+        
+        # Add similar products to search if available
+        if similar_products_analysis:
+            search_keywords.extend(similar_products_analysis.search_criteria)
+            semantic_queries.extend(similar_products_analysis.alternative_approaches)
+        
+        # Update requirements with LLM insights
+        enhanced_requirements = requirements.copy()
+        enhanced_requirements['search_keywords'] = search_keywords
+        enhanced_requirements['semantic_queries'] = semantic_queries
+        
+        # Perform the hybrid search
+        return await self._perform_hybrid_search(enhanced_requirements)
+    
+    async def _fallback_analysis(
+        self,
+        conversation_messages: List[AIMessage],
+        customer_context: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Fallback to original analysis method"""
+        print("⚠️ Using fallback analysis method...")
+        
+        # Extract requirements
+        requirements = await self._extract_requirements_from_conversation(conversation_messages, customer_context)
+        
+        # Perform hybrid search
         hybrid_results = await self._perform_hybrid_search(requirements)
         
-        # Step 3: Analyze and rank results
+        # Analyze results
         analysis = await self._analyze_hybrid_recommendations(
             hybrid_results["products"], 
             hybrid_results["solutions"], 
@@ -395,222 +590,64 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Perform hybrid search using Elasticsearch keyword and vector search with RRF fusion"""
         
-        print("🔍 Performing hybrid search (Elasticsearch keyword + vector + RRF)...")
+        print("🔍 Performing hybrid search with RRF fusion...")
         
-        # Check if vector search is available
-        if not self.vector_service:
-            print("⚠️ Vector service not available - using keyword search only")
-            elasticsearch_products = await self._elasticsearch_search(requirements)
-            vector_products = []
-            vector_solutions = []
-        else:
-            # Parallel searches for better performance
-            elasticsearch_products, vector_products, vector_solutions = await asyncio.gather(
-                self._elasticsearch_search(requirements),
-                self._elasticsearch_vector_search_products(requirements),
-                self._elasticsearch_vector_search_solutions(requirements),
-                return_exceptions=True
+        search_methods = []
+        
+        # Step 1: Elasticsearch keyword search
+        print("📋 Step 1: Elasticsearch keyword search...")
+        elasticsearch_products = await self._elasticsearch_search(requirements)
+        search_methods.append("elasticsearch_keyword")
+        print(f"   Found {len(elasticsearch_products)} products via keyword search")
+        
+        # Step 2: Vector search for products
+        vector_products = []
+        if self.vector_service:
+            print("🧠 Step 2: Vector search for products...")
+            vector_products = await self._elasticsearch_vector_search_products(requirements)
+            search_methods.append("vector_semantic")
+            print(f"   Found {len(vector_products)} products via vector search")
+        
+        # Step 3: Vector search for solutions
+        vector_solutions = []
+        if self.vector_service:
+            print("🧠 Step 3: Vector search for solutions...")
+            vector_solutions = await self._elasticsearch_vector_search_solutions(requirements)
+            search_methods.append("vector_solutions")
+            print(f"   Found {len(vector_solutions)} solutions via vector search")
+        
+        # Step 4: RRF fusion for products
+        print("🎯 Step 4: RRF fusion for products...")
+        if settings.use_rrf_fusion:
+            fused_products = self.rrf_fusion.fuse_rankings(
+                elasticsearch_products, 
+                vector_products,
+                max_results=settings.final_result_limit
             )
-        
-        # Handle exceptions
-        if isinstance(elasticsearch_products, Exception):
-            print(f"⚠️ Elasticsearch search failed: {elasticsearch_products}")
-            elasticsearch_products = []
-            
-        if isinstance(vector_products, Exception):
-            print(f"⚠️ Elasticsearch vector product search failed: {vector_products}")
-            vector_products = []
-            
-        if isinstance(vector_solutions, Exception):
-            print(f"⚠️ Elasticsearch vector solution search failed: {vector_solutions}")
-            vector_solutions = []
-        
-        # Debug logging before merge
-        print(f"🔍 Pre-merge counts:")
-        print(f"   Elasticsearch products: {len(elasticsearch_products)}")
-        print(f"   Vector products: {len(vector_products)}")
-        print(f"   Vector solutions: {len(vector_solutions)}")
-        
-        # Merge product results using RRF fusion
-        if settings.use_rrf_merging:
-            merged_products = self._merge_product_results_rrf(elasticsearch_products, vector_products)
+            print(f"   RRF fusion complete: {len(fused_products)} products")
         else:
-            # Fallback to simple merge if RRF is disabled
-            merged_products = self._merge_product_results_simple(elasticsearch_products, vector_products)
+            # Simple merge if RRF is disabled
+            fused_products = self._merge_product_results_simple(
+                elasticsearch_products, 
+                vector_products
+            )
+            print(f"   Simple merge complete: {len(fused_products)} products")
         
-        # Track search methods
-        search_methods = {
-            'elasticsearch_products': len(elasticsearch_products),
-            'vector_products': len(vector_products),
-            'vector_solutions': len(vector_solutions),
-            'merged_products': len(merged_products),
-            'fusion_method': 'rrf' if settings.use_rrf_merging else 'simple'
-        }
-        
-        print(f"🎯 Hybrid search complete:")
-        print(f"   Final merged products: {len(merged_products)}")
-        print(f"   Vector solutions: {len(vector_solutions)}")
-        print(f"   Search methods: {search_methods}")
+        # Step 5: Process solutions (no fusion needed for solutions)
+        solutions = vector_solutions[:settings.final_result_limit] if vector_solutions else []
         
         return {
-            'products': merged_products,
-            'solutions': vector_solutions,
-            'search_methods': search_methods
+            "products": fused_products,
+            "solutions": solutions,
+            "search_methods": search_methods,
+            "elasticsearch_count": len(elasticsearch_products),
+            "vector_products_count": len(vector_products),
+            "vector_solutions_count": len(vector_solutions),
+            "fusion_method": "rrf" if settings.use_rrf_fusion else "simple"
         }
     
-    async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search using Elasticsearch keyword search"""
-        try:
-            max_results = settings.max_search_results_per_source
-            return await self.elasticsearch.search_products_by_requirements(requirements, size=max_results)
-        except Exception as e:
-            print(f"❌ Elasticsearch search failed: {e}")
-            return []
-    
-    async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search products using Elasticsearch vector search with improved relevance"""
-        if not self.vector_service:
-            return []
-            
-        try:
-            semantic_query = requirements.get('semantic_query', '')
-            if not semantic_query:
-                return []
-            
-            # Remove category filtering - let semantic search find relevant products across all categories
-            # Instead, use semantic similarity and keyword matching for better relevance
-            
-            print(f"🧠 Vector search query: {semantic_query}")
-            
-            max_results = settings.max_search_results_per_source
-            
-            return await self.vector_service.vector_search_products(
-                query=semantic_query,
-                size=max_results,
-                filters=None,  # No category filters - let semantic search work across all categories
-                hybrid_weight=0.2  # Slightly higher hybrid weight for better text matching
-            )
-            
-        except Exception as e:
-            print(f"❌ Vector search failed: {e}")
-            return []
-    
-    async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search solutions using Elasticsearch vector search with improved relevance"""
-        if not self.vector_service:
-            return []
-            
-        try:
-            semantic_query = requirements.get('semantic_query', '')
-            if not semantic_query:
-                return []
-            
-            # Remove industry filtering - let semantic search find relevant solutions
-            # Industry can be used as context in the query instead of a filter
-            
-            print(f"🧠 Vector solution search query: {semantic_query}")
-            
-            max_results = settings.max_search_results_per_source
-            
-            return await self.vector_service.vector_search_solutions(
-                query=semantic_query,
-                size=max_results,
-                filters=None,  # Remove industry filters
-                hybrid_weight=0.2  # Increased text search weight for better keyword matching
-            )
-        except Exception as e:
-            print(f"❌ Elasticsearch vector solution search failed: {e}")
-            return []
-    
-    def _merge_product_results_rrf(
-        self, 
-        elasticsearch_products: List[Dict], 
-        vector_products: List[Dict]
-    ) -> List[Dict]:
-        """Merge and deduplicate product results using RRF (Reciprocal Rank Fusion)"""
-        
-        print(f"🔀 Starting RRF merge process...")
-        print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
-        
-        # Use RRF fusion to combine rankings
-        fused_products = self.rrf_fusion.fuse_rankings(
-            elasticsearch_products=elasticsearch_products,
-            vector_products=vector_products,
-            max_results=settings.final_result_limit
-        )
-        
-        # Add hybrid_score for backward compatibility (use RRF score)
-        for product in fused_products:
-            product['hybrid_score'] = product.get('rrf_score', 0)
-        
-        print(f"🎯 RRF merge complete: {len(fused_products)} unique products")
-        print(f"   Top 5 results:")
-        for i, product in enumerate(fused_products[:5]):
-            print(f"     {i+1}. {product.get('name', 'Unknown')} (RRF: {product.get('rrf_score', 0):.4f}, Source: {product.get('search_source', 'unknown')})")
-        
-        return fused_products
-    
-    def _merge_product_results_simple(
-        self, 
-        elasticsearch_products: List[Dict], 
-        vector_products: List[Dict]
-    ) -> List[Dict]:
-        """Simple merge when RRF is disabled - combine and deduplicate by ID"""
-        
-        print(f"🔀 Starting simple merge process (RRF disabled)...")
-        print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
-        
-        # Create a dictionary to deduplicate by ID
-        merged_dict = {}
-        
-        # Add Elasticsearch products first
-        for product in elasticsearch_products:
-            product_id = product.get('id', '')
-            if product_id:
-                product['search_source'] = 'elasticsearch'
-                product['keyword_score'] = product.get('_score', 0)
-                product['semantic_score'] = 0
-                merged_dict[product_id] = product
-        
-        # Add vector products, keeping the higher score if duplicate
-        for product in vector_products:
-            product_id = product.get('id', '')
-            if product_id:
-                if product_id in merged_dict:
-                    # Product exists in both sources
-                    existing = merged_dict[product_id]
-                    existing['search_source'] = 'both'
-                    existing['semantic_score'] = product.get('_similarity_score', 0)
-                    # Keep the higher score
-                    if product.get('_similarity_score', 0) > existing.get('keyword_score', 0):
-                        merged_dict[product_id] = product
-                        product['search_source'] = 'both'
-                        product['keyword_score'] = existing.get('_score', 0)
-                else:
-                    # New product from vector search
-                    product['search_source'] = 'vector'
-                    product['keyword_score'] = 0
-                    product['semantic_score'] = product.get('_similarity_score', 0)
-                    merged_dict[product_id] = product
-        
-        # Convert to list and sort by score
-        merged_products = list(merged_dict.values())
-        merged_products.sort(key=lambda x: max(x.get('keyword_score', 0), x.get('semantic_score', 0)), reverse=True)
-        
-        # Limit results
-        max_results = settings.final_result_limit
-        merged_products = merged_products[:max_results]
-        
-        print(f"🎯 Simple merge complete: {len(merged_products)} unique products")
-        print(f"   Top 5 results:")
-        for i, product in enumerate(merged_products[:5]):
-            score = max(product.get('keyword_score', 0), product.get('semantic_score', 0))
-            print(f"     {i+1}. {product.get('name', 'Unknown')} (Score: {score:.2f}, Source: {product.get('search_source', 'unknown')})")
-        
-        return merged_products
-    
     async def _analyze_hybrid_recommendations(
-        self, 
+        self,
         products: List[Dict], 
         solutions: List[Dict], 
         requirements: Dict[str, Any]
@@ -619,7 +656,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         
         analysis_prompt = f"""You are a technical solution architect analyzing hybrid search results from both keyword and semantic search.
 
-CUSTOMER REQUIREMENTS:
+REQUIREMENTS:
 {json.dumps(requirements, indent=2)}
 
 HYBRID PRODUCT RESULTS:
@@ -629,7 +666,7 @@ SEMANTIC SOLUTION RESULTS:
 {json.dumps(solutions, indent=2)}
 
 Provide detailed analysis considering both keyword relevance and semantic similarity scores."""
-        
+
         try:
             analysis = await self.base_provider.generate_structured_response(
                 [AIMessage(role="user", content=analysis_prompt)],
@@ -639,89 +676,27 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             return analysis.model_dump()
             
         except Exception as e:
-            print(f"⚠️ Hybrid analysis failed: {e}")
+            logger.error(f"Hybrid analysis failed: {e}")
             return {
-                "recommended_approach": "hybrid",
-                "top_recommendations": [],
-                "missing_requirements": [],
-                "alternative_options": [],
-                "total_estimated_value": 0
+                "analysis_summary": "Analysis failed - using fallback",
+                "key_recommendations": [],
+                "technical_insights": [],
+                "business_benefits": [],
+                "confidence_score": 0.3
             }
-    
-    def _calculate_hybrid_confidence(
-        self, 
-        hybrid_results: Dict[str, Any], 
-        requirements: Dict[str, Any]
-    ) -> float:
-        """Calculate confidence based on RRF hybrid search results"""
-        
-        score = 0.0
-        
-        products = hybrid_results.get('products', [])
-        solutions = hybrid_results.get('solutions', [])
-        search_methods = hybrid_results.get('search_methods', {})
-        fusion_method = search_methods.get('fusion_method', 'unknown')
-        
-        # Base score for finding results
-        if products:
-            score += 0.3
-        if solutions:
-            score += 0.2
-        
-        # RRF-specific confidence calculation
-        if fusion_method == 'rrf':
-            # Bonus for hybrid matches (found in both sources) - RRF handles this better
-            hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
-            if hybrid_matches > 0:
-                score += 0.25 * min(hybrid_matches / 5, 1.0)  # Up to 25% bonus
-            
-            # Bonus for high RRF scores (indicates strong consensus)
-            high_rrf_products = len([p for p in products if p.get('rrf_score', 0) > 0.02])
-            if high_rrf_products > 0:
-                score += 0.15 * min(high_rrf_products / 3, 1.0)  # Up to 15% bonus
-            
-            # Bonus for balanced results from both sources
-            es_count = search_methods.get('elasticsearch_products', 0)
-            vector_count = search_methods.get('vector_products', 0)
-            if es_count > 0 and vector_count > 0:
-                balance_ratio = min(es_count, vector_count) / max(es_count, vector_count)
-                score += 0.1 * balance_ratio  # Up to 10% bonus for balanced results
-        else:
-            # Simple fusion confidence calculation
-            hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
-            if hybrid_matches > 0:
-                score += 0.2 * min(hybrid_matches / 5, 1.0)  # Up to 20% bonus
-            
-            # Bonus for high scores in simple fusion
-            high_score_products = len([p for p in products if max(p.get('keyword_score', 0), p.get('semantic_score', 0)) > 5.0])
-            if high_score_products > 0:
-                score += 0.1 * min(high_score_products / 3, 1.0)  # Up to 10% bonus
-        
-        # Bonus for high semantic similarity in vector-only results
-        high_semantic_products = len([p for p in products if p.get('semantic_score', 0) > 0.8])
-        if high_semantic_products > 0:
-            score += 0.1 * min(high_semantic_products / 3, 1.0)  # Up to 10% bonus
-        
-        return min(score, 1.0)
     
     async def retrieve_products(
         self,
         messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Main interface for hybrid product retrieval using RRF fusion"""
+        """Main interface for hybrid product retrieval using LLM-powered context analysis"""
         
         try:
-            print(f"🔍 Hybrid Product Retriever (RRF): Starting analysis...")
+            print(f"🧠 Hybrid Product Retriever: Starting LLM-powered analysis...")
             
-            # Extract requirements
-            requirements = await self._extract_requirements_from_conversation(messages, customer_context)
-            
-            # Perform hybrid search
-            hybrid_results = await self._perform_hybrid_search(requirements)
-            
-            # Calculate confidence
-            confidence = self._calculate_hybrid_confidence(hybrid_results, requirements)
+            # Use the enhanced conversation analysis with LLM context
+            enhanced_results = await self.analyze_conversation_and_retrieve(messages, customer_context)
             
             # Build RRF parameters for response
             rrf_parameters = {
@@ -731,24 +706,26 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'description': 'Reciprocal Rank Fusion parameters for hybrid search result merging'
             }
             
-            # Return structured response
+            # Return structured response with LLM context
             retrieval_result = {
-                'products': hybrid_results['products'],
-                'solutions': hybrid_results['solutions'],
-                'requirements': requirements,
-                'total_products': len(hybrid_results['products']),
-                'total_solutions': len(hybrid_results['solutions']),
-                'search_methods': hybrid_results['search_methods'],
-                'retrieval_method': 'hybrid_elasticsearch_vector_rrf',
-                'fusion_method': hybrid_results['search_methods'].get('fusion_method', 'unknown'),
+                'products': enhanced_results.get('products', []),
+                'solutions': enhanced_results.get('solutions', []),
+                'requirements': enhanced_results.get('requirements', {}),
+                'total_products': len(enhanced_results.get('products', [])),
+                'total_solutions': len(enhanced_results.get('solutions', [])),
+                'search_methods': enhanced_results.get('search_methods', {}),
+                'retrieval_method': 'llm_enhanced_hybrid_elasticsearch_vector_rrf',
+                'fusion_method': enhanced_results.get('search_methods', {}).get('fusion_method', 'unknown'),
                 'rrf_parameters': rrf_parameters,
-                'retrieval_confidence': confidence,
+                'retrieval_confidence': enhanced_results.get('retrieval_confidence', 0.0),
+                'llm_context_used': True,
+                'similar_products_analysis': enhanced_results.get('similar_products_analysis', False),
                 'success': True
             }
             
-            print(f"✅ RRF Hybrid Retriever: Found {len(hybrid_results['products'])} products, {len(hybrid_results['solutions'])} solutions")
-            print(f"   Confidence: {confidence:.1%}")
-            print(f"   Fusion method: {retrieval_result['fusion_method']}")
+            print(f"✅ LLM-Enhanced Hybrid Retriever: Found {len(enhanced_results.get('products', []))} products, {len(enhanced_results.get('solutions', []))} solutions")
+            print(f"   Confidence: {enhanced_results.get('retrieval_confidence', 0.0):.1%}")
+            print(f"   LLM Context: {enhanced_results.get('requirements', {}).get('llm_context', {}).get('primary_need', 'Unknown')}")
             return retrieval_result
             
         except Exception as e:
@@ -767,6 +744,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'fusion_method': 'none',
                 'rrf_parameters': {},
                 'retrieval_confidence': 0.0,
+                'llm_context_used': False,
+                'similar_products_analysis': False,
                 'success': False,
                 'error': str(e)
             }
@@ -818,6 +797,62 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             'industry': customer_context.get('industry', '') if customer_context else '',
             'extraction_method': 'fallback'
         }
+
+    def _calculate_hybrid_confidence(
+        self, 
+        hybrid_results: Dict[str, Any], 
+        requirements: Dict[str, Any]
+    ) -> float:
+        """Calculate confidence based on RRF hybrid search results"""
+        
+        score = 0.0
+        
+        products = hybrid_results.get('products', [])
+        solutions = hybrid_results.get('solutions', [])
+        search_methods = hybrid_results.get('search_methods', {})
+        fusion_method = search_methods.get('fusion_method', 'unknown')
+        
+        # Base score for finding results
+        if products:
+            score += 0.3
+        if solutions:
+            score += 0.2
+        
+        # RRF-specific confidence calculation
+        if fusion_method == 'rrf':
+            # Bonus for hybrid matches (found in both sources) - RRF handles this better
+            hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
+            if hybrid_matches > 0:
+                score += 0.25 * min(hybrid_matches / 5, 1.0)  # Up to 25% bonus
+            
+            # Bonus for high RRF scores (indicates strong consensus)
+            high_rrf_products = len([p for p in products if p.get('rrf_score', 0) > 0.02])
+            if high_rrf_products > 0:
+                score += 0.15 * min(high_rrf_products / 3, 1.0)  # Up to 15% bonus
+            
+            # Bonus for balanced results from both sources
+            es_count = search_methods.get('elasticsearch_count', 0)
+            vector_count = search_methods.get('vector_products_count', 0)
+            if es_count > 0 and vector_count > 0:
+                balance_ratio = min(es_count, vector_count) / max(es_count, vector_count)
+                score += 0.1 * balance_ratio  # Up to 10% bonus for balanced results
+        else:
+            # Simple fusion confidence calculation
+            hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
+            if hybrid_matches > 0:
+                score += 0.2 * min(hybrid_matches / 5, 1.0)  # Up to 20% bonus
+            
+            # Bonus for high scores in simple fusion
+            high_score_products = len([p for p in products if max(p.get('keyword_score', 0), p.get('semantic_score', 0)) > 5.0])
+            if high_score_products > 0:
+                score += 0.1 * min(high_score_products / 3, 1.0)  # Up to 10% bonus
+        
+        # Bonus for high semantic similarity in vector-only results
+        high_semantic_products = len([p for p in products if p.get('semantic_score', 0) > 0.8])
+        if high_semantic_products > 0:
+            score += 0.1 * min(high_semantic_products / 3, 1.0)  # Up to 10% bonus
+        
+        return min(score, 1.0)
 
 # Async helper to avoid import issues
 async def run_async(coro):
