@@ -143,9 +143,17 @@ class ElasticsearchService:
         if not hasattr(self, 'initialized'):
             self.initialized = True
     
+    async def _force_patch_transport(self):
+        """Force the decorator's patching logic to run before any real use"""
+        try:
+            await self.test_connection()  # This will trigger the decorator and patch transport
+        except Exception:
+            pass  # Ignore errors, just want to patch
+    
     async def initialize(self):
         """Initialize Elasticsearch indices and load data"""
         try:
+            await self._force_patch_transport()  # Patch transport before any real use
             await self.test_connection()
             await self.create_indices()
             
