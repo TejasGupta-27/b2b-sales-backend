@@ -251,9 +251,19 @@ Note: You might want to learn more about their needs as the conversation progres
         })
         
         # If we have enough information, generate the actual quote
-        if len(intent_analysis.missing_info) == 0:
+        # Be more lenient - if customer explicitly asks for quote, generate it even with some missing info
+        should_generate_quote = (
+            len(intent_analysis.missing_info) == 0 or  # Complete requirements
+            intent_analysis.confidence > 0.8 or  # High confidence in intent
+            any(keyword in messages[-1].content.lower() for keyword in ['quote', 'price', 'cost', 'total'])  # Explicit quote request
+        )
+        
+        if should_generate_quote:
             try:
-                print("✅ Requirements complete - generating quote...")
+                print("✅ Generating quote (requirements complete or explicit request)...")
+                if len(intent_analysis.missing_info) > 0:
+                    print(f"   Note: Some missing info: {intent_analysis.missing_info}")
+                
                 quote = await self.generate_quote({
                     'conversation_messages': messages,
                     'customer_context': customer_context
@@ -272,7 +282,8 @@ Note: You might want to learn more about their needs as the conversation progres
                         'pdf_url': quote.get('pdf_url'),
                         'pitch_deck_generated': quote.get('pitch_deck_generated', False),
                         'pitch_deck_url': quote.get('pitch_deck_url'),
-                        'quote_total': quote.get('financials', {}).get('total') if 'financials' in quote else quote.get('total')
+                        'quote_total': quote.get('financials', {}).get('total') if 'financials' in quote else quote.get('total'),
+                        'requirements_complete': len(intent_analysis.missing_info) == 0
                     })
                 else:
                     response.metadata['quote_generation_error'] = quote.get('error', 'Unknown error') if quote else 'No quote returned'
@@ -280,6 +291,9 @@ Note: You might want to learn more about their needs as the conversation progres
             except Exception as e:
                 print(f"❌ Quote generation failed: {e}")
                 response.metadata['quote_generation_error'] = str(e)
+        else:
+            print(f"⚠️ Not generating quote yet - missing info: {intent_analysis.missing_info}")
+            response.metadata['requirements_complete'] = False
         
         return response
     

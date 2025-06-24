@@ -773,12 +773,19 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         
         print("🔍 Performing hybrid search with RRF fusion...")
         
-        search_methods = []
+        search_methods = {
+            "methods": [],
+            "elasticsearch_count": 0,
+            "vector_products_count": 0,
+            "vector_solutions_count": 0,
+            "fusion_method": "unknown"
+        }
         
         # Step 1: Elasticsearch keyword search
         print("📋 Step 1: Elasticsearch keyword search...")
         elasticsearch_products = await self._elasticsearch_search(requirements)
-        search_methods.append("elasticsearch_keyword")
+        search_methods["methods"].append("elasticsearch_keyword")
+        search_methods["elasticsearch_count"] = len(elasticsearch_products)
         print(f"   Found {len(elasticsearch_products)} products via keyword search")
         
         # Step 2: Vector search for products
@@ -786,7 +793,8 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         if self.vector_service:
             print("🧠 Step 2: Vector search for products...")
             vector_products = await self._elasticsearch_vector_search_products(requirements)
-            search_methods.append("vector_semantic")
+            search_methods["methods"].append("vector_semantic")
+            search_methods["vector_products_count"] = len(vector_products)
             print(f"   Found {len(vector_products)} products via vector search")
             
         # Step 3: Vector search for solutions
@@ -794,7 +802,8 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         if self.vector_service:
             print("🧠 Step 3: Vector search for solutions...")
             vector_solutions = await self._elasticsearch_vector_search_solutions(requirements)
-            search_methods.append("vector_solutions")
+            search_methods["methods"].append("vector_solutions")
+            search_methods["vector_solutions_count"] = len(vector_solutions)
             print(f"   Found {len(vector_solutions)} solutions via vector search")
         
         # Step 4: RRF fusion for products
@@ -805,6 +814,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
                 vector_products,
                 max_results=settings.final_result_limit
             )
+            search_methods["fusion_method"] = "rrf"
             print(f"   RRF fusion complete: {len(fused_products)} products")
         else:
             # Simple merge if RRF is disabled
@@ -812,6 +822,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
                 elasticsearch_products, 
                 vector_products
             )
+            search_methods["fusion_method"] = "simple"
             print(f"   Simple merge complete: {len(fused_products)} products")
         
         # Step 5: Process solutions (no fusion needed for solutions)
@@ -820,11 +831,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         return {
             "products": fused_products,
             "solutions": solutions,
-            "search_methods": search_methods,
-            "elasticsearch_count": len(elasticsearch_products),
-            "vector_products_count": len(vector_products),
-            "vector_solutions_count": len(vector_solutions),
-            "fusion_method": "rrf" if settings.use_rrf_merging else "simple"
+            "search_methods": search_methods
         }
     
     async def _analyze_hybrid_recommendations(
@@ -1143,8 +1150,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             
             print(f"🧠 Vector search query: {semantic_query}")
             
-            # Perform vector search
-            results = await self.vector_service.search_products(semantic_query, limit=settings.final_result_limit)
+            # Perform vector search using the correct method name and parameter
+            results = await self.vector_service.vector_search_products(semantic_query, size=settings.final_result_limit)
             
             # Add search metadata
             for product in results:
@@ -1170,8 +1177,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             
             print(f"🧠 Vector search for solutions: {semantic_query}")
             
-            # Perform vector search for solutions
-            results = await self.vector_service.search_solutions(semantic_query, limit=settings.final_result_limit)
+            # Perform vector search for solutions using the correct method name and parameter
+            results = await self.vector_service.vector_search_solutions(semantic_query, size=settings.final_result_limit)
             
             return results
             
