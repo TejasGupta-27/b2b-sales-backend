@@ -133,6 +133,21 @@ class ElasticsearchService:
                 retry_on_timeout=True,
                 max_retries=3
             )
+            # --- PATCH TRANSPORT HERE ---
+            transport = getattr(cls._instance.client, 'transport', None)
+            if asyncio.iscoroutine(transport):
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                resolved = loop.run_until_complete(transport)
+                if hasattr(cls._instance.client, '_transport'):
+                    cls._instance.client._transport = resolved
+                else:
+                    setattr(cls._instance.client, '_transport', resolved)
+            # --- END PATCH ---
             cls._instance.products_index = settings.elasticsearch_index_products
             cls._instance.solutions_index = settings.elasticsearch_index_solutions
             cls._instance.health_checked = False
