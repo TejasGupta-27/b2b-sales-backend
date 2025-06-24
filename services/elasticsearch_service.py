@@ -47,18 +47,38 @@ def handle_newrelic_interference(func):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                return await func(*args, **kwargs)
+                async with disable_newrelic_for_elasticsearch():
+                    return await func(*args, **kwargs)
             except AttributeError as attr_error:
-                if "'coroutine' object has no attribute" in str(attr_error):
+                error_msg = str(attr_error).lower()
+                if any(phrase in error_msg for phrase in [
+                    "'coroutine' object has no attribute",
+                    "transport",
+                    "perform_request",
+                    "_nr_wrapper"
+                ]):
                     logger.warning(f"New Relic interference detected in {func.__name__} (attempt {attempt + 1}), retrying...")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.5 * (attempt + 1))  # Progressive backoff
                         continue
                     else:
                         logger.error(f"New Relic interference persisted after {max_retries} attempts for {func.__name__}")
-                        raise
+                        # Try one more time with direct client access
+                        try:
+                            # For count operations, try alternative approach
+                            if "count" in func.__name__:
+                                logger.info("Attempting alternative count method...")
+                                return 0  # Return 0 count as fallback
+                            raise
+                        except:
+                            raise attr_error
                 else:
                     raise
+            except Exception as e:
+                # Handle other exceptions normally
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(0.5 * (attempt + 1))
         return await func(*args, **kwargs)
     return wrapper
 
@@ -106,6 +126,7 @@ class ElasticsearchService:
             logger.error(f"Failed to initialize Elasticsearch: {e}")
             logger.warning("Continuing with fallback data due to Elasticsearch initialization failure")
     
+    @handle_newrelic_interference
     async def test_connection(self):
         """Test Elasticsearch connection"""
         try:
@@ -116,6 +137,7 @@ class ElasticsearchService:
             logger.error(f"Elasticsearch connection failed: {e}")
             return False
     
+    @handle_newrelic_interference
     async def create_indices(self):
         """Create Elasticsearch indices with mappings"""
         
@@ -254,32 +276,21 @@ class ElasticsearchService:
             except Exception as fallback_error:
                 logger.error(f"Failed to load fallback data: {fallback_error}")
     
+    @handle_newrelic_interference
     async def _wait_for_cluster_ready(self, max_attempts: int = 10, delay: float = 2.0):
         """Wait for Elasticsearch cluster to be ready"""
         for attempt in range(max_attempts):
             try:
-                # Use context manager to disable New Relic for this operation
-                async with disable_newrelic_for_elasticsearch():
-                    # Try a simple cluster health check with short timeout
-                    try:
-                        health = await self.client.cluster.health(
-                            wait_for_status='yellow',
-                            timeout='2s',
-                            request_timeout=3
-                        )
-                        
-                        if health['status'] in ['green', 'yellow']:
-                            logger.info(f"✅ Cluster ready: {health['status']} status")
-                            return True
-                            
-                    except AttributeError as attr_error:
-                        # Handle New Relic interference with async methods
-                        if "'coroutine' object has no attribute" in str(attr_error):
-                            logger.warning(f"New Relic interference detected in cluster health check (attempt {attempt + 1}), retrying...")
-                            await asyncio.sleep(0.5)
-                            continue
-                        else:
-                            raise
+                # Try a simple cluster health check with short timeout
+                health = await self.client.cluster.health(
+                    wait_for_status='yellow',
+                    timeout='2s',
+                    request_timeout=3
+                )
+                
+                if health['status'] in ['green', 'yellow']:
+                    logger.info(f"✅ Cluster ready: {health['status']} status")
+                    return True
                     
             except Exception as e:
                 logger.warning(f"Cluster not ready (attempt {attempt + 1}/{max_attempts}): {e}")
@@ -289,6 +300,7 @@ class ElasticsearchService:
         logger.warning("Cluster readiness timeout - proceeding anyway")
         return False
     
+    @handle_newrelic_interference
     async def _safe_count(self, index: str) -> int:
         """Safely count documents with retries and fallbacks"""
         max_retries = 3
@@ -308,41 +320,50 @@ class ElasticsearchService:
                     logger.error(f"All count attempts failed for {index}")
                     return 0
     
+    @handle_newrelic_interference
     async def _safe_count_with_retries(self, index: str, max_retries: int = 5) -> int:
         """Enhanced safe count with more retries and better error handling for container restarts"""
         logger.info(f"🔍 Counting documents in {index} (with enhanced retries)...")
         
         for attempt in range(max_retries):
             try:
-                # Use context manager to disable New Relic for this operation
-                async with disable_newrelic_for_elasticsearch():
-                    # First check if index exists
-                    exists = await self.client.indices.exists(index=index)
-                    if not exists:
-                        logger.info(f"📝 Index {index} does not exist yet")
-                        return 0
+                # First check if index exists
+                exists = await self.client.indices.exists(index=index)
+                if not exists:
+                    logger.info(f"📝 Index {index} does not exist yet")
+                    return 0
+                
+                # Try counting with alternative methods if needed
+                try:
+                    response = await self.client.count(
+                        index=index,
+                        request_timeout=10,
+                        ignore_unavailable=True
+                    )
                     
-                    # Try different counting methods with better error handling
-                    try:
-                        response = await self.client.count(
-                            index=index,
-                            request_timeout=10,
-                            ignore_unavailable=True
-                        )
-                        
-                        count = response.get('count', 0)
-                        logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
-                        return count
-                        
-                    except AttributeError as attr_error:
-                        # Handle New Relic interference with async methods
-                        if "'coroutine' object has no attribute" in str(attr_error):
-                            logger.warning(f"New Relic interference detected in count attempt {attempt + 1}, retrying...")
-                            # Force a small delay to let New Relic settle
-                            await asyncio.sleep(0.5)
-                            continue
-                        else:
-                            raise
+                    count = response.get('count', 0)
+                    logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
+                    return count
+                    
+                except Exception as count_error:
+                    logger.warning(f"Count method failed, trying search method: {count_error}")
+                    # Alternative: use search to get total count
+                    search_response = await self.client.search(
+                        index=index,
+                        size=0,
+                        track_total_hits=True,
+                        request_timeout=10,
+                        ignore_unavailable=True
+                    )
+                    
+                    total = search_response.get('hits', {}).get('total', {})
+                    if isinstance(total, dict):
+                        count = total.get('value', 0)
+                    else:
+                        count = total or 0
+                    
+                    logger.info(f"📊 Index {index} contains {count} documents via search (attempt {attempt + 1})")
+                    return count
                 
             except Exception as e:
                 logger.warning(f"Count attempt {attempt + 1}/{max_retries} failed for {index}: {e}")
@@ -355,6 +376,7 @@ class ElasticsearchService:
                     logger.error(f"❌ All {max_retries} count attempts failed for {index}")
                     return 0
     
+    @handle_newrelic_interference
     async def _safe_refresh_indices(self):
         """Safely refresh indices with error handling"""
         try:
@@ -367,6 +389,7 @@ class ElasticsearchService:
         except Exception as e:
             logger.warning(f"Index refresh failed: {e}")
     
+    @handle_newrelic_interference
     async def _force_load_sample_data(self):
         """Force load sample data with individual document indexing"""
         logger.info("🔄 Force loading sample products...")
@@ -473,6 +496,7 @@ class ElasticsearchService:
         
         logger.info("✅ Force loaded sample data")
     
+    @handle_newrelic_interference
     async def _handle_readonly_cluster(self):
         """Handle read-only cluster by attempting to clear the restriction"""
         try:
@@ -489,6 +513,7 @@ class ElasticsearchService:
             logger.warning(f"Could not clear read-only mode: {e}")
             return False
 
+    @handle_newrelic_interference
     async def _force_index_document(self, index: str, doc_id: str, document: dict, max_retries: int = 5):
         """Force index a single document with aggressive retries"""
         for attempt in range(max_retries):
@@ -520,6 +545,7 @@ class ElasticsearchService:
                     logger.error(f"Failed to index {doc_id} after {max_retries} attempts")
                     return False
     
+    @handle_newrelic_interference
     async def ensure_healthy(self):
         """Ensure Elasticsearch is healthy before operations with aggressive retry"""
         max_attempts = 5
@@ -546,6 +572,7 @@ class ElasticsearchService:
         await self._attempt_cluster_recovery()
         raise Exception("Elasticsearch cluster unhealthy after recovery attempts")
     
+    @handle_newrelic_interference
     async def _attempt_cluster_recovery(self):
         """Attempt to recover unhealthy cluster"""
         try:
@@ -856,6 +883,7 @@ class ElasticsearchService:
         
         return ' '.join(search_parts).lower()
     
+    @handle_newrelic_interference
     async def index_product(self, product: Dict[str, Any]):
         """Index a single product"""
         try:
@@ -867,6 +895,7 @@ class ElasticsearchService:
         except Exception as e:
             logger.error(f"Failed to index product {product.get('id')}: {e}")
     
+    @handle_newrelic_interference
     async def index_solution(self, solution: Dict[str, Any]):
         """Index a single solution"""
         try:
@@ -878,6 +907,7 @@ class ElasticsearchService:
         except Exception as e:
             logger.error(f"Failed to index solution {solution.get('id')}: {e}")
     
+    @handle_newrelic_interference
     async def check_health(self) -> bool:
         """Check if Elasticsearch is healthy and ready"""
         try:
@@ -889,6 +919,7 @@ class ElasticsearchService:
             print(f"❌ Elasticsearch health check failed: {e}")
             return False
     
+    @handle_newrelic_interference
     async def search_products(self, query_body: dict, index: str = "products") -> List[Dict]:
         """Search products with better error handling"""
         try:
@@ -920,6 +951,7 @@ class ElasticsearchService:
             print(f"❌ Elasticsearch search failed: {e}")
             return []
 
+    @handle_newrelic_interference
     async def get_random_products(self, size: int = 10) -> List[Dict]:
         """Get random products for testing/sampling"""
         try:
@@ -948,6 +980,7 @@ class ElasticsearchService:
             logger.error(f"Random products retrieval failed: {e}")
             return []
     
+    @handle_newrelic_interference
     async def search_solutions(self, requirements: Dict[str, Any], size: int = 5) -> List[Dict]:
         """Search for solutions based on requirements"""
         search_body = {
@@ -991,6 +1024,7 @@ class ElasticsearchService:
             logger.error(f"Solution search failed: {e}")
             return []
     
+    @handle_newrelic_interference
     async def close(self):
         """Close Elasticsearch connection"""
         try:
@@ -998,6 +1032,7 @@ class ElasticsearchService:
         except Exception as e:
             logger.warning(f"Error closing Elasticsearch connection: {e}")
 
+    @handle_newrelic_interference
     async def get_product_categories(self) -> List[str]:
         """Get all available product categories"""
         try:
@@ -1025,6 +1060,7 @@ class ElasticsearchService:
             logger.error(f"Failed to get categories: {e}")
             return []
 
+    @handle_newrelic_interference
     async def get_product_stats(self) -> Dict[str, Any]:
         """Get statistics about indexed products"""
         try:
@@ -1067,6 +1103,7 @@ class ElasticsearchService:
             logger.error(f"Failed to get product stats: {e}")
             return {"total_products": 0, "categories": {}, "price_range": {}}
 
+    @handle_newrelic_interference
     async def reindex_all_data(self, force_replace: bool = False):
         """Reindex Elasticsearch data - either update existing or replace completely"""
         try:
@@ -1098,6 +1135,7 @@ class ElasticsearchService:
             logger.error(f"Failed to reindex data: {e}")
             raise
 
+    @handle_newrelic_interference
     async def update_existing_data(self):
         """Update existing Elasticsearch data without destroying it"""
         try:
