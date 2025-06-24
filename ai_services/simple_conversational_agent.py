@@ -132,7 +132,7 @@ class SimpleConversationalAgent(AIProvider):
         messages: List[AIMessage], 
         customer_context: Optional[Dict[str, Any]]
     ) -> ConversationIntent:
-        """Analyze conversation intent using Pydantic function calling"""
+        """Analyze conversation intent using Pydantic function calling - focus on discovery first"""
         
         conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages[-3:]])  # Last 3 messages
         
@@ -143,14 +143,31 @@ CONVERSATION:
 
 CUSTOMER CONTEXT: {customer_context or 'None provided'}
 
+IMPORTANT GUIDELINES:
+1. **Discovery First**: Always prioritize gathering requirements over product recommendations
+2. **Product Retrieval**: Only retrieve products if the customer has provided substantial requirements AND explicitly asks for recommendations
+3. **Quote Generation**: Only generate quotes if the customer explicitly requests a quote AND has provided detailed requirements
+4. **Be Conservative**: It's better to ask more questions than to make premature recommendations
+
 Determine:
 1. What type of intent this represents
-2. Whether product retrieval is needed
-3. Whether quote generation is needed
-4. What information might be missing
-5. Suggested follow-up questions
+2. Whether product retrieval is needed (be very conservative - only if customer has provided detailed requirements AND asks for recommendations)
+3. Whether quote generation is needed (only if explicitly requested with detailed requirements)
+4. What information is missing (focus on gathering requirements first)
+5. Suggested follow-up questions to gather more information
 
-Be intelligent about this - don't retrieve products for every question, only when the customer is actually looking for product recommendations or solutions."""
+Examples of when NOT to retrieve products:
+- Customer mentions a product category but no specific requirements
+- Customer asks general questions about technology
+- Customer hasn't provided budget, timeline, or specific use cases
+- Customer is still in early discovery phase
+
+Examples of when to retrieve products:
+- Customer has provided detailed requirements (budget, timeline, specific needs) AND explicitly asks for recommendations
+- Customer has described their use case in detail AND asks for product suggestions
+- Customer is ready for solution presentation phase
+
+Be very conservative about product retrieval - it's better to gather more information first."""
 
         try:
             intent_analysis = await self.base_provider.generate_structured_response(
@@ -160,15 +177,15 @@ Be intelligent about this - don't retrieve products for every question, only whe
             return intent_analysis
         except Exception as e:
             print(f"⚠️ Intent analysis failed: {e}")
-            # Fallback to basic analysis
+            # Fallback to conservative analysis
             return ConversationIntent(
-                intent_type="general_chat",
+                intent_type="discovery",
                 should_retrieve_products=False,
                 should_generate_quote=False,
                 confidence=0.5,
-                reasoning="Fallback analysis due to error",
-                missing_info=[],
-                suggested_questions=[]
+                reasoning="Fallback analysis - focusing on discovery",
+                missing_info=["specific requirements", "budget", "timeline", "use case details"],
+                suggested_questions=["What specific problem are you trying to solve?", "What's your budget range?", "When do you need this solution?"]
             )
     
     async def _generate_quote_response(
@@ -178,7 +195,7 @@ Be intelligent about this - don't retrieve products for every question, only whe
         product_data: Optional[Dict[str, Any]],
         intent_analysis: ConversationIntent
     ) -> AIResponse:
-        """Generate quote response with product recommendations"""
+        """Generate quote response with focus on gathering missing information first"""
         
         print("💰 Generating quote response...")
         
@@ -186,36 +203,39 @@ Be intelligent about this - don't retrieve products for every question, only whe
         quote_guidance = self.prompt_manager.get_prompt("conversational_agent", "quote_guidance", "")
         
         if not quote_guidance:
-            quote_guidance = """The customer is asking for a quote. Provide a comprehensive response that includes:
+            quote_guidance = """The customer is asking for a quote. However, before providing a detailed quote, ensure you have all necessary information.
 
-1. Acknowledgment of their request
-2. Summary of their requirements
-3. Product recommendations (if available)
-4. Next steps for quote generation
-5. Any missing information needed
+APPROACH:
+1. Acknowledge their quote request warmly
+2. Check if you have all required information (budget, timeline, specific requirements, use case details)
+3. If information is missing, ask for it first before proceeding with quote generation
+4. Only proceed with quote generation if you have comprehensive requirements
+5. If you have the information, provide a summary and next steps
 
-Be professional yet conversational."""
+Be professional yet conversational. It's better to gather complete information than to provide an inaccurate quote."""
         
         # Build enhanced context
         enhanced_messages = self._build_conversational_context(messages, customer_context)
         
-        # Add product context if available
+        # Add missing information context - prioritize this
+        if intent_analysis.missing_info:
+            missing_info_context = f"""
+IMPORTANT: Before generating a quote, we need to gather more information.
+
+Missing Information:
+{chr(10).join([f"- {info}" for info in intent_analysis.missing_info])}
+
+Focus on gathering this information first. Only proceed with quote generation if you have comprehensive requirements.
+"""
+            enhanced_messages.append(AIMessage(role="system", content=missing_info_context))
+        
+        # Add product context if available (but don't prioritize it)
         if product_data and product_data.get('products'):
             product_context = self._build_product_context(product_data)
             enhanced_messages.append(AIMessage(role="system", content=product_context))
         
         # Add quote guidance
         enhanced_messages.append(AIMessage(role="system", content=quote_guidance))
-        
-        # Add missing information context
-        if intent_analysis.missing_info:
-            missing_info_context = f"""
-Missing Information Needed:
-{chr(10).join([f"- {info}" for info in intent_analysis.missing_info])}
-
-Ask for this information to provide an accurate quote.
-"""
-            enhanced_messages.append(AIMessage(role="system", content=missing_info_context))
         
         response = await self.base_provider.generate_response(enhanced_messages)
         
@@ -225,7 +245,8 @@ Ask for this information to provide an accurate quote.
         response.metadata.update({
             'quote_request': True,
             'missing_info': intent_analysis.missing_info,
-            'suggested_questions': intent_analysis.suggested_questions
+            'suggested_questions': intent_analysis.suggested_questions,
+            'requirements_complete': len(intent_analysis.missing_info) == 0
         })
         
         return response
@@ -237,7 +258,7 @@ Ask for this information to provide an accurate quote.
         product_data: Dict[str, Any],
         intent_analysis: ConversationIntent
     ) -> AIResponse:
-        """Generate response with product recommendations"""
+        """Generate response with product recommendations - only if requirements are complete"""
         
         print("📦 Generating product response...")
         
@@ -245,14 +266,16 @@ Ask for this information to provide an accurate quote.
         product_guidance = self.prompt_manager.get_prompt("conversational_agent", "product_guidance", "")
         
         if not product_guidance:
-            product_guidance = """The customer is asking about products. Provide a helpful response that includes:
+            product_guidance = """The customer is asking about products and you have sufficient requirements to make recommendations.
 
-1. Acknowledgment of their inquiry
-2. Relevant product recommendations
-3. Key features and benefits
-4. Next steps or questions
+APPROACH:
+1. Acknowledge their inquiry and the requirements they've provided
+2. Present relevant product recommendations with clear reasoning
+3. Explain why these products fit their specific needs
+4. Ask if they'd like more details about any specific product
+5. Suggest next steps (demo, quote, etc.)
 
-Be informative and helpful, not pushy."""
+Be informative and helpful, but also be ready to gather more information if needed."""
         
         # Build enhanced context
         enhanced_messages = self._build_conversational_context(messages, customer_context)
@@ -272,7 +295,8 @@ Be informative and helpful, not pushy."""
         response.metadata.update({
             'product_inquiry': True,
             'products_recommended': len(product_data.get('products', [])),
-            'solutions_recommended': len(product_data.get('solutions', []))
+            'solutions_recommended': len(product_data.get('solutions', [])),
+            'requirements_complete': len(intent_analysis.missing_info) == 0
         })
         
         return response
@@ -283,20 +307,34 @@ Be informative and helpful, not pushy."""
         customer_context: Optional[Dict[str, Any]],
         intent_analysis: ConversationIntent
     ) -> AIResponse:
-        """Generate general conversational response"""
+        """Generate general conversational response with focus on discovery"""
         
-        print("💬 Generating general response...")
+        print("💬 Generating general response with discovery focus...")
         
         # Build conversational context using prompt manager
         enhanced_messages = self._build_conversational_context(messages, customer_context)
         
+        # Add discovery-focused guidance
+        discovery_guidance = """You are in discovery mode. Your primary goal is to understand the customer's needs and gather requirements.
+
+APPROACH:
+1. Be conversational and helpful
+2. Ask follow-up questions to understand their specific needs
+3. Gather information about their business context, challenges, and goals
+4. Don't jump to product recommendations unless they explicitly ask AND you have sufficient information
+5. Focus on understanding their problem before suggesting solutions
+
+Remember: It's better to ask one more question than to make premature recommendations."""
+        
+        enhanced_messages.append(AIMessage(role="system", content=discovery_guidance))
+        
         # Add suggested questions if available
         if intent_analysis.suggested_questions:
             questions_context = f"""
-Suggested follow-up questions to ask:
+Suggested follow-up questions to gather more information:
 {chr(10).join([f"- {question}" for question in intent_analysis.suggested_questions])}
 
-Consider incorporating these questions naturally into your response if appropriate.
+Incorporate these questions naturally into your response to better understand their needs.
 """
             enhanced_messages.append(AIMessage(role="system", content=questions_context))
         
@@ -308,7 +346,9 @@ Consider incorporating these questions naturally into your response if appropria
         
         response.metadata.update({
             'general_chat': True,
-            'suggested_questions': intent_analysis.suggested_questions
+            'discovery_mode': True,
+            'suggested_questions': intent_analysis.suggested_questions,
+            'missing_info': intent_analysis.missing_info
         })
         
         return response
@@ -354,6 +394,34 @@ Confidence: {product_data.get('retrieval_confidence', 0):.1%}
         
         # Get main system prompt from prompt manager
         system_prompt = self.prompt_manager.get_system_prompt("conversational_agent")
+        
+        # Add discovery-focused system guidance
+        discovery_system_guidance = """
+
+IMPORTANT SALES APPROACH:
+You are a consultative B2B sales assistant. Your primary goal is to understand the customer's needs through discovery before making any recommendations.
+
+DISCOVERY-FIRST PRINCIPLES:
+1. **Ask Questions First**: Always gather requirements before suggesting solutions
+2. **Understand the Problem**: Focus on understanding their challenges and goals
+3. **Gather Context**: Learn about their business, budget, timeline, and specific needs
+4. **Be Patient**: Don't rush to product recommendations
+5. **Build Trust**: Show genuine interest in their success
+
+WHEN TO RECOMMEND PRODUCTS:
+- Only after you have comprehensive requirements (budget, timeline, specific needs, use case details)
+- Only when the customer explicitly asks for recommendations
+- Only when you understand their problem well enough to suggest relevant solutions
+
+WHEN TO GATHER MORE INFORMATION:
+- Customer mentions a product category but no specific requirements
+- Customer asks general questions about technology
+- Customer hasn't provided budget, timeline, or specific use cases
+- Customer is still in early discovery phase
+
+Remember: It's better to ask one more question than to make premature recommendations that don't fit their needs."""
+
+        system_prompt = discovery_system_guidance + system_prompt
         
         # Get conversational configuration
         config = self.prompt_manager.get_conversational_config()
