@@ -55,15 +55,29 @@ def handle_newrelic_interference(func):
                 CoroutineType = type((lambda: (yield))())
             try:
                 if self_obj and hasattr(self_obj, 'client'):
+                    # If the whole client is a coroutine (common NR wrap), await it and patch
+                    if asyncio.iscoroutine(self_obj.client):
+                        logger.debug("Awaiting coroutine Elasticsearch client to resolve New Relic wrapper issue...")
+                        real_client = await self_obj.client
+                        self_obj.client = real_client
+                    # Now fix transport inside the client if needed
                     transport = getattr(self_obj.client, 'transport', None)
                     if asyncio.iscoroutine(transport):
                         logger.debug("Awaiting coroutine transport to resolve New Relic wrapper issue...")
                         resolved = await transport
-                        # Replace the coroutine with the resolved transport
-                        self_obj.client.transport = resolved
-                        # Also patch the private attribute for safety
+                        
+                        # The 'transport' attribute on AsyncElasticsearch is a @property with no setter
+                        # so attempting to assign to it raises AttributeError. Instead, update the
+                        # underlying private attribute that the property returns ("_transport").  This
+                        # allows all subsequent property accesses (self.client.transport) to return the
+                        # already-resolved transport instance without altering the public API.
                         if hasattr(self_obj.client, '_transport'):
                             self_obj.client._transport = resolved
+                        else:
+                            # Fallback: monkey-patch a new attribute so that future accesses work.
+                            setattr(self_obj.client, '_transport', resolved)
+                        
+                        logger.debug("Replaced coroutine transport with resolved transport instance")
             except Exception as e:
                 logger.debug(f"Transport resolution not required or failed: {e}")
         
