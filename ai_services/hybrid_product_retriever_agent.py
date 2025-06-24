@@ -6,13 +6,14 @@ from .base import AIProvider, AIMessage, AIResponse
 from services.elasticsearch_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from .function_models import RequirementExtraction, ProductAnalysis
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 class RRFHybridFusion:
     """Reciprocal Rank Fusion (RRF) implementation for hybrid search results"""
     
-    def __init__(self, k: float = 60.0):
+    def __init__(self, k: float = None):
         """
         Initialize RRF with parameter k
         
@@ -20,7 +21,8 @@ class RRFHybridFusion:
             k: RRF parameter that controls the contribution of lower-ranked results
                Default k=60 is commonly used and provides good balance
         """
-        self.k = k
+        self.k = k or settings.rrf_k
+        logger.info(f"RRF Fusion initialized with k={self.k}")
     
     def calculate_rrf_score(self, rank: int) -> float:
         """
@@ -40,7 +42,7 @@ class RRFHybridFusion:
         self, 
         elasticsearch_products: List[Dict], 
         vector_products: List[Dict],
-        max_results: int = 20
+        max_results: int = None
     ) -> List[Dict]:
         """
         Fuse product rankings using RRF
@@ -53,8 +55,11 @@ class RRFHybridFusion:
         Returns:
             Fused and ranked product list
         """
+        max_results = max_results or settings.final_result_limit
+        
         print(f"🎯 RRF Fusion: Starting with k={self.k}")
         print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
+        print(f"   Max results: {max_results}")
         
         # Create product ID to rank mappings
         es_ranks = {}
@@ -88,24 +93,24 @@ class RRFHybridFusion:
                 all_products[product_id] = product.copy()
                 rrf_scores[product_id] = 0.0
         
-        # Calculate RRF scores
+        # Calculate RRF scores with weighted contributions
         for product_id in rrf_scores:
             es_rank = es_ranks.get(product_id)
             vector_rank = vector_ranks.get(product_id)
             
             rrf_score = 0.0
             
-            # Add RRF score from Elasticsearch ranking
+            # Add weighted RRF score from Elasticsearch ranking
             if es_rank is not None:
-                es_rrf = self.calculate_rrf_score(es_rank)
+                es_rrf = self.calculate_rrf_score(es_rank) * settings.rrf_elasticsearch_weight
                 rrf_score += es_rrf
-                print(f"   📊 {product_id}: ES rank {es_rank} → RRF {es_rrf:.4f}")
+                print(f"   📊 {product_id}: ES rank {es_rank} → RRF {es_rrf:.4f} (weight: {settings.rrf_elasticsearch_weight})")
             
-            # Add RRF score from vector ranking
+            # Add weighted RRF score from vector ranking
             if vector_rank is not None:
-                vector_rrf = self.calculate_rrf_score(vector_rank)
+                vector_rrf = self.calculate_rrf_score(vector_rank) * settings.rrf_semantic_weight
                 rrf_score += vector_rrf
-                print(f"   📊 {product_id}: Vector rank {vector_rank} → RRF {vector_rrf:.4f}")
+                print(f"   📊 {product_id}: Vector rank {vector_rank} → RRF {vector_rrf:.4f} (weight: {settings.rrf_semantic_weight})")
             
             rrf_scores[product_id] = rrf_score
             print(f"   🎯 {product_id}: Total RRF = {rrf_score:.4f}")
@@ -142,39 +147,53 @@ class RRFHybridFusion:
         return fused_products[:max_results]
 
 class HybridProductRetrieverAgent(AIProvider):
-    """Hybrid product retriever using Elasticsearch for both keyword and semantic search"""
+    """Hybrid product retriever using Elasticsearch for both keyword and semantic search with RRF fusion"""
     
     def __init__(
         self, 
         base_provider: AIProvider,
-        azure_embedding_endpoint: str,
-        azure_embedding_key: str,
-        rrf_k: float = 60.0,
+        azure_embedding_endpoint: str = None,
+        azure_embedding_key: str = None,
+        rrf_k: float = None,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.base_provider = base_provider
         self.elasticsearch = get_elasticsearch_service()
-        self.vector_service = get_elasticsearch_vector_service(
-            azure_embedding_endpoint, 
-            azure_embedding_key
-        )
-        # Initialize RRF fusion
+        
+        # Use settings if not provided
+        azure_embedding_endpoint = azure_embedding_endpoint or settings.azure_embedding_endpoint
+        azure_embedding_key = azure_embedding_key or settings.azure_embedding_api_key
+        
+        if azure_embedding_endpoint and azure_embedding_key:
+            self.vector_service = get_elasticsearch_vector_service(
+                azure_embedding_endpoint, 
+                azure_embedding_key
+            )
+        else:
+            self.vector_service = None
+            logger.warning("Azure embedding credentials not configured - vector search will be disabled")
+        
+        # Initialize RRF fusion with configurable k
+        rrf_k = rrf_k or settings.rrf_k
         self.rrf_fusion = RRFHybridFusion(k=rrf_k)
-        logger.info(f"Initialized RRF fusion with k={rrf_k}")
+        logger.info(f"Hybrid Product Retriever initialized with RRF k={rrf_k}")
         
     @property
     def provider_name(self) -> str:
-        return f"hybrid_product_retriever_{self.base_provider.provider_name}"
+        return f"hybrid_product_retriever_rrf_{self.base_provider.provider_name}"
     
     def is_configured(self) -> bool:
-        return self.base_provider.is_configured()
+        return self.base_provider.is_configured() and self.vector_service is not None
     
     async def initialize(self):
         """Initialize both search services"""
         try:
-            await self.vector_service.initialize()
-            logger.info("Hybrid Product Retriever (Elasticsearch Vector) initialized successfully")
+            if self.vector_service:
+                await self.vector_service.initialize()
+                logger.info("Hybrid Product Retriever (Elasticsearch Vector + RRF) initialized successfully")
+            else:
+                logger.warning("Vector service not available - using keyword search only")
         except Exception as e:
             logger.error(f"Failed to initialize Hybrid Product Retriever: {e}")
             raise
@@ -374,17 +393,24 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         return comprehensive_query
     
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform hybrid search using Elasticsearch keyword and vector search"""
+        """Perform hybrid search using Elasticsearch keyword and vector search with RRF fusion"""
         
-        print("🔍 Performing hybrid search (Elasticsearch keyword + vector)...")
+        print("🔍 Performing hybrid search (Elasticsearch keyword + vector + RRF)...")
         
-        # Parallel searches
-        elasticsearch_products, vector_products, vector_solutions = await asyncio.gather(
-            self._elasticsearch_search(requirements),
-            self._elasticsearch_vector_search_products(requirements),
-            self._elasticsearch_vector_search_solutions(requirements),
-            return_exceptions=True
-        )
+        # Check if vector search is available
+        if not self.vector_service:
+            print("⚠️ Vector service not available - using keyword search only")
+            elasticsearch_products = await self._elasticsearch_search(requirements)
+            vector_products = []
+            vector_solutions = []
+        else:
+            # Parallel searches for better performance
+            elasticsearch_products, vector_products, vector_solutions = await asyncio.gather(
+                self._elasticsearch_search(requirements),
+                self._elasticsearch_vector_search_products(requirements),
+                self._elasticsearch_vector_search_solutions(requirements),
+                return_exceptions=True
+            )
         
         # Handle exceptions
         if isinstance(elasticsearch_products, Exception):
@@ -405,15 +431,20 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         print(f"   Vector products: {len(vector_products)}")
         print(f"   Vector solutions: {len(vector_solutions)}")
         
-        # Merge product results
-        merged_products = self._merge_product_results(elasticsearch_products, vector_products)
+        # Merge product results using RRF fusion
+        if settings.use_rrf_merging:
+            merged_products = self._merge_product_results_rrf(elasticsearch_products, vector_products)
+        else:
+            # Fallback to simple merge if RRF is disabled
+            merged_products = self._merge_product_results_simple(elasticsearch_products, vector_products)
         
         # Track search methods
         search_methods = {
             'elasticsearch_products': len(elasticsearch_products),
             'vector_products': len(vector_products),
             'vector_solutions': len(vector_solutions),
-            'merged_products': len(merged_products)
+            'merged_products': len(merged_products),
+            'fusion_method': 'rrf' if settings.use_rrf_merging else 'simple'
         }
         
         print(f"🎯 Hybrid search complete:")
@@ -428,15 +459,19 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         }
     
     async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Search using Elasticsearch"""
+        """Search using Elasticsearch keyword search"""
         try:
-            return await self.elasticsearch.search_products_by_requirements(requirements, size=15)
+            max_results = settings.max_search_results_per_source
+            return await self.elasticsearch.search_products_by_requirements(requirements, size=max_results)
         except Exception as e:
             print(f"❌ Elasticsearch search failed: {e}")
             return []
     
     async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Search products using Elasticsearch vector search with improved relevance"""
+        if not self.vector_service:
+            return []
+            
         try:
             semantic_query = requirements.get('semantic_query', '')
             if not semantic_query:
@@ -447,9 +482,11 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             
             print(f"🧠 Vector search query: {semantic_query}")
             
+            max_results = settings.max_search_results_per_source
+            
             return await self.vector_service.vector_search_products(
                 query=semantic_query,
-                size=20,  # Increased size for better RRF fusion
+                size=max_results,
                 filters=None,  # No category filters - let semantic search work across all categories
                 hybrid_weight=0.2  # Slightly higher hybrid weight for better text matching
             )
@@ -460,6 +497,9 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
     
     async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Search solutions using Elasticsearch vector search with improved relevance"""
+        if not self.vector_service:
+            return []
+            
         try:
             semantic_query = requirements.get('semantic_query', '')
             if not semantic_query:
@@ -470,9 +510,11 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             
             print(f"🧠 Vector solution search query: {semantic_query}")
             
+            max_results = settings.max_search_results_per_source
+            
             return await self.vector_service.vector_search_solutions(
                 query=semantic_query,
-                size=15,  # Increased size for better coverage
+                size=max_results,
                 filters=None,  # Remove industry filters
                 hybrid_weight=0.2  # Increased text search weight for better keyword matching
             )
@@ -480,7 +522,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             print(f"❌ Elasticsearch vector solution search failed: {e}")
             return []
     
-    def _merge_product_results(
+    def _merge_product_results_rrf(
         self, 
         elasticsearch_products: List[Dict], 
         vector_products: List[Dict]
@@ -494,7 +536,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         fused_products = self.rrf_fusion.fuse_rankings(
             elasticsearch_products=elasticsearch_products,
             vector_products=vector_products,
-            max_results=20
+            max_results=settings.final_result_limit
         )
         
         # Add hybrid_score for backward compatibility (use RRF score)
@@ -507,6 +549,65 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             print(f"     {i+1}. {product.get('name', 'Unknown')} (RRF: {product.get('rrf_score', 0):.4f}, Source: {product.get('search_source', 'unknown')})")
         
         return fused_products
+    
+    def _merge_product_results_simple(
+        self, 
+        elasticsearch_products: List[Dict], 
+        vector_products: List[Dict]
+    ) -> List[Dict]:
+        """Simple merge when RRF is disabled - combine and deduplicate by ID"""
+        
+        print(f"🔀 Starting simple merge process (RRF disabled)...")
+        print(f"   Input: {len(elasticsearch_products)} ES products, {len(vector_products)} vector products")
+        
+        # Create a dictionary to deduplicate by ID
+        merged_dict = {}
+        
+        # Add Elasticsearch products first
+        for product in elasticsearch_products:
+            product_id = product.get('id', '')
+            if product_id:
+                product['search_source'] = 'elasticsearch'
+                product['keyword_score'] = product.get('_score', 0)
+                product['semantic_score'] = 0
+                merged_dict[product_id] = product
+        
+        # Add vector products, keeping the higher score if duplicate
+        for product in vector_products:
+            product_id = product.get('id', '')
+            if product_id:
+                if product_id in merged_dict:
+                    # Product exists in both sources
+                    existing = merged_dict[product_id]
+                    existing['search_source'] = 'both'
+                    existing['semantic_score'] = product.get('_similarity_score', 0)
+                    # Keep the higher score
+                    if product.get('_similarity_score', 0) > existing.get('keyword_score', 0):
+                        merged_dict[product_id] = product
+                        product['search_source'] = 'both'
+                        product['keyword_score'] = existing.get('_score', 0)
+                else:
+                    # New product from vector search
+                    product['search_source'] = 'vector'
+                    product['keyword_score'] = 0
+                    product['semantic_score'] = product.get('_similarity_score', 0)
+                    merged_dict[product_id] = product
+        
+        # Convert to list and sort by score
+        merged_products = list(merged_dict.values())
+        merged_products.sort(key=lambda x: max(x.get('keyword_score', 0), x.get('semantic_score', 0)), reverse=True)
+        
+        # Limit results
+        max_results = settings.final_result_limit
+        merged_products = merged_products[:max_results]
+        
+        print(f"🎯 Simple merge complete: {len(merged_products)} unique products")
+        print(f"   Top 5 results:")
+        for i, product in enumerate(merged_products[:5]):
+            score = max(product.get('keyword_score', 0), product.get('semantic_score', 0))
+            print(f"     {i+1}. {product.get('name', 'Unknown')} (Score: {score:.2f}, Source: {product.get('search_source', 'unknown')})")
+        
+        return merged_products
     
     async def _analyze_hybrid_recommendations(
         self, 
@@ -559,6 +660,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         products = hybrid_results.get('products', [])
         solutions = hybrid_results.get('solutions', [])
         search_methods = hybrid_results.get('search_methods', {})
+        fusion_method = search_methods.get('fusion_method', 'unknown')
         
         # Base score for finding results
         if products:
@@ -566,27 +668,39 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         if solutions:
             score += 0.2
         
-        # Bonus for hybrid matches (found in both sources) - RRF handles this better
-        hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
-        if hybrid_matches > 0:
-            score += 0.25 * min(hybrid_matches / 5, 1.0)  # Up to 25% bonus
-        
-        # Bonus for high RRF scores (indicates strong consensus)
-        high_rrf_products = len([p for p in products if p.get('rrf_score', 0) > 0.02])
-        if high_rrf_products > 0:
-            score += 0.15 * min(high_rrf_products / 3, 1.0)  # Up to 15% bonus
+        # RRF-specific confidence calculation
+        if fusion_method == 'rrf':
+            # Bonus for hybrid matches (found in both sources) - RRF handles this better
+            hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
+            if hybrid_matches > 0:
+                score += 0.25 * min(hybrid_matches / 5, 1.0)  # Up to 25% bonus
+            
+            # Bonus for high RRF scores (indicates strong consensus)
+            high_rrf_products = len([p for p in products if p.get('rrf_score', 0) > 0.02])
+            if high_rrf_products > 0:
+                score += 0.15 * min(high_rrf_products / 3, 1.0)  # Up to 15% bonus
+            
+            # Bonus for balanced results from both sources
+            es_count = search_methods.get('elasticsearch_products', 0)
+            vector_count = search_methods.get('vector_products', 0)
+            if es_count > 0 and vector_count > 0:
+                balance_ratio = min(es_count, vector_count) / max(es_count, vector_count)
+                score += 0.1 * balance_ratio  # Up to 10% bonus for balanced results
+        else:
+            # Simple fusion confidence calculation
+            hybrid_matches = len([p for p in products if p.get('search_source') == 'both'])
+            if hybrid_matches > 0:
+                score += 0.2 * min(hybrid_matches / 5, 1.0)  # Up to 20% bonus
+            
+            # Bonus for high scores in simple fusion
+            high_score_products = len([p for p in products if max(p.get('keyword_score', 0), p.get('semantic_score', 0)) > 5.0])
+            if high_score_products > 0:
+                score += 0.1 * min(high_score_products / 3, 1.0)  # Up to 10% bonus
         
         # Bonus for high semantic similarity in vector-only results
         high_semantic_products = len([p for p in products if p.get('semantic_score', 0) > 0.8])
         if high_semantic_products > 0:
             score += 0.1 * min(high_semantic_products / 3, 1.0)  # Up to 10% bonus
-        
-        # Bonus for balanced results from both sources
-        es_count = search_methods.get('elasticsearch_products', 0)
-        vector_count = search_methods.get('vector_products', 0)
-        if es_count > 0 and vector_count > 0:
-            balance_ratio = min(es_count, vector_count) / max(es_count, vector_count)
-            score += 0.1 * balance_ratio  # Up to 10% bonus for balanced results
         
         return min(score, 1.0)
     
@@ -609,6 +723,14 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             # Calculate confidence
             confidence = self._calculate_hybrid_confidence(hybrid_results, requirements)
             
+            # Build RRF parameters for response
+            rrf_parameters = {
+                'k': self.rrf_fusion.k,
+                'elasticsearch_weight': settings.rrf_elasticsearch_weight,
+                'semantic_weight': settings.rrf_semantic_weight,
+                'description': 'Reciprocal Rank Fusion parameters for hybrid search result merging'
+            }
+            
             # Return structured response
             retrieval_result = {
                 'products': hybrid_results['products'],
@@ -618,17 +740,15 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'total_solutions': len(hybrid_results['solutions']),
                 'search_methods': hybrid_results['search_methods'],
                 'retrieval_method': 'hybrid_elasticsearch_vector_rrf',
-                'fusion_method': 'reciprocal_rank_fusion',
-                'rrf_parameters': {
-                    'k': self.rrf_fusion.k,
-                    'description': 'Reciprocal Rank Fusion parameter controlling lower-ranked result contribution'
-                },
+                'fusion_method': hybrid_results['search_methods'].get('fusion_method', 'unknown'),
+                'rrf_parameters': rrf_parameters,
                 'retrieval_confidence': confidence,
                 'success': True
             }
             
             print(f"✅ RRF Hybrid Retriever: Found {len(hybrid_results['products'])} products, {len(hybrid_results['solutions'])} solutions")
             print(f"   Confidence: {confidence:.1%}")
+            print(f"   Fusion method: {retrieval_result['fusion_method']}")
             return retrieval_result
             
         except Exception as e:
@@ -645,6 +765,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'search_methods': {},
                 'retrieval_method': 'error_fallback',
                 'fusion_method': 'none',
+                'rrf_parameters': {},
                 'retrieval_confidence': 0.0,
                 'success': False,
                 'error': str(e)

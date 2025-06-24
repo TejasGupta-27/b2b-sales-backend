@@ -11,6 +11,7 @@ import logging
 import asyncio
 from services.elasticsearch_service import get_elasticsearch_service
 from services.chroma_service import ChromaDBService
+from services.prompt_manager import get_prompt_manager
 from db.database import get_db
 from config import settings
 import aiofiles
@@ -42,18 +43,180 @@ async def admin_dashboard():
         logger.error(f"Error serving admin dashboard: {e}")
         return HTMLResponse(content=f"<h1>Error</h1><p>Failed to load admin dashboard: {e}</p>")
 
+# Conversational Configuration Endpoints
+@router.get("/conversational/config")
+async def get_conversational_config():
+    """Get conversational configuration"""
+    try:
+        prompt_manager = get_prompt_manager()
+        config = prompt_manager.get_conversational_config()
+        return config
+    except Exception as e:
+        logger.error(f"Error getting conversational config: {e}")
+        raise HTTPException(status_code=500, detail="Error getting conversational configuration")
+
+@router.post("/conversational/config/{config_type}")
+async def update_conversational_config(config_type: str, config_data: Dict[str, Any]):
+    """Update conversational configuration"""
+    try:
+        prompt_manager = get_prompt_manager()
+        success = prompt_manager.update_conversational_config(config_type, config_data)
+        
+        if success:
+            return {"status": "success", "message": f"{config_type} configuration updated successfully"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid config type: {config_type}")
+    
+    except Exception as e:
+        logger.error(f"Error updating conversational config: {e}")
+        raise HTTPException(status_code=500, detail="Error updating conversational configuration")
+
+@router.get("/conversational/config/{config_type}")
+async def get_conversational_config_type(config_type: str):
+    """Get specific conversational configuration type"""
+    try:
+        prompt_manager = get_prompt_manager()
+        
+        if config_type == "personality":
+            config_str = prompt_manager.get_prompt("conversational_agent", "personality_config", "{}")
+        elif config_type == "industry_contexts":
+            config_str = prompt_manager.get_prompt("conversational_agent", "industry_contexts", "{}")
+        elif config_type == "response_guidelines":
+            config_str = prompt_manager.get_prompt("conversational_agent", "response_guidelines", "{}")
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid config type: {config_type}")
+        
+        return json.loads(config_str)
+    
+    except Exception as e:
+        logger.error(f"Error getting conversational config type: {e}")
+        raise HTTPException(status_code=500, detail="Error getting conversational configuration")
+
+@router.post("/conversational/config/reset")
+async def reset_conversational_config():
+    """Reset conversational configuration to defaults"""
+    try:
+        prompt_manager = get_prompt_manager()
+        
+        # Get default prompts
+        default_prompts = prompt_manager._get_default_conversational_prompts()
+        conversational_prompts = default_prompts.get("conversational_agent", {})
+        
+        # Reset each configuration
+        for name, content in conversational_prompts.items():
+            prompt_manager.save_prompt("conversational_agent", name, content)
+        
+        logger.info("Conversational configuration reset to defaults")
+        return {"status": "success", "message": "Conversational configuration reset to defaults"}
+    
+    except Exception as e:
+        logger.error(f"Error resetting conversational config: {e}")
+        raise HTTPException(status_code=500, detail="Error resetting conversational configuration")
+
+@router.post("/conversational/config/test")
+async def test_conversational_config(config_data: Dict[str, Any]):
+    """Test conversational configuration with sample data"""
+    try:
+        config_type = config_data.get("config_type")
+        config_content = config_data.get("config")
+        
+        if not config_type or not config_content:
+            raise HTTPException(status_code=400, detail="Missing config_type or config")
+        
+        # Validate JSON format
+        try:
+            if isinstance(config_content, str):
+                parsed_config = json.loads(config_content)
+            else:
+                parsed_config = config_content
+        except json.JSONDecodeError as e:
+            return {
+                "status": "error",
+                "message": f"Invalid JSON format: {e}",
+                "test_results": {}
+            }
+        
+        # Test configuration based on type
+        test_results = {
+            "config_type": config_type,
+            "is_valid_json": True,
+            "config_size": len(str(parsed_config)),
+            "validation_results": {}
+        }
+        
+        if config_type == "personality":
+            # Validate personality configuration
+            required_fields = ["name", "role", "personality_traits", "communication_style", "tone"]
+            for field in required_fields:
+                if field not in parsed_config:
+                    test_results["validation_results"][field] = "Missing"
+                else:
+                    test_results["validation_results"][field] = "Present"
+            
+            # Test personality prompt generation
+            try:
+                name = parsed_config.get("name", "Agent")
+                role = parsed_config.get("role", "Assistant")
+                traits = ", ".join(parsed_config.get("personality_traits", []))
+                
+                test_prompt = f"""You are {name}, a {role}. 
+Your personality: {traits}
+Communication style: {parsed_config.get('communication_style', 'conversational')}
+Tone: {parsed_config.get('tone', 'professional')}"""
+                
+                test_results["sample_prompt"] = test_prompt
+                test_results["prompt_length"] = len(test_prompt)
+                
+            except Exception as e:
+                test_results["validation_results"]["prompt_generation"] = f"Error: {e}"
+        
+        elif config_type == "industry_contexts":
+            # Validate industry contexts
+            if not isinstance(parsed_config, dict):
+                test_results["validation_results"]["structure"] = "Should be a dictionary"
+            else:
+                test_results["validation_results"]["structure"] = "Valid dictionary"
+                test_results["validation_results"]["industries_count"] = len(parsed_config)
+                
+                # Check each industry
+                for industry, config in parsed_config.items():
+                    if isinstance(config, dict) and "focus_areas" in config and "common_concerns" in config:
+                        test_results["validation_results"][f"industry_{industry}"] = "Valid"
+                    else:
+                        test_results["validation_results"][f"industry_{industry}"] = "Invalid structure"
+        
+        elif config_type == "response_guidelines":
+            # Validate response guidelines
+            if not isinstance(parsed_config, dict):
+                test_results["validation_results"]["structure"] = "Should be a dictionary"
+            else:
+                test_results["validation_results"]["structure"] = "Valid dictionary"
+                test_results["validation_results"]["guideline_types_count"] = len(parsed_config)
+                
+                # Check each guideline type
+                for guideline_type, config in parsed_config.items():
+                    if isinstance(config, dict) and "approach" in config and "key_elements" in config:
+                        test_results["validation_results"][f"guideline_{guideline_type}"] = "Valid"
+                    else:
+                        test_results["validation_results"][f"guideline_{guideline_type}"] = "Invalid structure"
+        
+        return {
+            "status": "success",
+            "message": f"Configuration '{config_type}' tested successfully",
+            "test_results": test_results
+        }
+    
+    except Exception as e:
+        logger.error(f"Error testing conversational config: {e}")
+        raise HTTPException(status_code=500, detail="Error testing conversational configuration")
+
 # Prompt Management Endpoints
 @router.get("/prompts/{category}")
 async def get_prompts(category: str):
     """Get all prompts for a category"""
     try:
-        if PROMPTS_CONFIG_FILE.exists():
-            with open(PROMPTS_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                prompts_config = json.load(f)
-        else:
-            prompts_config = {}
-        
-        return prompts_config.get(category, {})
+        prompt_manager = get_prompt_manager()
+        return prompt_manager.get_category_prompts(category)
     except Exception as e:
         logger.error(f"Error loading prompts: {e}")
         raise HTTPException(status_code=500, detail="Error loading prompts")
@@ -66,25 +229,13 @@ async def save_prompt(prompt_data: Dict[str, Any]):
         name = prompt_data["name"]
         content = prompt_data["content"]
         
-        # Load existing prompts
-        if PROMPTS_CONFIG_FILE.exists():
-            with open(PROMPTS_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                prompts_config = json.load(f)
+        prompt_manager = get_prompt_manager()
+        success = prompt_manager.save_prompt(category, name, content)
+        
+        if success:
+            return {"status": "success", "message": "Prompt saved successfully"}
         else:
-            prompts_config = {}
-        
-        # Update prompts
-        if category not in prompts_config:
-            prompts_config[category] = {}
-        
-        prompts_config[category][name] = content
-        
-        # Save back to file
-        with open(PROMPTS_CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(prompts_config, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"Saved prompt: {category}/{name}")
-        return {"status": "success", "message": "Prompt saved successfully"}
+            raise HTTPException(status_code=500, detail="Error saving prompt")
     
     except Exception as e:
         logger.error(f"Error saving prompt: {e}")
@@ -94,23 +245,10 @@ async def save_prompt(prompt_data: Dict[str, Any]):
 async def delete_prompt(category: str, name: str):
     """Delete a prompt"""
     try:
-        if not PROMPTS_CONFIG_FILE.exists():
-            raise HTTPException(status_code=404, detail="No prompts found")
+        prompt_manager = get_prompt_manager()
+        success = prompt_manager.delete_prompt(category, name)
         
-        with open(PROMPTS_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            prompts_config = json.load(f)
-        
-        if category in prompts_config and name in prompts_config[category]:
-            del prompts_config[category][name]
-            
-            # Clean up empty categories
-            if not prompts_config[category]:
-                del prompts_config[category]
-            
-            with open(PROMPTS_CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(prompts_config, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"Deleted prompt: {category}/{name}")
+        if success:
             return {"status": "success", "message": "Prompt deleted successfully"}
         else:
             raise HTTPException(status_code=404, detail="Prompt not found")

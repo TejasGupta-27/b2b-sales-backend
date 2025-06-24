@@ -83,6 +83,16 @@ class Settings(BaseSettings):
     elasticsearch_weight: float = float(os.getenv("ELASTICSEARCH_WEIGHT", "0.4"))
     semantic_weight: float = float(os.getenv("SEMANTIC_WEIGHT", "0.6"))
     
+    # RRF (Reciprocal Rank Fusion) configuration for hybrid search
+    use_rrf_merging: bool = os.getenv("USE_RRF_MERGING", "True").lower() == "true"
+    rrf_k: float = float(os.getenv("RRF_K", "60.0"))  # RRF constant, default 60
+    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.5"))
+    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.5"))
+    
+    # Search result configuration
+    max_search_results_per_source: int = int(os.getenv("MAX_SEARCH_RESULTS_PER_SOURCE", "50"))
+    final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "20"))
+    
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert comma-separated CORS origins to list"""
