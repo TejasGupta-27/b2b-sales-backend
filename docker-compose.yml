@@ -39,6 +39,51 @@ services:
       # CORS Configuration
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
       
+      # New Relic Configuration
+      - NEWRELIC_ENABLED=True
+      - NEWRELIC_LICENSE_KEY=${NEWRELIC_LICENSE_KEY}
+      - NEWRELIC_APP_NAME=B2B Sales Backend
+      - NEWRELIC_ENVIRONMENT=production
+      - ENABLE_RESPONSE_CACHING=True
+      - CACHE_TTL=300
+      - MAX_CONCURRENT_REQUESTS=100
+      - REQUEST_TIMEOUT=30
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=b2b_sales
+      - DB_ECHO_SQL=False
+      - CONVERSATION_HISTORY_LIMIT=20
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_INDEX_PRODUCTS=products
+      - ELASTICSEARCH_INDEX_SOLUTIONS=solutions
+      - CHROMA_DB_PATH=./chroma_db
+      - CHROMA_MAX_ITEMS_PER_FILE=50
+      - DATA_DIR=Data/json
+      - DEFAULT_AI_PROVIDER=azure_openai
+      - AZURE_OPENAI_API_VERSION=2025-01-01-preview
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - AZURE_EMBEDDING_DEPLOYMENT_NAME=${AZURE_EMBEDDING_DEPLOYMENT_NAME}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - HUGGINGFACE_MODEL=microsoft/DialoGPT-medium
+      - ELEVENLABS_VOICE_ID=pNInz6obpgDQGcFmaJgB
+      - ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+      - ELEVENLABS_STT_MODEL_ID=scribe_v1
+      - ELEVENLABS_STABILITY=0.5
+      - ELEVENLABS_SIMILARITY_BOOST=0.5
+      - ELEVENLABS_STYLE=0.0
+      - ELEVENLABS_USE_SPEAKER_BOOST=True
+      - SPEECH_PRIMARY_PROVIDER=elevenlabs
+      - SPEECH_FALLBACK_ENABLED=True
+      - SPEECH_TTS_PRIMARY_RETRIES=1
+      - ELASTICSEARCH_WEIGHT=0.4
+      - SEMANTIC_WEIGHT=0.6
+      - USE_RRF_MERGING=True
+      - RRF_K=60.0
+      - RRF_ELASTICSEARCH_WEIGHT=0.5
+      - RRF_SEMANTIC_WEIGHT=0.5
+      - MAX_SEARCH_RESULTS_PER_SOURCE=50
+      - FINAL_RESULT_LIMIT=20
+      
     volumes:
       # Persist logs
       - ./logs:/app/logs
@@ -52,6 +97,9 @@ services:
       # Persist JSON data files
       - ./Data/json:/app/Data/json
       # Note: ChromaDB volume removed - using Elasticsearch for all search functionality
+      - ./chroma_db:/app/chroma_db
+      # Persist New Relic configuration
+      - ./newrelic.ini:/app/newrelic.ini
     depends_on:
       - postgres
       - elasticsearch

@@ -11,6 +11,9 @@ python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
 
+# Monitoring
+newrelic
+
 # ML and additional dependencies that might change
 httpx
 openai
