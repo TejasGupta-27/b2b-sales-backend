@@ -209,7 +209,7 @@ Remember: This is a natural conversation, not a sales process checklist. Do what
         quote_guidance = self.prompt_manager.get_prompt("conversational_agent", "quote_guidance", "")
         
         if not quote_guidance:
-            quote_guidance = """The customer is asking for a quote. Help them get what they need.
+            quote_guidance = """The customer is asking for a quote. Help them get what they need in a natural, conversational way.
 
 APPROACH:
 - Acknowledge their quote request warmly
@@ -218,7 +218,12 @@ APPROACH:
 - If you have enough information, provide a summary and next steps
 - Be helpful and professional, not pushy
 
-Remember: You're helping them get what they need, not following a rigid process."""
+EXAMPLES:
+- "Perfect! I've put together a quote for the PC build we discussed..."
+- "Great! Here's what I've come up with for your setup..."
+- "Awesome! I've got the pricing ready for you..."
+
+Remember: You're having a conversation, not sending a formal business document. Be natural and helpful."""
         
         # Build enhanced context
         enhanced_messages = self._build_conversational_context(messages, customer_context)
@@ -300,67 +305,90 @@ Note: You might want to learn more about their needs as the conversation progres
     def _enhance_response_with_quote_info(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
         """Enhance response with quote information including PDF and pitch deck"""
         
-        # Add professional quote presentation with dynamic context
-        response.content += f"\n\n🎯 **Excellent! Based on our thorough discussion and your specific requirements, I've prepared a comprehensive, customized quote using our intelligent product matching system.**"
-        response.content += f"\n\n📋 **Quote #{quote.get('quote_number', 'N/A')}**"
+        # Check if the response already contains conversational content about the quote
+        original_content = response.content.strip()
         
-        # Highlight the thorough discovery process
-        response.content += f"\n\n✅ **Complete Requirements Analysis:** Our conversation covered all the essential areas needed for an accurate quote - your business context, technical requirements, operational needs, and specific challenges."
-        
-        # Add pricing summary
-        if 'financials' in quote:
-            financials = quote['financials']
-            response.content += f"\n\n💰 **Investment Summary:**"
-            response.content += f"\n• Subtotal: **${financials['subtotal']:,.2f}**"
-            response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
-            response.content += f"\n• **Total Investment: ${financials['total']:,.2f}**"
+        # If the response is already conversational and mentions the quote, enhance it naturally
+        if any(keyword in original_content.lower() for keyword in ['quote', 'price', 'cost', 'total', 'pricing']):
+            # The LLM already handled the quote conversation naturally, just add the technical details
+            response.content += f"\n\n📋 **Quote Details:**"
+            response.content += f"\n• Quote Number: {quote.get('quote_number', 'N/A')}"
+            
+            # Add pricing summary
+            if 'financials' in quote:
+                financials = quote['financials']
+                response.content += f"\n• Subtotal: ${financials['subtotal']:,.2f}"
+                response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
+                response.content += f"\n• **Total: ${financials['total']:,.2f}**"
+            elif 'pricing' in quote:
+                pricing = quote['pricing']
+                response.content += f"\n• Subtotal: ${pricing['subtotal']:,.2f}"
+                response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
+                response.content += f"\n• **Total: ${pricing['total']:,.2f}**"
+            
+            if quote.get('valid_until'):
+                try:
+                    response.content += f"\n• Valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
+                except:
+                    response.content += f"\n• Valid until: {quote['valid_until']}"
+            
+            # Add download links
+            if quote.get('pdf_generated', False) and quote.get('pdf_url'):
+                response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
+            
+            if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
+                response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
+            
+            # Add natural next steps
+            response.content += f"\n\n**What's next?**"
+            response.content += f"\n• Review the detailed quote and let me know if you have any questions"
+            if quote.get('pitch_deck_generated', False):
+                response.content += f"\n• Check out the pitch deck for a visual overview"
+            response.content += f"\n• I'm here to help with any clarifications or adjustments"
+            
+        else:
+            # The LLM didn't mention the quote, so provide a more conversational introduction
+            response.content += f"\n\nPerfect! I've put together a detailed quote based on our discussion."
+            response.content += f"\n\n📋 **Quote #{quote.get('quote_number', 'N/A')}**"
+            
+            # Add pricing summary
+            if 'financials' in quote:
+                financials = quote['financials']
+                response.content += f"\n\n💰 **Here's the breakdown:**"
+                response.content += f"\n• Subtotal: ${financials['subtotal']:,.2f}"
+                response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
+                response.content += f"\n• **Total: ${financials['total']:,.2f}**"
+            elif 'pricing' in quote:
+                pricing = quote['pricing']
+                response.content += f"\n\n💰 **Here's the breakdown:**"
+                response.content += f"\n• Subtotal: ${pricing['subtotal']:,.2f}"
+                response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
+                response.content += f"\n• **Total: ${pricing['total']:,.2f}**"
+            
             if quote.get('valid_until'):
                 try:
                     response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
                 except:
                     response.content += f"\n• Quote valid until: {quote['valid_until']}"
-        elif 'pricing' in quote:
-            # Support legacy format
-            pricing = quote['pricing']
-            response.content += f"\n\n💰 **Investment Summary:**"
-            response.content += f"\n• Subtotal: **${pricing['subtotal']:,.2f}**"
-            response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
-            response.content += f"\n• **Total Investment: ${pricing['total']:,.2f}**"
-            if quote.get('valid_until'):
-                try:
-                    response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
-                except:
-                    response.content += f"\n• Quote valid until: {quote['valid_until']}"
-        
-        # Add PDF download link if available
-        if quote.get('pdf_generated', False) and quote.get('pdf_url'):
-            response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
-        else:
-            response.content += f"\n\n📄 **Quote PDF:** Currently being generated..."
-            if quote.get('pdf_error'):
-                response.content += f" (Note: PDF generation encountered an issue - please contact support if needed)"
-        
-        # Add pitch deck download link only if it was generated successfully
-        if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
-            response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
-        
-        # Enhanced next steps
-        response.content += f"\n\n**Next Steps:**"
-        response.content += f"\n1. Review the detailed quote with all selected products and solutions"
-        if quote.get('pitch_deck_generated', False):
-            response.content += f"\n2. Check out the pitch deck for a visual overview of the solution"
-            response.content += f"\n3. Let me know if you'd like to discuss any aspects in more detail"
-            response.content += f"\n4. I can arrange product demos or technical consultations if helpful"
-            response.content += f"\n5. We can finalize implementation timeline and support arrangements"
-        else:
-            response.content += f"\n2. Let me know if you'd like to discuss any aspects in more detail"
-            response.content += f"\n3. I can arrange product demos or technical consultations if helpful"
-            response.content += f"\n4. We can finalize implementation timeline and support arrangements"
-        
-        if quote.get('pitch_deck_generated', False):
-            response.content += f"\n\nThis quote and pitch deck reflect our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
-        else:
-            response.content += f"\n\nThis quote reflects our thorough understanding of your business needs and technical requirements. I'm confident these recommendations will deliver the performance and value you're looking for! 🚀"
+            
+            # Add download links
+            if quote.get('pdf_generated', False) and quote.get('pdf_url'):
+                response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
+            else:
+                response.content += f"\n\n📄 **Quote PDF:** Currently being generated..."
+                if quote.get('pdf_error'):
+                    response.content += f" (Note: PDF generation encountered an issue - please contact support if needed)"
+            
+            if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
+                response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
+            
+            # Add conversational next steps
+            response.content += f"\n\n**What happens next?**"
+            response.content += f"\n• Take a look at the detailed quote and let me know if anything needs adjusting"
+            if quote.get('pitch_deck_generated', False):
+                response.content += f"\n• The pitch deck gives you a nice visual overview of everything"
+            response.content += f"\n• Feel free to ask any questions or request changes"
+            response.content += f"\n• Once you're happy with it, we can move forward with the next steps"
         
         return response
     

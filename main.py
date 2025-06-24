@@ -87,15 +87,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Speech service dependency
-async def get_speech_service():
-    """Dependency to get speech service instance."""
-    service = SpeechService(model_name="medium")
-    await service.initialize()
-    try:
-        yield service
-    finally:
-        await service.close()
+# Global speech service instance
+speech_service = None
 
 # Include routers
 app.include_router(leads_router)
@@ -161,9 +154,6 @@ class ChatSearchRequest(BaseModel):
 
 # Add Elasticsearch Vector service initialization
 vector_service = None
-
-# Initialize speech service
-speech_service = None
 
 # Add simple context helper function
 def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Dict[str, Any]]) -> List[AIMessage]:
@@ -239,6 +229,11 @@ async def startup_event():
         else:
             logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
         
+        # Initialize SpeechService ONCE
+        speech_service = SpeechService(model_name="medium")
+        await speech_service.initialize()
+        logger.info("✅ SpeechService initialized successfully")
+        
         logger.info("✅ Application startup completed")
         
     except Exception as e:
@@ -252,6 +247,9 @@ async def shutdown_event():
         elasticsearch_service = get_elasticsearch_service()
         await elasticsearch_service.close()
         logger.info("✅ Elasticsearch connection closed")
+        if speech_service:
+            await speech_service.close()
+            logger.info("✅ SpeechService closed")
     except Exception as e:
         logger.warning(f"⚠️ Error during shutdown: {e}")
 
@@ -264,8 +262,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     """Optimized sales chat endpoint with reduced latency"""
     try:
         # Get speech service
-        speech_service = SpeechService(model_name="medium")
-        await speech_service.initialize()
+        global speech_service
         
         try:
             # Handle lead management
@@ -389,7 +386,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             return chat_response
             
         finally:
-            await speech_service.close()
+            pass
             
     except Exception as e:
         logger.exception("Error in optimized sales chat endpoint")
@@ -500,8 +497,7 @@ async def generate_quote(quote_request: Dict[str, Any]):
 async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # Get speech service
-        speech_service = SpeechService(model_name="medium")
-        await speech_service.initialize()
+        global speech_service
         
         try:
             # Handle lead management
@@ -581,7 +577,7 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             )
             
         finally:
-            await speech_service.close()
+            pass
             
     except Exception as e:
         logger.error(f"Error in send_message endpoint: {str(e)}")
