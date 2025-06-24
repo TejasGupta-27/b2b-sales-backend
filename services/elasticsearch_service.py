@@ -255,16 +255,27 @@ class ElasticsearchService:
                     logger.info(f"📝 Index {index} does not exist yet")
                     return 0
                 
-                # Try different counting methods
-                response = await self.client.count(
-                    index=index,
-                    request_timeout=10,
-                    ignore_unavailable=True
-                )
-                
-                count = response.get('count', 0)
-                logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
-                return count
+                # Try different counting methods with better error handling
+                try:
+                    response = await self.client.count(
+                        index=index,
+                        request_timeout=10,
+                        ignore_unavailable=True
+                    )
+                    
+                    count = response.get('count', 0)
+                    logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
+                    return count
+                    
+                except AttributeError as attr_error:
+                    # Handle New Relic interference with async methods
+                    if "'coroutine' object has no attribute" in str(attr_error):
+                        logger.warning(f"New Relic interference detected in count attempt {attempt + 1}, retrying...")
+                        # Force a small delay to let New Relic settle
+                        await asyncio.sleep(0.5)
+                        continue
+                    else:
+                        raise
                 
             except Exception as e:
                 logger.warning(f"Count attempt {attempt + 1}/{max_retries} failed for {index}: {e}")
