@@ -30,6 +30,7 @@ from routes.admin import router as admin_router
 # Import AI services
 from ai_services.factory import AIServiceFactory
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
+from ai_services.quote_generation_agent import QuoteGenerationAgent
 from ai_services.base import AIMessage
 
 # Import models
@@ -332,6 +333,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
                 conversational_agent = SimpleConversationalAgent(base_provider)
                 
+                # Initialize the agent (this will initialize hybrid retriever if configured)
+                await conversational_agent.initialize()
+                
                 # Let the conversational agent handle all types of requests naturally
                 # No hardcoded phrase detection - let the AI determine the best response
                 response = await conversational_agent.generate_response(
@@ -418,47 +422,78 @@ async def get_products():
 
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
-    """Generate a detailed quotation and pitch deck"""
+    """Generate a detailed quotation and pitch deck using QuoteGenerationAgent"""
     try:
-        base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = SimpleConversationalAgent(base_provider)
+        # Create and initialize the quote generation agent
+        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+        quote_agent = QuoteGenerationAgent(base_provider)
         
-        # Generate the quote
-        quote = await sales_agent.generate_quote(quote_request)
+        # Extract conversation messages from the request
+        conversation_messages = quote_request.get('conversation_messages', [])
+        customer_context = quote_request.get('customer_context', {})
+        
+        # If no conversation messages provided, create a basic one from the request
+        if not conversation_messages:
+            requirements = quote_request.get('requirements', {})
+            customer_info = quote_request.get('customer_info', {})
+            
+            # Create a basic conversation message from the requirements
+            basic_message = f"Customer needs: {requirements.get('description', 'Business technology solution')}"
+            if customer_info.get('company_name'):
+                basic_message += f" for {customer_info['company_name']}"
+            if customer_info.get('industry'):
+                basic_message += f" in {customer_info['industry']} industry"
+            
+            conversation_messages = [AIMessage(role="user", content=basic_message)]
+        
+        # Generate the quote using the QuoteGenerationAgent
+        quote = await quote_agent.generate_quote_from_conversation(
+            conversation_messages=conversation_messages,
+            customer_context=customer_context
+        )
+        
+        # Check if quote generation was successful
+        if not quote:
+            raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
+        
+        if 'error' in quote:
+            raise HTTPException(status_code=500, detail=quote['error'])
         
         # Generate unique IDs
-        quote_id = str(uuid.uuid4())
+        quote_id = quote.get('quote_id', str(uuid.uuid4()))
         deck_id = str(uuid.uuid4())
         
-        # Save the quote to a file
-        quote_path = f"Data/quotes/quote_{quote_id}.pdf"
-        os.makedirs(os.path.dirname(quote_path), exist_ok=True)
-        
-        # Generate PDF for the quote
-        pdf_generator = PDFGenerator()
-        pdf_buffer = pdf_generator.generate_quote_pdf(quote)
-        with open(quote_path, 'wb') as f:
-            f.write(pdf_buffer.getvalue())
-        
-        # Generate pitch deck
-        pitch_deck_service = PitchDeckService()
-        deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
-        
-        # Generate the pitch deck
-        deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
-        os.makedirs(os.path.dirname(deck_path), exist_ok=True)
-        
-        # Generate the PowerPoint file
-        await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+        # Generate pitch deck if quote was successful
+        pitch_deck_path = None
+        if quote.get('pdf_generated'):
+            try:
+                # Generate pitch deck
+                pitch_deck_service = PitchDeckService()
+                deck_structure = await pitch_deck_service.extract_ppt_structure(quote.get('quote_text', ''))
+                
+                # Generate the pitch deck
+                deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+                os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+                
+                # Generate the PowerPoint file
+                await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+                pitch_deck_path = deck_path
+            except Exception as deck_error:
+                logger.warning(f"Pitch deck generation failed: {deck_error}")
         
         return {
             "quote": quote,
             "quote_id": quote_id,
-            "quote_link": f"/api/quotes/download-pdf/{quote_id}",
-            "pitch_deck_id": deck_id,
-            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}"
+            "quote_link": quote.get('pdf_url', f"/api/quotes/download-pdf/{quote_id}"),
+            "pitch_deck_id": deck_id if pitch_deck_path else None,
+            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}" if pitch_deck_path else None,
+            "generated_by": "QuoteGenerationAgent",
+            "pdf_generated": quote.get('pdf_generated', False),
+            "pdf_path": quote.get('pdf_path'),
+            "generation_method": quote.get('generation_method', 'unknown')
         }
     except Exception as e:
+        logger.error(f"Quote generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/send")
@@ -1149,6 +1184,90 @@ async def get_performance_stats():
     except Exception as e:
         logger.error(f"Error getting performance stats: {e}")
         return {"error": str(e)}
+
+@app.post("/api/generate-quote-from-conversation/{lead_id}")
+async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(get_db)):
+    """Generate a quote from existing conversation history"""
+    try:
+        # Get conversation history for the lead
+        messages = db.query(DBChatMessage).filter(
+            DBChatMessage.lead_id == lead_id
+        ).order_by(DBChatMessage.created_at).all()
+        
+        if not messages:
+            raise HTTPException(status_code=404, detail="No conversation history found for this lead")
+        
+        # Convert to AIMessage format
+        conversation_messages = []
+        for msg in messages:
+            role = "user" if msg.message_type == MessageType.USER.value else "assistant"
+            conversation_messages.append(AIMessage(role=role, content=msg.content))
+        
+        # Get customer context from lead
+        lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
+        customer_context = None
+        if lead_record:
+            customer_context = {
+                "company_name": lead_record.company_name,
+                "contact_name": lead_record.contact_name,
+                "email": lead_record.email,
+                "company_size": getattr(lead_record, 'company_size', None),
+                "industry": getattr(lead_record, 'industry', None),
+                "budget_range": getattr(lead_record, 'budget_range', None),
+                "timeline": getattr(lead_record, 'decision_timeline', None)
+            }
+        
+        # Create and initialize the quote generation agent
+        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+        quote_agent = QuoteGenerationAgent(base_provider)
+        
+        # Generate the quote using the QuoteGenerationAgent
+        quote = await quote_agent.generate_quote_from_conversation(
+            conversation_messages=conversation_messages,
+            customer_context=customer_context
+        )
+        
+        # Check if quote generation was successful
+        if not quote:
+            raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
+        
+        if 'error' in quote:
+            raise HTTPException(status_code=500, detail=quote['error'])
+        
+        # Generate pitch deck if quote was successful
+        deck_id = str(uuid.uuid4())
+        pitch_deck_path = None
+        if quote.get('pdf_generated'):
+            try:
+                # Generate pitch deck
+                pitch_deck_service = PitchDeckService()
+                deck_structure = await pitch_deck_service.extract_ppt_structure(quote.get('quote_text', ''))
+                
+                # Generate the pitch deck
+                deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+                os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+                
+                # Generate the PowerPoint file
+                await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+                pitch_deck_path = deck_path
+            except Exception as deck_error:
+                logger.warning(f"Pitch deck generation failed: {deck_error}")
+        
+        return {
+            "quote": quote,
+            "lead_id": lead_id,
+            "conversation_messages_count": len(conversation_messages),
+            "quote_link": quote.get('pdf_url', f"/api/quotes/download-pdf/{quote.get('quote_id', 'unknown')}"),
+            "pitch_deck_id": deck_id if pitch_deck_path else None,
+            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}" if pitch_deck_path else None,
+            "generated_by": "QuoteGenerationAgent",
+            "pdf_generated": quote.get('pdf_generated', False),
+            "pdf_path": quote.get('pdf_path'),
+            "generation_method": quote.get('generation_method', 'unknown')
+        }
+    except Exception as e:
+        logger.error(f"Quote generation from conversation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
