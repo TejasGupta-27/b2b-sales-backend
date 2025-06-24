@@ -685,6 +685,50 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 "confidence_score": 0.3
             }
     
+    async def _analyze_and_rank_results(
+        self,
+        search_results: Dict[str, Any],
+        context_analysis: ContextAnalysis,
+        requirements: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Analyze and rank search results using LLM insights"""
+        
+        try:
+            # Analyze hybrid recommendations
+            analysis = await self._analyze_hybrid_recommendations(
+                search_results["products"], 
+                search_results["solutions"], 
+                requirements
+            )
+            
+            # Calculate confidence
+            confidence = self._calculate_hybrid_confidence(search_results, requirements)
+            
+            return {
+                "requirements": requirements,
+                "products": search_results["products"],
+                "solutions": search_results["solutions"],
+                "analysis": analysis,
+                "search_methods": search_results["search_methods"],
+                "retrieval_confidence": confidence,
+                "llm_context_used": True,
+                "similar_products_analysis": context_analysis.similar_products is not None
+            }
+            
+        except Exception as e:
+            logger.error(f"Result analysis failed: {e}")
+            return {
+                "requirements": requirements,
+                "products": search_results.get("products", []),
+                "solutions": search_results.get("solutions", []),
+                "analysis": {},
+                "search_methods": search_results.get("search_methods", {}),
+                "retrieval_confidence": 0.0,
+                "llm_context_used": True,
+                "similar_products_analysis": False,
+                "error": str(e)
+            }
+    
     async def retrieve_products(
         self,
         messages: List[AIMessage],
@@ -853,6 +897,146 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             score += 0.1 * min(high_semantic_products / 3, 1.0)  # Up to 10% bonus
         
         return min(score, 1.0)
+
+    async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
+        """Perform Elasticsearch keyword search for products"""
+        try:
+            # Build search query from requirements
+            search_terms = requirements.get('search_terms', [])
+            product_categories = requirements.get('product_categories', [])
+            use_case = requirements.get('use_case', '')
+            
+            # Combine search terms
+            query_terms = search_terms + product_categories
+            if use_case:
+                query_terms.append(use_case)
+            
+            # Remove duplicates and empty strings
+            query_terms = list(set([term for term in query_terms if term and term.strip()]))
+            
+            if not query_terms:
+                query_terms = ['business', 'solution']  # Fallback
+            
+            # Build Elasticsearch query
+            query = {
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"name": {"query": term, "boost": 2.0}}} for term in query_terms
+                        ] + [
+                            {"match": {"description": {"query": term, "boost": 1.0}}} for term in query_terms
+                        ] + [
+                            {"match": {"category": {"query": term, "boost": 1.5}}} for term in query_terms
+                        ]
+                    }
+                },
+                "size": settings.final_result_limit
+            }
+            
+            print(f"🔍 Elasticsearch query: {json.dumps(query, indent=2)}")
+            
+            # Perform search
+            results = await self.elasticsearch.search_products(query)
+            
+            # Add search metadata
+            for product in results:
+                product['search_source'] = 'elasticsearch'
+                product['keyword_score'] = product.get('_score', 0)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch search failed: {e}")
+            return []
+    
+    async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
+        """Perform vector search for products using semantic similarity"""
+        try:
+            if not self.vector_service:
+                return []
+            
+            # Use semantic query from requirements
+            semantic_query = requirements.get('semantic_query', '')
+            if not semantic_query:
+                semantic_query = requirements.get('use_case', 'business solution')
+            
+            print(f"🧠 Vector search query: {semantic_query}")
+            
+            # Perform vector search
+            results = await self.vector_service.search_products(semantic_query, limit=settings.final_result_limit)
+            
+            # Add search metadata
+            for product in results:
+                product['search_source'] = 'vector'
+                product['semantic_score'] = product.get('_similarity_score', 0)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Vector search for products failed: {e}")
+            return []
+    
+    async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
+        """Perform vector search for solutions using semantic similarity"""
+        try:
+            if not self.vector_service:
+                return []
+            
+            # Use semantic query from requirements
+            semantic_query = requirements.get('semantic_query', '')
+            if not semantic_query:
+                semantic_query = requirements.get('use_case', 'business solution')
+            
+            print(f"🧠 Vector search for solutions: {semantic_query}")
+            
+            # Perform vector search for solutions
+            results = await self.vector_service.search_solutions(semantic_query, limit=settings.final_result_limit)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Vector search for solutions failed: {e}")
+            return []
+    
+    def _merge_product_results_simple(
+        self, 
+        elasticsearch_products: List[Dict], 
+        vector_products: List[Dict]
+    ) -> List[Dict]:
+        """Simple merge of product results without RRF"""
+        
+        # Create a map of product ID to product
+        all_products = {}
+        
+        # Add Elasticsearch products
+        for product in elasticsearch_products:
+            product_id = product.get('id', '')
+            if product_id:
+                all_products[product_id] = product.copy()
+                all_products[product_id]['search_source'] = 'elasticsearch'
+                all_products[product_id]['keyword_score'] = product.get('_score', 0)
+                all_products[product_id]['semantic_score'] = 0
+        
+        # Add vector products (overwrite if exists)
+        for product in vector_products:
+            product_id = product.get('id', '')
+            if product_id:
+                if product_id in all_products:
+                    # Product found in both sources
+                    all_products[product_id]['search_source'] = 'both'
+                    all_products[product_id]['semantic_score'] = product.get('_similarity_score', 0)
+                else:
+                    # Product only in vector search
+                    all_products[product_id] = product.copy()
+                    all_products[product_id]['search_source'] = 'vector'
+                    all_products[product_id]['keyword_score'] = 0
+                    all_products[product_id]['semantic_score'] = product.get('_similarity_score', 0)
+        
+        # Sort by combined score (keyword + semantic)
+        merged_products = list(all_products.values())
+        merged_products.sort(key=lambda x: x.get('keyword_score', 0) + x.get('semantic_score', 0), reverse=True)
+        
+        return merged_products[:settings.final_result_limit]
 
 # Async helper to avoid import issues
 async def run_async(coro):

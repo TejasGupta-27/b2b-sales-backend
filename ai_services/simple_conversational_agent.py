@@ -155,12 +155,25 @@ CONVERSATION ANALYSIS:
 
 GUIDELINES:
 - Focus on being helpful and natural, not following rigid rules
-- If they're asking about products or solutions, it's okay to provide recommendations
+- **Be very conservative about product retrieval** - only retrieve products if they have provided substantial requirements AND explicitly ask for recommendations
+- If they're asking about products or solutions but haven't provided enough context, focus on gathering more information first
 - If they're still exploring or haven't shared much, focus on learning about their needs
 - Trust your judgment about what would be most helpful to them
 - Don't overthink it - just be genuinely helpful
 
-Remember: This is a natural conversation, not a sales process checklist. Do what feels right to help the customer."""
+EXAMPLES OF WHEN NOT TO RETRIEVE PRODUCTS:
+- Customer mentions a product category but no specific requirements
+- Customer asks general questions about technology
+- Customer hasn't provided budget, timeline, or specific use cases
+- Customer is still in early discovery phase
+- Customer just mentioned what they're looking for but hasn't provided enough context
+
+EXAMPLES OF WHEN TO RETRIEVE PRODUCTS:
+- Customer has provided detailed requirements (budget, timeline, specific needs) AND explicitly asks for recommendations
+- Customer has described their use case in detail AND asks for product suggestions
+- Customer is ready for solution presentation phase
+
+Remember: This is a natural conversation, not a sales process checklist. Do what feels right to help the customer, but err on the side of gathering more information first."""
 
         try:
             intent_analysis = await self.base_provider.generate_structured_response(
