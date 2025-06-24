@@ -139,7 +139,6 @@ class ElasticsearchService:
                 try:
                     loop = asyncio.get_event_loop()
                 except RuntimeError:
-                    import asyncio
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                 resolved = loop.run_until_complete(transport)
