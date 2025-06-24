@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     newrelic_license_key: Optional[str] = os.getenv("NEWRELIC_LICENSE_KEY")
     newrelic_app_name: str = os.getenv("NEWRELIC_APP_NAME", "B2B Sales Backend")
     newrelic_environment: str = os.getenv("NEWRELIC_ENVIRONMENT", "development")
+    newrelic_disable_for_elasticsearch: bool = os.getenv("NEWRELIC_DISABLE_FOR_ELASTICSEARCH", "True").lower() == "true"
     
     # Performance Configuration
     enable_response_caching: bool = os.getenv("ENABLE_RESPONSE_CACHING", "True").lower() == "true"

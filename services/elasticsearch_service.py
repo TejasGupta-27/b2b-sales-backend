@@ -6,8 +6,61 @@ from pathlib import Path
 from config import settings
 import asyncio
 from elasticsearch.exceptions import ConnectionError, RequestError
+import functools
+import contextlib
 
 logger = logging.getLogger(__name__)
+
+@contextlib.asynccontextmanager
+async def disable_newrelic_for_elasticsearch():
+    """Context manager to temporarily disable New Relic instrumentation for Elasticsearch operations"""
+    if not settings.newrelic_disable_for_elasticsearch:
+        # If disabled via config, just yield without doing anything
+        yield
+        return
+    
+    try:
+        # Try to disable New Relic instrumentation temporarily
+        import newrelic.agent
+        original_enabled = getattr(newrelic.agent, '_enabled', True)
+        newrelic.agent._enabled = False
+        logger.debug("Temporarily disabled New Relic instrumentation for Elasticsearch operation")
+    except (ImportError, AttributeError):
+        # New Relic not available or already disabled
+        pass
+    
+    try:
+        yield
+    finally:
+        try:
+            # Re-enable New Relic instrumentation
+            import newrelic.agent
+            newrelic.agent._enabled = original_enabled
+            logger.debug("Re-enabled New Relic instrumentation")
+        except (ImportError, AttributeError):
+            pass
+
+def handle_newrelic_interference(func):
+    """Decorator to handle New Relic interference with async Elasticsearch operations"""
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return await func(*args, **kwargs)
+            except AttributeError as attr_error:
+                if "'coroutine' object has no attribute" in str(attr_error):
+                    logger.warning(f"New Relic interference detected in {func.__name__} (attempt {attempt + 1}), retrying...")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(0.5)
+                        continue
+                    else:
+                        logger.error(f"New Relic interference persisted after {max_retries} attempts for {func.__name__}")
+                        raise
+                else:
+                    raise
+        return await func(*args, **kwargs)
+    return wrapper
 
 class ElasticsearchService:
     _instance = None
@@ -205,16 +258,28 @@ class ElasticsearchService:
         """Wait for Elasticsearch cluster to be ready"""
         for attempt in range(max_attempts):
             try:
-                # Try a simple cluster health check with short timeout
-                health = await self.client.cluster.health(
-                    wait_for_status='yellow',
-                    timeout='2s',
-                    request_timeout=3
-                )
-                
-                if health['status'] in ['green', 'yellow']:
-                    logger.info(f"✅ Cluster ready: {health['status']} status")
-                    return True
+                # Use context manager to disable New Relic for this operation
+                async with disable_newrelic_for_elasticsearch():
+                    # Try a simple cluster health check with short timeout
+                    try:
+                        health = await self.client.cluster.health(
+                            wait_for_status='yellow',
+                            timeout='2s',
+                            request_timeout=3
+                        )
+                        
+                        if health['status'] in ['green', 'yellow']:
+                            logger.info(f"✅ Cluster ready: {health['status']} status")
+                            return True
+                            
+                    except AttributeError as attr_error:
+                        # Handle New Relic interference with async methods
+                        if "'coroutine' object has no attribute" in str(attr_error):
+                            logger.warning(f"New Relic interference detected in cluster health check (attempt {attempt + 1}), retrying...")
+                            await asyncio.sleep(0.5)
+                            continue
+                        else:
+                            raise
                     
             except Exception as e:
                 logger.warning(f"Cluster not ready (attempt {attempt + 1}/{max_attempts}): {e}")
@@ -249,33 +314,35 @@ class ElasticsearchService:
         
         for attempt in range(max_retries):
             try:
-                # First check if index exists
-                exists = await self.client.indices.exists(index=index)
-                if not exists:
-                    logger.info(f"📝 Index {index} does not exist yet")
-                    return 0
-                
-                # Try different counting methods with better error handling
-                try:
-                    response = await self.client.count(
-                        index=index,
-                        request_timeout=10,
-                        ignore_unavailable=True
-                    )
+                # Use context manager to disable New Relic for this operation
+                async with disable_newrelic_for_elasticsearch():
+                    # First check if index exists
+                    exists = await self.client.indices.exists(index=index)
+                    if not exists:
+                        logger.info(f"📝 Index {index} does not exist yet")
+                        return 0
                     
-                    count = response.get('count', 0)
-                    logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
-                    return count
-                    
-                except AttributeError as attr_error:
-                    # Handle New Relic interference with async methods
-                    if "'coroutine' object has no attribute" in str(attr_error):
-                        logger.warning(f"New Relic interference detected in count attempt {attempt + 1}, retrying...")
-                        # Force a small delay to let New Relic settle
-                        await asyncio.sleep(0.5)
-                        continue
-                    else:
-                        raise
+                    # Try different counting methods with better error handling
+                    try:
+                        response = await self.client.count(
+                            index=index,
+                            request_timeout=10,
+                            ignore_unavailable=True
+                        )
+                        
+                        count = response.get('count', 0)
+                        logger.info(f"📊 Index {index} contains {count} documents (attempt {attempt + 1})")
+                        return count
+                        
+                    except AttributeError as attr_error:
+                        # Handle New Relic interference with async methods
+                        if "'coroutine' object has no attribute" in str(attr_error):
+                            logger.warning(f"New Relic interference detected in count attempt {attempt + 1}, retrying...")
+                            # Force a small delay to let New Relic settle
+                            await asyncio.sleep(0.5)
+                            continue
+                        else:
+                            raise
                 
             except Exception as e:
                 logger.warning(f"Count attempt {attempt + 1}/{max_retries} failed for {index}: {e}")
