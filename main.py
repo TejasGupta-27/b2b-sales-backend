@@ -1,9 +1,3 @@
-# New Relic monitoring setup
-import os
-if os.getenv("NEWRELIC_ENABLED", "True").lower() == "true":
-    import newrelic.agent
-    newrelic.agent.initialize('newrelic.ini')
-
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
