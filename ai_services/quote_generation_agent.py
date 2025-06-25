@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 from services.prompt_manager import get_prompt_manager
 import os
+from langdetect import detect
 
 logger = logging.getLogger(__name__)
 
@@ -162,12 +163,47 @@ class QuoteGenerationAgent(AIProvider):
                 print("❌ Debug - conversation_text is empty after processing!")
                 raise ValueError("No valid conversation content available")
 
-            # Create prompt for structured quote generation - no product retrieval required
-            print("🔍 Debug - Preparing quote prompt...")
-            safe_context = self._safe_serialize_context(customer_context)
-            print(f"🔍 Debug - Safe context length: {len(safe_context)}")
-            
-            quote_prompt = f"""Based on this sales conversation, generate a complete structured quote.
+            # Detect language (Japanese or not)
+            sample_text = ""
+            for msg in conversation_messages:
+                if hasattr(msg, "content"):
+                    sample_text += msg.content
+                elif isinstance(msg, dict):
+                    sample_text += msg.get("content", "")
+                elif isinstance(msg, str):
+                    sample_text += msg
+                if len(sample_text) > 100:
+                    break
+            try:
+                lang = detect(sample_text)
+            except Exception:
+                lang = "en"
+            # Support mixed Japanese/English
+            if lang == "ja" or re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]', sample_text):
+                lang = "ja"
+
+            # Prepare prompt in Japanese if needed
+            if lang == "ja":
+                quote_prompt = f"""この営業会話に基づいて、完全な構造化された見積書を日本語で作成してください。
+
+【会話内容】
+{conversation_text}
+
+【顧客情報】
+{safe_context}
+
+見積書には以下を含めてください：
+1. 会話から抽出した顧客情報
+2. 顧客のニーズに基づく最適な製品2～5点（実際にありそうなIT製品を使用）
+3. 小計・税・合計を含むプロフェッショナルな価格表
+4. なぜこれらの製品が適しているかのビジネス背景
+5. 利用規約
+6. 導入メモと次のステップ
+7. 見積書タイトルと会社のキャッチコピー
+
+価格は現実的な範囲で、見積書全体を日本語でプロフェッショナルに仕上げてください。特定の製品が会話で言及されていない場合は、会話内容に基づき適切なITソリューションを提案してください。"""
+            else:
+                quote_prompt = f"""Based on this sales conversation, generate a complete structured quote.
 
 CONVERSATION:
 {conversation_text}
@@ -214,7 +250,7 @@ Make sure all prices are realistic and the quote looks professional. If specific
             
             print("🔍 Debug - Starting PDF generation...")
             # Generate PDF
-            quote_dict = await self._generate_quote_pdf(quote_dict)
+            quote_dict = await self._generate_quote_pdf(quote_dict, lang=lang)
             print(f"🔍 Debug - PDF generation completed")
             print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
@@ -231,7 +267,7 @@ Make sure all prices are realistic and the quote looks professional. If specific
             print(f"   Full traceback: {traceback.format_exc()}")
             return None
     
-    async def _generate_quote_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_quote_pdf(self, quote_dict: Dict[str, Any], lang: str = "en") -> Dict[str, Any]:
         """Generate PDF for the quote with comprehensive debugging"""
         try:
             print("🔍 Debug - Starting PDF generation...")
@@ -258,8 +294,10 @@ Make sure all prices are realistic and the quote looks professional. If specific
             pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
             print(f"🔍 Debug - Converted quote data keys: {list(pdf_quote_data.keys())}")
             
-            # Generate and save the PDF (this is synchronous, not async)
-            print("🔍 Debug - Calling pdf_generator.save_pdf_to_file...")
+            # When calling the PDF generator, pass the lang or set font accordingly
+            pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
+            if lang == "ja":
+                pdf_quote_data['font'] = "NotoSansCJKjp"  # or another Japanese font available in your PDF generator
             pdf_path = pdf_generator.save_pdf_to_file(pdf_quote_data, filename)
             print(f"🔍 Debug - save_pdf_to_file returned: {pdf_path}")
             print(f"🔍 Debug - File path type: {type(pdf_path)}")
@@ -470,4 +508,4 @@ Make sure all prices are realistic and the quote looks professional. If specific
     # def get_product_catalog(self):
     #     """This method should now be dynamic - fetch from Elasticsearch"""
     #     # This can be removed since we're using Elasticsearch directly
-    #     pass 
+    #     pass
