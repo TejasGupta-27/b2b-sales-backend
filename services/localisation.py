@@ -1,5 +1,9 @@
-# services/localisation.py
+"""
+Localization service for quote generation
+Provides translations for different languages
+"""
 
+# Translation dictionary for quote generation
 quote_translations = {
     "en": {
         "intro": "🎯 **Excellent! Based on our thorough discussion and your specific requirements, I've prepared a comprehensive, customized quote using our intelligent product matching system.**",
@@ -52,7 +56,26 @@ quote_translations = {
             "terms_and_conditions": "Terms and Conditions",
             "implementation_notes": "Implementation Notes",
             "next_steps": "Next Steps"
-        }
+        },
+        # Quote generation prompts
+        "quote_prompt": """Based on this sales conversation, generate a complete structured quote.
+
+CONVERSATION:
+{conversation_text}
+
+CUSTOMER CONTEXT:
+{safe_context}
+
+Generate a complete quote with:
+1. Customer information extracted from conversation
+2. 2-5 most relevant products based on their needs (use realistic technology products)
+3. Professional pricing with subtotal, tax, and total
+4. Business context explaining why these products fit
+5. Professional terms and conditions
+6. Implementation notes and next steps
+7. Professional quote title and company tagline
+
+Make sure all prices are realistic and the quote looks professional. If specific products weren't mentioned, suggest appropriate technology solutions based on the conversation context. Set language to English."""
     },
     "ja": {
         "intro": "🎯 **鈴木様との丁寧なヒアリングをもとに、最適な提案書をご用意しました。**",
@@ -105,6 +128,46 @@ quote_translations = {
             "terms_and_conditions": "契約条件",
             "implementation_notes": "導入に関して",
             "next_steps": "次のステップ"
-        }
+        },
+        # Quote generation prompts in Japanese
+        "quote_prompt": """この営業会話に基づいて、完全な構造化見積もりを生成してください。
+
+会話内容:
+{conversation_text}
+
+顧客コンテキスト:
+{safe_context}
+
+以下を含む完全な見積もりを生成してください:
+1. 会話から抽出した顧客情報
+2. ニーズに基づく2-5の最適な製品（現実的な技術製品を使用）
+3. 小計、税金、合計を含む適切な価格設定
+4. これらの製品が適している理由を説明するビジネスコンテキスト
+5. 専門的な契約条件
+6. 導入に関する注意事項と次のステップ
+7. 専門的な見積もりタイトルと会社キャッチフレーズ
+
+すべての価格は現実的で、見積もりが専門的に見えるようにしてください。特定の製品が言及されていない場合は、会話のコンテキストに基づいて適切な技術ソリューションを提案してください。言語は日本語に設定してください。"""
     }
 }
+
+def get_quote_translations(language: str = "en") -> dict:
+    """
+    Get quote translations for specified language
+    
+    Args:
+        language: Language code ("en" or "ja")
+        
+    Returns:
+        Dictionary of translations for the specified language
+    """
+    return quote_translations.get(language, quote_translations["en"])
+
+def get_supported_languages() -> list:
+    """
+    Get list of supported language codes
+    
+    Returns:
+        List of supported language codes
+    """
+    return list(quote_translations.keys())

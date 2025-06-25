@@ -110,6 +110,7 @@ class SalesChatMessage(BaseModel):
     lead_id: Optional[str] = None
     conversation_stage: str = "discovery"
     provider: Optional[str] = None
+    language: Optional[str] = "en"
 
 class SalesChatResponse(BaseModel):
     id: str
@@ -307,7 +308,8 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
                 enhanced_agent = EnhancedB2BSalesAgent(
                     base_provider=base_provider,
-                    use_hybrid_retriever=settings.use_hybrid_retriever
+                    use_hybrid_retriever=settings.use_hybrid_retriever,
+                    language = lang
                 )
                 
                 # Initialize if needed
@@ -316,7 +318,8 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 # Generate response with error handling
                 response = await enhanced_agent.generate_response(
                     messages, 
-                    customer_context=customer_context
+                    customer_context=customer_context,
+                    language=lang 
                 )
                 
             except Exception as agent_error:
@@ -331,12 +334,21 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 response.metadata['agent_error'] = str(agent_error)
                 response.metadata['fallback_used'] = True
             
-            # Generate speech for the response
+            # 📌 Capture language from request or fallback
+            lang = getattr(request, "language", None)
+            if not lang:
+                logger.warning("⚠️ No language provided in request. Defaulting to English.")
+                lang = "en"
+            elif lang not in ["en", "ja"]:
+                logger.warning(f"⚠️ Unsupported language '{lang}' provided. Defaulting to English.")
+                lang = "en"
+
+            # 🗣️ Generate speech for the response
             speech_result = await speech_service.text_to_speech(
                 text=response.content,
-                language="en"  # Default to English for now
+                language=lang
             )
-            
+
             # Save assistant response with enhanced metadata
             response_metadata = {
                 "model": response.model,
@@ -344,6 +356,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 "usage": response.usage,
                 "enhanced_sales_agent": True,
                 "speech_data": speech_result
+                "language": lang  # ✅ include it for clarity
             }
             
             # Add product intelligence if available

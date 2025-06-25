@@ -10,6 +10,7 @@ from .function_models import QuoteData, CustomerInfo, QuoteLineItem
 from services.pdf_generator import PDFGenerator
 from services.elasticsearch_service import get_elasticsearch_service
 from .dynamic_extraction_agent import DynamicExtractionAgent
+from services.localisation import get_quote_translations
 from pydantic import BaseModel, Field
 from pathlib import Path
 from services.prompt_manager import get_prompt_manager
@@ -64,28 +65,18 @@ class StructuredQuote(BaseModel):
     # Metadata
     valid_until: str = Field(description="Quote expiration date")
     created_at: str = Field(description="Quote creation date")
-
-class QuoteTitleGeneration(BaseModel):
-    """Model for generating quote titles"""
-    title: str = Field(description="Professional, specific quote title")
-    tagline: str = Field(description="Company tagline relevant to the business context")
-
-class QuoteTermsGeneration(BaseModel):
-    """Model for generating terms and conditions"""
-    terms_and_conditions: List[str] = Field(description="List of professional terms and conditions")
-    implementation_notes: List[str] = Field(description="Implementation and deployment notes")
-    next_steps: List[str] = Field(description="Next steps for the customer")
+    language: str = Field(default="en", description="Quote language (en/ja)")
 
 class QuoteGenerationAgent(AIProvider):
-    """Completely dynamic quote generation with Pydantic function calling"""
+    """Dynamic quote generation with Pydantic function calling and internationalization"""
     
-    def __init__(self, base_provider: AIProvider, **kwargs):
+    def __init__(self, base_provider: AIProvider, language: str = "en", **kwargs):
         super().__init__(**kwargs)
         self.base_provider = base_provider
         self.pdf_generator = PDFGenerator()
         self.elasticsearch = get_elasticsearch_service()
-        # Use the dynamic extraction agent
         self.data_extractor = DynamicExtractionAgent(base_provider)
+        self.language = language
         
     @property
     def provider_name(self) -> str:
@@ -96,7 +87,6 @@ class QuoteGenerationAgent(AIProvider):
     
     async def generate_response(self, messages: List[AIMessage], **kwargs) -> AIResponse:
         """This agent only generates quotes, not conversational responses"""
-        # Track token usage from base provider
         if hasattr(self.base_provider, 'usage_tracker'):
             self.usage_tracker = self.base_provider.usage_tracker
             
@@ -114,207 +104,124 @@ class QuoteGenerationAgent(AIProvider):
     ) -> Optional[Dict[str, Any]]:
         """Generate quote using simplified workflow with conversation messages directly"""
         
-        logger.info(f"🔍 Quote Agent: Starting simplified quote generation...")
-        print(f"🔍 Debug - Input validation:")
-        print(f"   conversation_messages type: {type(conversation_messages)}")
-        print(f"   conversation_messages length: {len(conversation_messages) if conversation_messages else 0}")
-        print(f"   customer_context type: {type(customer_context)}")
-        print(f"   customer_context keys: {list(customer_context.keys()) if customer_context else 'None'}")
+        logger.info(f"🔍 Quote Agent: Starting quote generation for language: {self.language}")
         
         try:
-            # Use conversation_messages directly instead of extracting from recommendation_context
+            # Get translations for the specified language
+            t = get_quote_translations(self.language)
+            
             if not conversation_messages:
                 logger.error("❌ No conversation messages provided")
-                print("❌ Debug - conversation_messages is empty!")
                 raise ValueError("No conversation messages available for quote generation")
             
             logger.info(f"✅ Found {len(conversation_messages)} conversation messages")
-            print(f"🔍 Debug - Processing conversation messages...")
             
-            # Prepare conversation text for AI analysis - handle both AIMessage objects and dicts
+            # Prepare conversation text for AI analysis
             conversation_parts = []
             for i, msg in enumerate(conversation_messages):
-                print(f"🔍 Debug - Message {i+1}: type={type(msg)}")
                 if hasattr(msg, 'role') and hasattr(msg, 'content'):
-                    # AIMessage object
                     if msg.content:
                         conversation_parts.append(f"{msg.role}: {msg.content}")
-                        print(f"   AIMessage - Role: {msg.role}, Content length: {len(msg.content)}")
                 elif isinstance(msg, dict):
-                    # Dictionary format
                     role = msg.get('role', 'user')
                     content = msg.get('content', '')
                     if content:
                         conversation_parts.append(f"{role}: {content}")
-                        print(f"   Dict - Role: {role}, Content length: {len(content)}")
                 elif isinstance(msg, str):
-                    # String format - just add as user message
                     conversation_parts.append(f"user: {msg}")
-                    print(f"   String - Length: {len(msg)}")
-                else:
-                    print(f"   Unknown message format: {msg}")
             
             conversation_text = "\n".join(conversation_parts)
-            print(f"🔍 Debug - Final conversation text length: {len(conversation_text)}")
             
             if not conversation_text.strip():
                 logger.error("❌ No valid conversation content found")
-                print("❌ Debug - conversation_text is empty after processing!")
                 raise ValueError("No valid conversation content available")
 
-            # Create prompt for structured quote generation - no product retrieval required
-            print("🔍 Debug - Preparing quote prompt...")
+            # Prepare safe context for AI
             safe_context = self._safe_serialize_context(customer_context)
-            print(f"🔍 Debug - Safe context length: {len(safe_context)}")
             
-            quote_prompt = f"""Based on this sales conversation, generate a complete structured quote.
-
-CONVERSATION:
-{conversation_text}
-
-CUSTOMER CONTEXT:
-{safe_context}
-
-Generate a complete quote with:
-1. Customer information extracted from conversation
-2. 2-5 most relevant products based on their needs (use realistic technology products)
-3. Professional pricing with subtotal, tax, and total
-4. Business context explaining why these products fit
-5. Professional terms and conditions
-6. Implementation notes and next steps
-7. Professional quote title and company tagline
-
-Make sure all prices are realistic and the quote looks professional. If specific products weren't mentioned, suggest appropriate technology solutions based on the conversation context."""
-
-            print(f"🔍 Debug - Quote prompt length: {len(quote_prompt)}")
+            # Use the appropriate prompt from translations
+            quote_prompt = t["quote_prompt"].format(
+                conversation_text=conversation_text,
+                safe_context=safe_context
+            )
             
             # Use Pydantic function calling to generate structured quote
-            print("🔍 Debug - Calling base_provider.generate_structured_response...")
             response = await self.base_provider.generate_structured_response(
                 [AIMessage(role="user", content=quote_prompt)],
                 StructuredQuote
             )
             
-            print(f"🔍 Debug - Structured response type: {type(response)}")
-            print(f"🔍 Debug - Response model_dump available: {hasattr(response, 'model_dump')}")
-            
             # Convert to dictionary and add metadata
             quote_dict = response.model_dump()
-            print(f"🔍 Debug - Quote dict type: {type(quote_dict)}")
-            print(f"🔍 Debug - Quote dict keys: {list(quote_dict.keys())}")
+            quote_dict['language'] = self.language  # Ensure language is set
             
             quote_id = quote_dict['quote_number'].split('-')[-1] if '-' in quote_dict['quote_number'] else str(uuid.uuid4())[:8]
-            print(f"🔍 Debug - Generated quote_id: {quote_id}")
             
             quote_dict.update({
                 'quote_id': quote_id,
-                'generation_method': 'pydantic_structured_simplified',
+                'generation_method': 'pydantic_structured_internationalized',
                 'data_source': 'conversation_only'
             })
             
-            print("🔍 Debug - Starting PDF generation...")
-            # Generate PDF
+            # Generate PDF with proper internationalization
             quote_dict = await self._generate_quote_pdf(quote_dict)
-            print(f"🔍 Debug - PDF generation completed")
-            print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
-            logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']}")
+            logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']} (Language: {self.language})")
             return quote_dict
             
         except Exception as e:
             logger.error(f"❌ Quote generation failed: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
-            print(f"❌ Debug - Full exception details:")
-            print(f"   Exception type: {type(e)}")
-            print(f"   Exception message: {str(e)}")
-            print(f"   Full traceback: {traceback.format_exc()}")
             return None
     
     async def _generate_quote_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate PDF for the quote with comprehensive debugging"""
+        """Generate PDF for the quote with proper internationalization"""
         try:
-            print("🔍 Debug - Starting PDF generation...")
-            print(f"🔍 Debug - Input quote_dict type: {type(quote_dict)}")
-            print(f"🔍 Debug - Input quote_dict keys: {list(quote_dict.keys())}")
+            logger.info(f"🔍 Starting PDF generation with language: {self.language}")
             
             from services.pdf_generator import PDFGenerator
-            print("🔍 Debug - PDFGenerator imported successfully")
-            
             pdf_generator = PDFGenerator()
-            print("🔍 Debug - PDFGenerator initialized")
             
             # Get quote ID for file naming
             quote_id = quote_dict.get('quote_id', 'unknown')
             quote_number = quote_dict.get('quote_number', 'QUOTE-UNKNOWN')
-            print(f"🔍 Debug - Quote ID: {quote_id}")
-            print(f"🔍 Debug - Quote number: {quote_number}")
             
             # Create filename
-            filename = f"quote_{quote_id}.pdf"
-            print(f"🔍 Debug - Target filename: {filename}")
+            filename = f"quote_{quote_id}_{language}.pdf"
             
-            # Convert the quote dict to match the PDF generator's expected format
+            # Convert the quote dict to match the PDF generator's expected format with translations
             pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
-            print(f"🔍 Debug - Converted quote data keys: {list(pdf_quote_data.keys())}")
             
-            # Generate and save the PDF (this is synchronous, not async)
-            print("🔍 Debug - Calling pdf_generator.save_pdf_to_file...")
+            # Generate and save the PDF
             pdf_path = pdf_generator.save_pdf_to_file(pdf_quote_data, filename)
-            print(f"🔍 Debug - save_pdf_to_file returned: {pdf_path}")
-            print(f"🔍 Debug - File path type: {type(pdf_path)}")
             
             # Check if file was actually created
-            if pdf_path:
-                import os
-                if os.path.exists(pdf_path):
-                    file_size = os.path.getsize(pdf_path)
-                    print(f"🔍 Debug - PDF file exists: {pdf_path}")
-                    print(f"🔍 Debug - PDF file size: {file_size} bytes")
-                    
-                    # Add PDF info to quote
-                    quote_dict.update({
-                        'pdf_generated': True,
-                        'pdf_path': pdf_path,
-                        'pdf_url': f'/api/quotes/download-pdf/{quote_id}',
-                        'file_size': file_size
-                    })
-                    
-                    print(f"✅ PDF generated successfully: {pdf_path}")
-                else:
-                    print(f"❌ Debug - PDF file does not exist: {pdf_path}")
-                    quote_dict.update({
-                        'pdf_generated': False,
-                        'pdf_error': 'PDF file was not created',
-                        'pdf_path': pdf_path
-                    })
+            if pdf_path and os.path.exists(pdf_path):
+                file_size = os.path.getsize(pdf_path)
+                logger.info(f"✅ PDF generated successfully: {pdf_path} ({file_size} bytes)")
+                
+                quote_dict.update({
+                    'pdf_generated': True,
+                    'pdf_path': pdf_path,
+                    'pdf_url': f'/api/quotes/download-pdf/{quote_id}',
+                    'file_size': file_size,
+                    'pdf_language': self.language
+                })
             else:
-                print("❌ Debug - No PDF path returned")
+                logger.error(f"❌ PDF file was not created: {pdf_path}")
                 quote_dict.update({
                     'pdf_generated': False,
-                    'pdf_error': 'No file path returned from PDF generator'
+                    'pdf_error': 'PDF file was not created',
+                    'pdf_path': pdf_path
                 })
             
-            print(f"🔍 Debug - Final quote_dict after PDF generation:")
-            print(f"   pdf_generated: {quote_dict.get('pdf_generated', 'Not set')}")
-            print(f"   pdf_path: {quote_dict.get('pdf_path', 'Not set')}")
-            print(f"   pdf_url: {quote_dict.get('pdf_url', 'Not set')}")
-            print(f"   pdf_error: {quote_dict.get('pdf_error', 'Not set')}")
-            
-            return quote_dict
-            
-        except ImportError as e:
-            print(f"❌ Debug - PDF Generator import failed: {str(e)}")
-            quote_dict.update({
-                'pdf_generated': False,
-                'pdf_error': f'PDF Generator import failed: {str(e)}'
-            })
             return quote_dict
             
         except Exception as e:
-            print(f"❌ Debug - PDF generation exception: {str(e)}")
+            logger.error(f"❌ PDF generation failed: {str(e)}")
             import traceback
-            print(f"❌ Debug - PDF generation traceback: {traceback.format_exc()}")
+            logger.error(traceback.format_exc())
             quote_dict.update({
                 'pdf_generated': False,
                 'pdf_error': f'PDF generation failed: {str(e)}'
@@ -322,16 +229,19 @@ Make sure all prices are realistic and the quote looks professional. If specific
             return quote_dict
 
     def _convert_quote_for_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert the structured quote format to PDF generator format"""
+        """Convert the structured quote format to PDF generator format with proper translations"""
         try:
-            print("🔍 Debug - Converting quote format for PDF generator...")
+            logger.info(f"🔍 Converting quote format for PDF generator (Language: {self.language})")
+            
+            # Get translations for the specified language
+            t = get_quote_translations(self.language)
+            pdf_labels = t["pdf_labels"]
             
             # Handle customer_info format conversion
             customer_info = quote_dict.get('customer_info', {})
             pdf_customer_info = {}
             
             if isinstance(customer_info, dict):
-                # Map the fields correctly
                 pdf_customer_info['company'] = customer_info.get('company_name', 'Valued Customer')
                 pdf_customer_info['contact'] = customer_info.get('contact_name', 'Dear Customer')
                 pdf_customer_info['email'] = customer_info.get('email', '')
@@ -341,7 +251,35 @@ Make sure all prices are realistic and the quote looks professional. If specific
             # Handle financials format conversion
             financials = quote_dict.get('financials', {})
             
-            # Convert to the format expected by PDF generator
+            # Convert currency based on language
+            currency_symbol = "¥" if self.language == "ja" else "$"
+            currency_code = "JPY" if self.language == "ja" else "USD"
+            
+            # Adjust amounts for Japanese currency (multiply by exchange rate if needed)
+            if self.language == "ja" and financials.get('currency', 'USD') == 'USD':
+                # Convert USD to JPY (approximate rate: 1 USD = 150 JPY)
+                exchange_rate = 150
+                subtotal = financials.get('subtotal', 0) * exchange_rate
+                tax_amount = financials.get('tax_amount', 0) * exchange_rate
+                total = financials.get('total', 0) * exchange_rate
+            else:
+                subtotal = financials.get('subtotal', 0)
+                tax_amount = financials.get('tax_amount', 0)
+                total = financials.get('total', 0)
+            
+            # Convert line items with proper currency
+            line_items = []
+            for item in quote_dict.get('line_items', []):
+                if isinstance(item, dict):
+                    converted_item = item.copy()
+                    if self.language == "ja" and financials.get('currency', 'USD') == 'USD':
+                        converted_item['unit_price'] = item.get('unit_price', 0) * exchange_rate
+                        converted_item['total_price'] = item.get('total_price', 0) * exchange_rate
+                    line_items.append(converted_item)
+                else:
+                    line_items.append(item)
+            
+            # Convert to the format expected by PDF generator with translations
             pdf_quote_data = {
                 'quote_number': quote_dict.get('quote_number', 'N/A'),
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
@@ -350,27 +288,27 @@ Make sure all prices are realistic and the quote looks professional. If specific
                 'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
                 'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
                 'customer_info': pdf_customer_info,
-                'line_items': quote_dict.get('line_items', []),
-                'subtotal': financials.get('subtotal', 0) if financials else 0,
+                'line_items': line_items,
+                'subtotal': subtotal,
                 'tax_rate': financials.get('tax_rate', 0) if financials else 0,
-                'tax_amount': financials.get('tax_amount', 0) if financials else 0,
-                'total': financials.get('total', 0) if financials else 0,
-                'currency': financials.get('currency', 'USD') if financials else 'USD',
+                'tax_amount': tax_amount,
+                'total': total,
+                'currency': currency_code,
+                'currency_symbol': currency_symbol,
                 'terms_and_conditions': quote_dict.get('terms_and_conditions', []),
                 'implementation_notes': quote_dict.get('implementation_notes', []),
-                'next_steps': quote_dict.get('next_steps', [])
+                'next_steps': quote_dict.get('next_steps', []),
+                'language': self.language,
+                'labels': pdf_labels  # Add translated labels
             }
             
-            print(f"🔍 Debug - PDF quote data converted successfully")
-            print(f"   customer_info keys: {list(pdf_quote_data['customer_info'].keys())}")
-            print(f"   line_items count: {len(pdf_quote_data['line_items'])}")
-            print(f"   total: {pdf_quote_data['total']}")
-            
+            logger.info(f"✅ PDF quote data converted successfully for {self.language}")
             return pdf_quote_data
             
         except Exception as e:
-            print(f"❌ Debug - Quote format conversion failed: {str(e)}")
-            # Return minimal safe format
+            logger.error(f"❌ Quote format conversion failed: {str(e)}")
+            # Return minimal safe format with fallback
+            t = get_quote_translations(self.language)
             return {
                 'quote_number': quote_dict.get('quote_number', 'N/A'),
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
@@ -381,11 +319,86 @@ Make sure all prices are realistic and the quote looks professional. If specific
                 'subtotal': 0,
                 'tax_amount': 0,
                 'total': 0,
-                'currency': 'USD',
+                'currency': 'USD' if self.language == "en" else 'JPY',
+                'currency_symbol': '$' if self.language == "en" else '¥',
                 'terms_and_conditions': [],
                 'implementation_notes': [],
-                'next_steps': []
+                'next_steps': [],
+                'language': self.language,
+                'labels': t["pdf_labels"]
             }
+
+    def format_quote_response(self, quote_dict: Dict[str, Any]) -> str:
+        """Format the quote response with proper translations"""
+        t = get_quote_translations(self.language)
+        
+        # Extract financial info
+        financials = quote_dict.get('financials', {})
+        subtotal = financials.get('subtotal', 0)
+        tax = financials.get('tax_amount', 0)
+        total = financials.get('total', 0)
+        currency = financials.get('currency', 'USD')
+        
+        # Convert to local currency if needed
+        if self.language == "ja" and currency == "USD":
+            exchange_rate = 150  # USD to JPY
+            subtotal *= exchange_rate
+            tax *= exchange_rate
+            total *= exchange_rate
+        
+        # Build response
+        response_parts = [
+            t["intro"],
+            "",
+            t["quote_number"].format(quote_number=quote_dict.get('quote_number', 'N/A')),
+            "",
+            t["analysis"],
+            "",
+            t["investment_summary"]
+        ]
+        
+        # Add financial summary
+        response_parts.extend([
+            t["subtotal"].format(subtotal=subtotal),
+            t["tax"].format(tax=tax),
+            t["total"].format(total=total),
+            t["valid_until"].format(date=quote_dict.get('valid_until', 'N/A'))
+        ])
+        
+        response_parts.append("")
+        
+        # Add PDF link
+        if quote_dict.get('pdf_generated'):
+            pdf_url = quote_dict.get('pdf_url', '#')
+            response_parts.append(t["pdf_ready"].format(url=pdf_url))
+        else:
+            response_parts.append(t["pdf_pending"])
+            if quote_dict.get('pdf_error'):
+                response_parts.append(t["pdf_error"])
+        
+        response_parts.extend([
+            "",
+            t["next_steps"]
+        ])
+        
+        # Add next steps list
+        next_steps = t["next_without_ppt"]
+        for i, step in enumerate(next_steps, 1):
+            response_parts.append(step)
+        
+        response_parts.extend([
+            "",
+            t["confidence_note"]
+        ])
+        
+        return "\n".join(response_parts)
+
+    def generate_bilingual_quote_response(self, quote_dict: Dict[str, Any]) -> Dict[str, str]:
+        """Generate quote responses in both English and Japanese"""
+        return {
+            "en": self.format_quote_response(quote_dict, "en"),
+            "ja": self.format_quote_response(quote_dict, "ja")
+        }
 
     def _serialize_quote_for_storage(self, quote: Dict[str, Any]) -> Dict[str, Any]:
         """Serialize quote data for storage by removing circular references"""

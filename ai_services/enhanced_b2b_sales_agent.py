@@ -23,6 +23,7 @@ class EnhancedB2BSalesAgent(AIProvider):
         self, 
         base_provider: AIProvider,
         use_hybrid_retriever: bool = True,
+        language: str = "en",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -30,6 +31,7 @@ class EnhancedB2BSalesAgent(AIProvider):
         self.conversation_analyzer = ConversationFlowAgent(base_provider)
         self.quote_agent = QuoteGenerationAgent(base_provider)
         self.quick_response_generator = QuickResponseGenerator(base_provider)
+        self.lang = language
         
         # Track asked questions to prevent duplicates
         self.asked_questions = set()
@@ -101,6 +103,7 @@ class EnhancedB2BSalesAgent(AIProvider):
         self, 
         messages: List[AIMessage], 
         customer_context: Optional[Dict[str, Any]] = None,
+        language: str = "en",
         **kwargs
     ) -> AIResponse:
         """Generate sales-focused responses with intelligent conversation flow management"""
@@ -353,7 +356,7 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
             try:
                 # Enhance response with quote information
                 print("🔍 Debug - Enhancing response with quote information...")
-                response = self._enhance_response_with_dynamic_quote(response, quote, quote.get('quote_id', 'unknown'))
+                response = self._enhance_response_with_dynamic_quote(response, quote, quote.get('quote_id', 'unknown'),language=self.lang)
                 print("🔍 Debug - Response enhancement completed")
             except Exception as e:
                 print(f"❌ Debug - Response enhancement failed: {str(e)}")
@@ -847,7 +850,7 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 response.metadata['quote_id'] = quote.get('id')
                 
                 # Enhance sales response to incorporate the quote
-                response = self._enhance_response_with_dynamic_quote(response, quote)
+                response = self._enhance_response_with_dynamic_quote(response, quote,language=lang)
             else:
                 print("❌ Quote agent couldn't generate quote from enhanced conversation")
                 response.metadata['quote_generation_failed'] = True
