@@ -24,7 +24,7 @@ class QuoteLineItem(BaseModel):
     quantity: int = Field(default=1, description="Quantity")
     unit_price: float = Field(description="Price per unit")
     total_price: float = Field(description="Total price for this line item")
-    category: str = Field(default="Technology", description="Product category")
+    category: str = Field(default="", description="Product category (e.g., Hardware, Software, Services, etc.)")
 
 class QuoteCustomerInfo(BaseModel):
     """Customer information for the quote"""
@@ -177,14 +177,23 @@ CUSTOMER CONTEXT:
 
 Generate a complete quote with:
 1. Customer information extracted from conversation
-2. 2-5 most relevant products based on their needs (use realistic technology products)
+2. Products/services that match exactly what was discussed in the conversation
 3. Professional pricing with subtotal, tax, and total
-4. Business context explaining why these products fit
+4. Business context explaining why these products fit their needs
 5. Professional terms and conditions
 6. Implementation notes and next steps
 7. Professional quote title and company tagline
 
-Make sure all prices are realistic and the quote looks professional. If specific products weren't mentioned, suggest appropriate technology solutions based on the conversation context."""
+IMPORTANT GUIDELINES:
+- Use ONLY the specific products/services mentioned in the conversation
+- If the conversation is about PC components, quote PC components
+- If the conversation is about software, quote software
+- If the conversation is about services, quote services
+- Do NOT default to generic "technology solutions" unless that's what was actually discussed
+- Make sure all prices are realistic for the specific products mentioned
+- The quote should directly reflect what the customer asked for
+
+Make sure the quote accurately represents what was discussed in the conversation, not generic business solutions."""
 
             print(f"🔍 Debug - Quote prompt length: {len(quote_prompt)}")
             
@@ -347,8 +356,8 @@ Make sure all prices are realistic and the quote looks professional. If specific
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
                 'created_at': quote_dict.get('created_at', ''),
                 'valid_until': quote_dict.get('valid_until', ''),
-                'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
-                'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
+                'quote_title': quote_dict.get('title', 'Professional Quote'),
+                'company_tagline': quote_dict.get('company_tagline', 'Quality Products & Services'),
                 'customer_info': pdf_customer_info,
                 'line_items': quote_dict.get('line_items', []),
                 'subtotal': financials.get('subtotal', 0) if financials else 0,
@@ -374,8 +383,8 @@ Make sure all prices are realistic and the quote looks professional. If specific
             return {
                 'quote_number': quote_dict.get('quote_number', 'N/A'),
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
-                'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
-                'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
+                'quote_title': quote_dict.get('title', 'Professional Quote'),
+                'company_tagline': quote_dict.get('company_tagline', 'Quality Products & Services'),
                 'customer_info': {'company': 'Valued Customer', 'contact': 'Dear Customer'},
                 'line_items': [],
                 'subtotal': 0,

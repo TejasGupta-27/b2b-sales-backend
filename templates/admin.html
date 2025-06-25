@@ -675,6 +675,7 @@
         <div class="tab-container">
             <div class="tab-buttons">
                 <button class="tab-button active" onclick="showTab('prompts')">Prompt Management</button>
+                <button class="tab-button" onclick="showTab('conversational')">Conversational Config</button>
                 <button class="tab-button" onclick="showTab('data')">Data Management</button>
                 <button class="tab-button" onclick="showTab('logs')">Log Viewer</button>
                 <button class="tab-button" onclick="showTab('metrics')">Performance Metrics</button>
@@ -706,6 +707,44 @@
                     <button class="btn" onclick="testPrompt()">🧪 Test Prompt</button>
                 </div>
                 <div id="prompts-list" style="margin-top: 32px;"></div>
+            </div>
+            
+            <div id="conversational-tab" class="tab-content">
+                <h3 style="color: #1a202c; margin-bottom: 24px;">Conversational Agent Configuration</h3>
+                
+                <div class="form-group">
+                    <label for="config-type">Configuration Type:</label>
+                    <select id="config-type" onchange="loadConversationalConfig()">
+                        <option value="personality">Agent Personality</option>
+                        <option value="industry_contexts">Industry Contexts</option>
+                        <option value="response_guidelines">Response Guidelines</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="config-content">Configuration (JSON):</label>
+                    <textarea id="config-content" rows="15" placeholder="Enter JSON configuration..."></textarea>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="saveConversationalConfig()">💾 Save Configuration</button>
+                    <button class="btn" onclick="loadConversationalConfig()">🔄 Load Configuration</button>
+                    <button class="btn" onclick="testConversationalConfig()">🧪 Test Configuration</button>
+                    <button class="btn btn-danger" onclick="resetConversationalConfig()">🔄 Reset to Defaults</button>
+                </div>
+                
+                <div style="margin-top: 24px; padding: 16px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <h4 style="color: #1a202c; margin-bottom: 12px;">Configuration Guide</h4>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.5;">
+                        <strong>Personality:</strong> Define agent name, role, traits, communication style, and tone.<br>
+                        <strong>Industry Contexts:</strong> Configure industry-specific focus areas and common concerns.<br>
+                        <strong>Response Guidelines:</strong> Set guidelines for different types of customer requests.<br>
+                        <br>
+                        <strong>Note:</strong> Changes are applied immediately to new conversations.
+                    </div>
+                </div>
+                
+                <div id="conversational-config-status" style="margin-top: 32px;"></div>
             </div>
             
             <div id="data-tab" class="tab-content">
@@ -807,6 +846,8 @@
             // Load appropriate data for the tab
             if (tabName === 'prompts') {
                 loadPrompts();
+            } else if (tabName === 'conversational') {
+                loadConversationalConfig();
             } else if (tabName === 'logs') {
                 loadLogs();
             } else if (tabName === 'metrics') {
@@ -1496,6 +1537,167 @@
             } catch (error) {
                 console.error('Error viewing logs:', error);
                 showAlert('Error viewing logs', 'error');
+            }
+        }
+        
+        // Conversational configuration functions
+        async function loadConversationalConfig() {
+            const configType = document.getElementById('config-type').value;
+            try {
+                const response = await fetch('/api/admin/conversational/config/' + configType);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('config-content').value = JSON.stringify(data, null, 2);
+                    showAlert('Configuration loaded successfully', 'success');
+                } else {
+                    showAlert('Error loading configuration', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading conversational config:', error);
+                showAlert('Error loading configuration', 'error');
+            }
+        }
+        
+        async function saveConversationalConfig() {
+            const configType = document.getElementById('config-type').value;
+            const configContent = document.getElementById('config-content').value;
+            
+            if (!configContent.trim()) {
+                showAlert('Please enter configuration content', 'error');
+                return;
+            }
+            
+            try {
+                // Validate JSON
+                const configData = JSON.parse(configContent);
+                
+                const response = await fetch('/api/admin/conversational/config/' + configType, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(configData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'Configuration saved successfully', 'success');
+                } else {
+                    showAlert('Error saving configuration', 'error');
+                }
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    showAlert('Invalid JSON format', 'error');
+                } else {
+                    console.error('Error saving conversational config:', error);
+                    showAlert('Error saving configuration', 'error');
+                }
+            }
+        }
+        
+        async function testConversationalConfig() {
+            const configType = document.getElementById('config-type').value;
+            const configContent = document.getElementById('config-content').value;
+            
+            if (!configContent.trim()) {
+                showAlert('Please enter configuration content to test', 'error');
+                return;
+            }
+            
+            try {
+                // Validate JSON
+                const configData = JSON.parse(configContent);
+                
+                const response = await fetch('/api/admin/conversational/config/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        config_type: configType,
+                        config: configData
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                        const testResults = result.test_results;
+                        let message = `✅ Configuration '${configType}' tested successfully! `;
+                        
+                        if (testResults.validation_results) {
+                            const validCount = Object.values(testResults.validation_results).filter(v => v === 'Valid' || v === 'Present').length;
+                            const totalCount = Object.keys(testResults.validation_results).length;
+                            message += `Validation: ${validCount}/${totalCount} passed. `;
+                        }
+                        
+                        if (testResults.config_size) {
+                            message += `Size: ${testResults.config_size} characters. `;
+                        }
+                        
+                        showAlert(message, 'success');
+                        console.log('Configuration test results:', testResults);
+                        
+                        // Display detailed results
+                        displayConfigTestResults(testResults);
+                    } else {
+                        showAlert(result.message, 'error');
+                    }
+                } else {
+                    showAlert('Error testing configuration', 'error');
+                }
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    showAlert('Invalid JSON format', 'error');
+                } else {
+                    console.error('Error testing conversational config:', error);
+                    showAlert('Error testing configuration', 'error');
+                }
+            }
+        }
+        
+        function displayConfigTestResults(testResults) {
+            const statusElement = document.getElementById('conversational-config-status');
+            let html = '<h4 style="color: #1a202c; margin-bottom: 16px;">Test Results:</h4>';
+            html += '<div style="background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0;">';
+            
+            if (testResults.validation_results) {
+                html += '<h5 style="color: #1a202c; margin-bottom: 12px;">Validation Results:</h5>';
+                Object.entries(testResults.validation_results).forEach(([key, value]) => {
+                    const statusClass = value === 'Valid' || value === 'Present' ? 'status-online' : 'status-offline';
+                    html += `<div style="margin: 8px 0;"><span class="status-indicator ${statusClass}"></span>${key}: ${value}</div>`;
+                });
+            }
+            
+            if (testResults.sample_prompt) {
+                html += '<h5 style="color: #1a202c; margin: 12px 0 8px 0;">Sample Generated Prompt:</h5>';
+                html += `<div style="background: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">${testResults.sample_prompt}</div>`;
+            }
+            
+            if (testResults.config_size) {
+                html += `<div style="margin-top: 12px; font-size: 13px; color: #64748b;">Configuration size: ${testResults.config_size} characters</div>`;
+            }
+            
+            html += '</div>';
+            statusElement.innerHTML = html;
+        }
+        
+        async function resetConversationalConfig() {
+            if (!confirm('Are you sure you want to reset all conversational configuration to defaults? This will overwrite all custom settings.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/conversational/config/reset', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message || 'Configuration reset to defaults', 'success');
+                    loadConversationalConfig(); // Reload the current config type
+                } else {
+                    showAlert('Error resetting configuration', 'error');
+                }
+            } catch (error) {
+                console.error('Error resetting conversational config:', error);
+                showAlert('Error resetting configuration', 'error');
             }
         }
         
