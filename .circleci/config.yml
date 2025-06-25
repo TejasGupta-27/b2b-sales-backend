@@ -126,9 +126,26 @@ jobs:
               # Build and start new containers
               docker compose up --build -d
               
+              # Wait for services to be ready before setting up nginx
+              echo "Waiting for services to be ready..."
+              sleep 30
+              
+              # Setup nginx reverse proxy
+              if [ -f setup-nginx-proxy.sh ]; then
+                echo "Setting up nginx reverse proxy..."
+                chmod +x setup-nginx-proxy.sh
+                ./setup-nginx-proxy.sh install
+              else
+                echo "Warning: setup-nginx-proxy.sh not found, skipping nginx setup"
+              fi
+              
               # Clean up old images and volumes
               docker image prune -f
               docker volume prune -f
+              
+              # Show final status
+              echo "Deployment completed. Checking service status..."
+              ./setup-nginx-proxy.sh status || echo "Nginx status check failed"
             EOF
 
 
