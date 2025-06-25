@@ -851,6 +851,9 @@ class ElasticsearchService:
     
     async def search_products(self, query_body: dict, index: str = "products") -> List[Dict]:
         """Search products with better error handling"""
+        if lang == "ja":
+            from services.translation_service import translate_to_english
+            query_body = translate_to_english(query_body)
         try:
             await self.ensure_healthy()
             

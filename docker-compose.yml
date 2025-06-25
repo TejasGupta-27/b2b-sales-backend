@@ -35,6 +35,7 @@ services:
       - USE_HYBRID_RETRIEVER=true
       - FORCE_RELOAD_DATA=false
       - SKIP_DATA_LOADING=false
+      - PYTHONUNBUFFERED=1 
 
       # CORS Configuration
       - CORS_ORIGINS=http://74.176.202.10:3000,http://74.176.202.10:3001,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001

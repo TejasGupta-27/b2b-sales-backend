@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 from services.prompt_manager import get_prompt_manager
 import os
+from langdetect import detect
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,7 @@ class QuoteGenerationAgent(AIProvider):
                 conversation_text=conversation_text,
                 safe_context=safe_context
             )
+            print(f"🔍 Debug - Quote prompt length: {len(quote_prompt)}")
             
             # Use Pydantic function calling to generate structured quote
             response = await self.base_provider.generate_structured_response(
@@ -163,8 +165,12 @@ class QuoteGenerationAgent(AIProvider):
                 'data_source': 'conversation_only'
             })
             
-            # Generate PDF with proper internationalization
-            quote_dict = await self._generate_quote_pdf(quote_dict)
+            print("🔍 Debug - Starting PDF generation...")
+            
+            # Generate PDF
+            quote_dict = await self._generate_quote_pdf(quote_dict, lang=lang)
+            print(f"🔍 Debug - PDF generation completed")
+            print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
             logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']} (Language: {self.language})")
             return quote_dict
@@ -175,10 +181,10 @@ class QuoteGenerationAgent(AIProvider):
             logger.error(traceback.format_exc())
             return None
     
-    async def _generate_quote_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate PDF for the quote with proper internationalization"""
+    async def _generate_quote_pdf(self, quote_dict: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+        """Generate PDF for the quote with comprehensive debugging"""
         try:
-            logger.info(f"🔍 Starting PDF generation with language: {self.language}")
+            logger.info(f"🔍 Starting PDF generation with language: {language}")
             
             from services.pdf_generator import PDFGenerator
             pdf_generator = PDFGenerator()
@@ -193,7 +199,10 @@ class QuoteGenerationAgent(AIProvider):
             # Convert the quote dict to match the PDF generator's expected format with translations
             pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
             
-            # Generate and save the PDF
+            # When calling the PDF generator, pass the lang or set font accordingly
+            pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
+            if language == "ja":
+                pdf_quote_data['font'] = "NotoSansCJKjp"  # or another Japanese font available in your PDF generator
             pdf_path = pdf_generator.save_pdf_to_file(pdf_quote_data, filename)
             
             # Check if file was actually created
@@ -483,4 +492,4 @@ class QuoteGenerationAgent(AIProvider):
     # def get_product_catalog(self):
     #     """This method should now be dynamic - fetch from Elasticsearch"""
     #     # This can be removed since we're using Elasticsearch directly
-    #     pass 
+    #     pass

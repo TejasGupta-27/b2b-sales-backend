@@ -14,6 +14,7 @@ from config import settings
 from .quick_response_generator import QuickResponseGenerator
 from services.prompt_manager import get_prompt_manager
 from services.localisation import quote_translations
+from services.email_sender import send_quote_email
 
 
 class EnhancedB2BSalesAgent(AIProvider):
@@ -388,6 +389,17 @@ Example approach: "I'd be happy to prepare a detailed quote for you! To ensure I
                 print(f"❌ Debug - Metadata update failed: {str(e)}")
                 import traceback
                 print(f"❌ Debug - Metadata traceback: {traceback.format_exc()}")
+
+            try:
+                # Send the quote email with PDF and PPT attachments
+                ppt_path = quote.get('pitch_deck_url') or 'path/to/default_ppt.pptx'
+                pdf_path = quote.get('pdf_url') or 'path/to/default_pdf.pdf'
+
+                print(f"📧 Sending quote email to customer {quote.get('customer_info', {}).get('email')}...")
+                send_quote_email(quote, ppt_path, pdf_path)
+                print("📧 Email sent successfully.")
+            except Exception as e:
+                print(f"❌ Failed to send quote email: {str(e)}")
             
         else:
             print("❌ Quote generation failed")

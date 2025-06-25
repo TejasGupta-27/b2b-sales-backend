@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 import os
@@ -10,6 +10,7 @@ from db.database import get_db
 from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
 from services.pdf_generator import PDFGenerator
 from services.pitch_deck_service import PitchDeckService
+from services.email_sender import send_quote_email  # You must have this implemented
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ router = APIRouter()
 async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation and pitch deck"""
     try:
+        language = quote_request.get("language", "en")
         base_provider = AIServiceFactory.create_provider("azure_openai")
         sales_agent = EnhancedB2BSalesAgent(base_provider)
         
@@ -39,8 +41,8 @@ async def generate_quote(quote_request: Dict[str, Any]):
         
         # Generate pitch deck
         pitch_deck_service = PitchDeckService()
-        deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
-        
+        deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote), language=language)
+
         # Generate the pitch deck
         deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
         os.makedirs(os.path.dirname(deck_path), exist_ok=True)
@@ -116,19 +118,20 @@ async def download_quote_pdf(quote_id: str):
     """Download PDF file for a quote"""
     try:
         file_path = Path(f"Data/quotes/quote_{quote_id}.pdf")
-        
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="PDF file not found")
-        
+
         def iter_file():
             with open(file_path, 'rb') as file:
                 yield from file
-        
+
+        # Add a custom header with the send email link
         return StreamingResponse(
             iter_file(),
             media_type='application/pdf',
             headers={
-                "Content-Disposition": f"attachment; filename=quote_{quote_id}.pdf"
+                "Content-Disposition": f"attachment; filename=quote_{quote_id}.pdf",
+                "X-Send-Email-Link": f"/api/quotes/send-email/{quote_id}"
             }
         )
     except Exception as e:
@@ -152,7 +155,8 @@ async def download_quote_ppt(quote_id: str):
             iter_file(),
             media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
             headers={
-                "Content-Disposition": f"attachment; filename=quote_{quote_id}_deck.pptx"
+                "Content-Disposition": f"attachment; filename=quote_{quote_id}_deck.pptx",
+                "X-Send-Email-Link": f"/api/quotes/send-email/{quote_id}"
             }
         )
     except Exception as e:
@@ -275,4 +279,26 @@ async def download_pitch_deck(deck_id: str):
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/send-email/{quote_id}")
+async def send_quote_email_endpoint(quote_id: str):
+    """Send the quote and pitch deck to the customer via email."""
+    try:
+        # Load quote data (adjust path/logic as needed)
+        quote_path = Path(f"Data/quotes/quote_{quote_id}.pdf")
+        ppt_path = Path(f"Data/presentations/quote_{quote_id}_deck.pptx")
+        if not quote_path.exists():
+            raise HTTPException(status_code=404, detail="Quote PDF not found")
+        if not ppt_path.exists():
+            raise HTTPException(status_code=404, detail="Pitch deck not found")
+        # Load quote metadata (implement as needed)
+        # For example, load from DB or a JSON file
+        # quote = load_quote_metadata(quote_id)
+        quote = {}  # Replace with actual loading logic
+
+        # Send the email (implement send_quote_email accordingly)
+        send_quote_email(quote, str(ppt_path), str(quote_path))
+        return {"status": "success", "message": "Email sent successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

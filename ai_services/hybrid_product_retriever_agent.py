@@ -213,7 +213,7 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
         
         return " ".join(query_parts)
     
-    KEYWORD_FALLBACK_TRIGGERS = ["latest", "new release", "compare", "review", "availability"]
+    KEYWORD_FALLBACK_TRIGGERS = ["latest", "trending", "new release", "compare", "review", "availability"]
 
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Perform hybrid search using Elasticsearch keyword and vector search"""
@@ -262,7 +262,7 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
         quality_products = [p for p in merged_products if p.get('hybrid_score', 0) >= 25]
 
         # --- New: Keyword-based web fallback ---
-        semantic_query = requirements.get('semantic_query', '').lower()
+        semantic_query = str(requirements.get('semantic_query', '')).lower()
         if any(keyword in semantic_query for keyword in self.KEYWORD_FALLBACK_TRIGGERS):
             print("🌐 Keyword trigger detected. Invoking web search fallback...")
             quality_products = quality_products[:2]
@@ -275,13 +275,20 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
             try:
                 search_query = self._extract_search_query(requirements)
                 realtime_fallback_products = get_products(search_query)
+                if not isinstance(realtime_fallback_products, list):
+                    realtime_fallback_products = []
+
                 for product in realtime_fallback_products:
+                    if not isinstance(product, dict):
+                        print("⚠️ Invalid product structure in fallback")
                     product['search_source'] = 'fallback'
                     product['keyword_score'] = 0
+                    product['_similarity_score'] = 0.3 + 0.1 * len(product.get('name', ''))
                     product['semantic_score'] = product.get('_similarity_score', 0)
                     product['hybrid_score'] = product['semantic_score']
                 
-                merged_products = realtime_fallback_products + quality_products
+                # Reuse your merging logic: treat quality products as ES and fallback as vector
+                merged_products = self._merge_product_results(quality_products, realtime_fallback_products)
                 search_methods['realtime_fallback'] = len(realtime_fallback_products)
                 print(f"✅ Retrieved {len(realtime_fallback_products)} web products.")
             except Exception as e:
@@ -296,7 +303,12 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
         return {
             'products': merged_products,
             'solutions': vector_solutions,
-            'search_methods': search_methods
+            'search_methods': search_methods,
+            'diagnostics': {
+                'quality_products': len(quality_products),
+                'triggered_fallback': len(quality_products) < 3,
+                'fallback_trigger_keywords': [k for k in self.KEYWORD_FALLBACK_TRIGGERS if k in semantic_query]
+            }
         }
     
     async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
@@ -310,7 +322,7 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
     async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Search products using Elasticsearch vector search"""
         try:
-            semantic_query = requirements.get('semantic_query', '')
+            semantic_query = str(requirements.get('semantic_query', '')).lower()
             if not semantic_query:
                 return []
             
@@ -333,7 +345,7 @@ Be comprehensive and extract ALL relevant technical terms, business needs, and s
     async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Search solutions using Elasticsearch vector search"""
         try:
-            semantic_query = requirements.get('semantic_query', '')
+            semantic_query = str(requirements.get('semantic_query', '')).lower()
             if not semantic_query:
                 return []
             

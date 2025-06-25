@@ -5,9 +5,9 @@ from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
-    context_relevancy,
-    context_recall,
     context_precision,
+    context_recall,
+    answer_similarity,
 )
 from datasets import Dataset
 import chromadb
@@ -84,9 +84,9 @@ def main():
     metrics = [
         faithfulness,
         answer_relevancy,
-        context_relevancy,
-        context_recall,
         context_precision,
+        context_recall,
+        answer_similarity,
     ]
     
     # Run evaluation
@@ -109,4 +109,4 @@ def main():
         print(f"Retrieved Context: {context[:200]}...")  # Print first 200 chars
 
 if __name__ == "__main__":
-    main() 
+    main()

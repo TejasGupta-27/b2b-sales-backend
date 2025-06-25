@@ -82,7 +82,7 @@ class PitchDeckService:
     async def extract_ppt_structure(self, quotation: str) -> dict:
         """Use Azure OpenAI to generate a detailed and persuasive sales pitch deck structure from the quotation."""
         prompt = f"""
-You are a business assistant. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
+You are a business assistant. Respond in {language.upper()}. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
 
 ### QUOTATION
 \"\"\"

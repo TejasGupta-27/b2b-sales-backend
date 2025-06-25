@@ -55,9 +55,27 @@ from services.pdf_generator import PDFGenerator
 # Import pitch deck service
 from services.pitch_deck_service import PitchDeckService
 
-# Configure logging
+import sys
+import logging
+
+# 🔁 Redirect print to logger so it shows up in Docker logs
+class PrintLogger:
+    def __init__(self, logger, level=logging.INFO):
+        self.logger = logger
+        self.level = level
+    def write(self, message):
+        message = message.strip()
+        if message:
+            self.logger.log(self.level, message)
+    def flush(self):
+        pass  # Required for file-like compatibility
+
+# 🔧 Apply redirection
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("PrintLogger")
+sys.stdout = PrintLogger(logger)
+sys.stderr = PrintLogger(logger, level=logging.ERROR)
+
 
 # Add file handler for main application logs
 log_dir = Path("logs")
@@ -288,6 +306,15 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             for msg in existing_messages:
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
+
+            # 📌 Capture language from request or fallback
+            lang = getattr(request, "language", None)
+            if not lang:
+                logger.warning("⚠️ No language provided in request. Defaulting to English.")
+                lang = "en"
+            elif lang not in ["en", "ja"]:
+                logger.warning(f"⚠️ Unsupported language '{lang}' provided. Defaulting to English.")
+                lang = "en"
             
             # Get customer context from the lead
             customer_context = None
@@ -333,15 +360,6 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     response.metadata = {}
                 response.metadata['agent_error'] = str(agent_error)
                 response.metadata['fallback_used'] = True
-            
-            # 📌 Capture language from request or fallback
-            lang = getattr(request, "language", None)
-            if not lang:
-                logger.warning("⚠️ No language provided in request. Defaulting to English.")
-                lang = "en"
-            elif lang not in ["en", "ja"]:
-                logger.warning(f"⚠️ Unsupported language '{lang}' provided. Defaulting to English.")
-                lang = "en"
 
             # 🗣️ Generate speech for the response
             speech_result = await speech_service.text_to_speech(
@@ -355,7 +373,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 "provider": response.provider,
                 "usage": response.usage,
                 "enhanced_sales_agent": True,
-                "speech_data": speech_result
+                "speech_data": speech_result,
                 "language": lang  # ✅ include it for clarity
             }
             
