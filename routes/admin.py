@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -9,6 +9,8 @@ import glob
 from pathlib import Path
 import logging
 import asyncio
+import time
+import psutil
 from services.elasticsearch_service import get_elasticsearch_service
 from services.chroma_service import ChromaDBService
 from services.prompt_manager import get_prompt_manager
@@ -27,21 +29,506 @@ DATA_CONFIG_FILE = Path("Data/admin_config/data_sources.json")
 # Ensure config directory exists
 PROMPTS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+# Metrics storage
+metrics_data = {
+    "start_time": time.time(),
+    "request_count": 0,
+    "error_count": 0,
+    "response_times": [],
+    "token_usage": 0
+}
+
+# Grafana JSON Data Source Endpoints
+@router.get("/grafana/prompts")
+async def get_prompts_for_grafana():
+    """Get all prompts for Grafana display"""
+    try:
+        prompt_manager = get_prompt_manager()
+        all_prompts = {}
+        
+        categories = ["sales_agent", "quote_generation", "conversation_flow", "product_retriever", "discovery"]
+        for category in categories:
+            try:
+                category_prompts = prompt_manager.get_category_prompts(category)
+                all_prompts[category] = category_prompts
+            except Exception as e:
+                logger.warning(f"Error loading prompts for category {category}: {e}")
+                all_prompts[category] = {}
+        
+        # Format for Grafana
+        result = []
+        for category, prompts in all_prompts.items():
+            for name, content in prompts.items():
+                result.append({
+                    "category": category,
+                    "name": name,
+                    "content": content,
+                    "content_length": len(content),
+                    "word_count": len(content.split()),
+                    "last_modified": datetime.now().isoformat()
+                })
+        
+        return {"data": result}
+    
+    except Exception as e:
+        logger.error(f"Error getting prompts for Grafana: {e}")
+        return {"data": [], "error": str(e)}
+
+@router.get("/grafana/config")
+async def get_config_for_grafana():
+    """Get all configuration for Grafana display"""
+    try:
+        prompt_manager = get_prompt_manager()
+        
+        # Get conversational config
+        conversational_config = {}
+        try:
+            personality = prompt_manager.get_prompt("conversational_agent", "personality_config", "{}")
+            industry_contexts = prompt_manager.get_prompt("conversational_agent", "industry_contexts", "{}")
+            response_guidelines = prompt_manager.get_prompt("conversational_agent", "response_guidelines", "{}")
+            
+            conversational_config = {
+                "personality": json.loads(personality),
+                "industry_contexts": json.loads(industry_contexts),
+                "response_guidelines": json.loads(response_guidelines)
+            }
+        except Exception as e:
+            logger.warning(f"Error loading conversational config: {e}")
+        
+        # Get system config
+        system_config = {
+            "debug": settings.debug,
+            "use_hybrid_retriever": settings.use_hybrid_retriever,
+            "force_reload_data": settings.force_reload_data,
+            "skip_data_loading": settings.skip_data_loading,
+            "enable_response_caching": getattr(settings, 'enable_response_caching', False),
+            "cache_ttl": getattr(settings, 'cache_ttl', 300)
+        }
+        
+        return {
+            "data": {
+                "conversational": conversational_config,
+                "system": system_config,
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting config for Grafana: {e}")
+        return {"data": {}, "error": str(e)}
+
+@router.get("/grafana/logs")
+async def get_logs_for_grafana():
+    """Get logs for Grafana display"""
+    try:
+        logs_dir = Path("logs")
+        all_logs = []
+        
+        if logs_dir.exists():
+            for log_file in logs_dir.glob("*.log"):
+                if log_file.is_file():
+                    try:
+                        with open(log_file, 'r', encoding='utf-8') as f:
+                            lines = f.readlines()
+                            # Get last 100 lines
+                            recent_lines = lines[-100:] if len(lines) > 100 else lines
+                            
+                            for line in recent_lines:
+                                line = line.strip()
+                                if line:
+                                    # Parse log line (basic parsing)
+                                    parts = line.split(' - ', 2)
+                                    if len(parts) >= 3:
+                                        timestamp_str, level, message = parts[0], parts[1], parts[2]
+                                        try:
+                                            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                        except:
+                                            timestamp = datetime.now()
+                                        
+                                        all_logs.append({
+                                            "timestamp": timestamp.isoformat(),
+                                            "level": level,
+                                            "message": message,
+                                            "file": log_file.name
+                                        })
+                    except Exception as e:
+                        logger.warning(f"Error reading log file {log_file}: {e}")
+        
+        # Sort by timestamp
+        all_logs.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return {"data": all_logs[:1000]}  # Limit to 1000 entries
+    
+    except Exception as e:
+        logger.error(f"Error getting logs for Grafana: {e}")
+        return {"data": [], "error": str(e)}
+
+@router.get("/grafana/data-status")
+async def get_data_status_for_grafana():
+    """Get data source status for Grafana"""
+    try:
+        status = {
+            "elasticsearch": False,
+            "chromadb": False,
+            "json_files": False,
+            "json_files_count": 0,
+            "elasticsearch_stats": {},
+            "chromadb_stats": {},
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Check Elasticsearch
+        try:
+            elasticsearch_service = get_elasticsearch_service()
+            await elasticsearch_service.test_connection()
+            status["elasticsearch"] = True
+            try:
+                products_count = await elasticsearch_service._safe_count("products")
+                solutions_count = await elasticsearch_service._safe_count("solutions")
+                status["elasticsearch_stats"] = {
+                    "products": products_count,
+                    "solutions": solutions_count
+                }
+            except Exception as e:
+                status["elasticsearch_stats"] = {
+                    "products": "Unknown",
+                    "solutions": "Unknown",
+                    "error": str(e)
+                }
+        except Exception as e:
+            status["elasticsearch_error"] = str(e)
+        
+        # Check ChromaDB
+        try:
+            if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
+                chroma_service = ChromaDBService(
+                    azure_embedding_endpoint=settings.azure_embedding_endpoint,
+                    azure_embedding_key=settings.azure_embedding_api_key
+                )
+                await chroma_service.initialize()
+                stats = await chroma_service.get_collection_stats()
+                status["chromadb"] = True
+                status["chromadb_stats"] = stats
+        except Exception as e:
+            status["chromadb_error"] = str(e)
+        
+        # Check JSON files
+        json_dir = Path("Data/json")
+        if json_dir.exists():
+            json_files = list(json_dir.glob("*.json"))
+            status["json_files"] = len(json_files) > 0
+            status["json_files_count"] = len(json_files)
+        
+        return {"data": status}
+    
+    except Exception as e:
+        logger.error(f"Error getting data status for Grafana: {e}")
+        return {"data": {}, "error": str(e)}
+
+@router.get("/grafana/system-metrics")
+async def get_system_metrics_for_grafana():
+    """Get comprehensive system metrics for Grafana"""
+    try:
+        # Get database metrics
+        db: Session = next(get_db())
+        from db.models import Lead, ChatMessage
+        
+        # Get lead statistics
+        total_leads = db.query(Lead).count()
+        active_leads = db.query(Lead).filter(Lead.status == "active").count()
+        new_leads_today = db.query(Lead).filter(
+            Lead.created_at >= datetime.now().date()
+        ).count()
+        
+        # Get message statistics
+        total_messages = db.query(ChatMessage).count()
+        messages_today = db.query(ChatMessage).filter(
+            ChatMessage.timestamp >= datetime.now().date()
+        ).count()
+        
+        # Get system metrics
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        cpu_percent = process.cpu_percent()
+        
+        # Get file system metrics
+        data_dir = Path("Data")
+        total_files = 0
+        total_size = 0
+        if data_dir.exists():
+            for file_path in data_dir.rglob("*"):
+                if file_path.is_file():
+                    total_files += 1
+                    total_size += file_path.stat().st_size
+        
+        # Get token usage
+        token_file = Path("Data/token_usage.json")
+        token_usage = 0
+        if token_file.exists():
+            with open(token_file, 'r') as f:
+                token_data = json.load(f)
+                token_usage = token_data.get("total_tokens", 0)
+        
+        metrics = {
+            "database": {
+                "total_leads": total_leads,
+                "active_leads": active_leads,
+                "new_leads_today": new_leads_today,
+                "total_messages": total_messages,
+                "messages_today": messages_today
+            },
+            "system": {
+                "memory_usage_mb": memory_info.rss / 1024 / 1024,
+                "cpu_percent": cpu_percent,
+                "uptime_seconds": time.time() - metrics_data["start_time"],
+                "total_requests": metrics_data["request_count"],
+                "error_count": metrics_data["error_count"]
+            },
+            "files": {
+                "total_files": total_files,
+                "total_size_mb": total_size / 1024 / 1024
+            },
+            "ai": {
+                "token_usage": token_usage
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return {"data": metrics}
+    
+    except Exception as e:
+        logger.error(f"Error getting system metrics for Grafana: {e}")
+        return {"data": {}, "error": str(e)}
+
+# Action endpoints for Grafana
+@router.post("/grafana/actions/reindex")
+async def reindex_from_grafana(force_replace: bool = False):
+    """Reindex data from Grafana"""
+    try:
+        logger.info(f"Reindexing data from Grafana (force_replace={force_replace})...")
+        elasticsearch_service = get_elasticsearch_service()
+        
+        # Health check
+        health_check = await elasticsearch_service.test_connection()
+        if not health_check:
+            return {"success": False, "error": "Elasticsearch is not available"}
+        
+        # Reindex
+        await elasticsearch_service.reindex_all_data(force_replace=force_replace)
+        
+        return {
+            "success": True, 
+            "message": f"Data reindexed successfully: {'Data replaced completely' if force_replace else 'Data updated safely'}",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error reindexing from Grafana: {e}")
+        return {"success": False, "error": str(e)}
+
+@router.post("/grafana/actions/sync-chroma")
+async def sync_chroma_from_grafana(clear_existing: bool = False):
+    """Sync ChromaDB from Grafana"""
+    try:
+        from main import chroma_service
+        
+        if not chroma_service:
+            return {"success": False, "error": "ChromaDB not initialized"}
+        
+        result = await chroma_service.sync_data_safely(max_per_file=50, clear_existing=clear_existing)
+        stats = await chroma_service.get_collection_stats()
+        
+        return {
+            "success": True,
+            "message": "ChromaDB cleared and resynced" if clear_existing else "ChromaDB synced (duplicates prevented)",
+            "sync_result": result,
+            "final_stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error syncing ChromaDB from Grafana: {e}")
+        return {"success": False, "error": str(e)}
+
+@router.post("/grafana/actions/save-prompt")
+async def save_prompt_from_grafana(prompt_data: Dict[str, Any]):
+    """Save prompt from Grafana"""
+    try:
+        category = prompt_data["category"]
+        name = prompt_data["name"]
+        content = prompt_data["content"]
+        
+        prompt_manager = get_prompt_manager()
+        success = prompt_manager.save_prompt(category, name, content)
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Prompt saved successfully",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {"success": False, "error": "Error saving prompt"}
+    
+    except Exception as e:
+        logger.error(f"Error saving prompt from Grafana: {e}")
+        return {"success": False, "error": str(e)}
+
+@router.post("/grafana/actions/update-config")
+async def update_config_from_grafana(config_data: Dict[str, Any]):
+    """Update configuration from Grafana"""
+    try:
+        config_type = config_data.get("type")
+        config_content = config_data.get("content")
+        
+        if not config_type or not config_content:
+            return {"success": False, "error": "Missing config type or content"}
+        
+        prompt_manager = get_prompt_manager()
+        success = prompt_manager.update_conversational_config(config_type, config_content)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"{config_type} configuration updated successfully",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {"success": False, "error": f"Invalid config type: {config_type}"}
+    
+    except Exception as e:
+        logger.error(f"Error updating config from Grafana: {e}")
+        return {"success": False, "error": str(e)}
+
+# Legacy endpoints (keeping for backward compatibility)
 @router.get("/", response_class=HTMLResponse)
 async def admin_dashboard():
-    """Serve the admin dashboard HTML"""
+    """Serve the admin dashboard HTML (legacy)"""
+    return HTMLResponse(content="""
+    <h1>Admin Dashboard</h1>
+    <p>This admin portal has been replaced by Grafana monitoring.</p>
+    <p>Please access Grafana at: <a href="http://localhost:3000">http://localhost:3000</a></p>
+    <p>Username: admin, Password: admin123</p>
+    """)
+
+@router.get("/metrics")
+async def get_prometheus_metrics():
+    """Get Prometheus format metrics"""
     try:
-        template_path = Path("templates/admin.html")
-        if template_path.exists():
-            with open(template_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            return HTMLResponse(content=html_content)
-        else:
-            # Fallback if template file doesn't exist
-            return HTMLResponse(content="<h1>Admin Dashboard</h1><p>Template file not found. Please check templates/admin.html</p>")
+        # Get system metrics
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        cpu_percent = process.cpu_percent()
+        
+        # Get database metrics
+        db: Session = next(get_db())
+        from db.models import Lead, ChatMessage
+        active_leads = db.query(Lead).count()
+        total_messages = db.query(ChatMessage).count()
+        
+        # Get Elasticsearch metrics
+        elasticsearch_service = get_elasticsearch_service()
+        try:
+            products_count = await elasticsearch_service._safe_count("products")
+            solutions_count = await elasticsearch_service._safe_count("solutions")
+        except:
+            products_count = 0
+            solutions_count = 0
+        
+        # Get token usage
+        token_file = Path("Data/token_usage.json")
+        token_usage = 0
+        if token_file.exists():
+            with open(token_file, 'r') as f:
+                token_data = json.load(f)
+                token_usage = token_data.get("total_tokens", 0)
+        
+        # Calculate response time statistics
+        avg_response_time = 0
+        if metrics_data["response_times"]:
+            avg_response_time = sum(metrics_data["response_times"]) / len(metrics_data["response_times"])
+        
+        # Generate Prometheus format metrics
+        metrics = f"""# HELP b2b_uptime_seconds Total uptime in seconds
+# TYPE b2b_uptime_seconds counter
+b2b_uptime_seconds {time.time() - metrics_data["start_time"]}
+
+# HELP b2b_requests_total Total number of requests
+# TYPE b2b_requests_total counter
+b2b_requests_total {metrics_data["request_count"]}
+
+# HELP b2b_errors_total Total number of errors
+# TYPE b2b_errors_total counter
+b2b_errors_total {metrics_data["error_count"]}
+
+# HELP b2b_response_time_seconds Average response time
+# TYPE b2b_response_time_seconds gauge
+b2b_response_time_seconds {avg_response_time}
+
+# HELP b2b_active_leads Number of active leads
+# TYPE b2b_active_leads gauge
+b2b_active_leads {active_leads}
+
+# HELP b2b_total_messages Total number of chat messages
+# TYPE b2b_total_messages gauge
+b2b_total_messages {total_messages}
+
+# HELP b2b_elasticsearch_products_count Number of products in Elasticsearch
+# TYPE b2b_elasticsearch_products_count gauge
+b2b_elasticsearch_products_count {products_count}
+
+# HELP b2b_elasticsearch_solutions_count Number of solutions in Elasticsearch
+# TYPE b2b_elasticsearch_solutions_count gauge
+b2b_elasticsearch_solutions_count {solutions_count}
+
+# HELP b2b_token_usage_total Total AI token usage
+# TYPE b2b_token_usage_total counter
+b2b_token_usage_total {token_usage}
+
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total {process.cpu_times().user + process.cpu_times().system}
+
+# HELP process_resident_memory_bytes Resident memory size in bytes
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes {memory_info.rss}
+
+# HELP process_virtual_memory_bytes Virtual memory size in bytes
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes {memory_info.vms}
+
+# HELP process_open_fds Number of open file descriptors
+# TYPE process_open_fds gauge
+process_open_fds {len(process.open_files())}
+
+# HELP process_threads Number of OS threads in the process
+# TYPE process_threads gauge
+process_threads {process.num_threads()}
+"""
+        
+        return Response(content=metrics, media_type="text/plain")
+    
     except Exception as e:
-        logger.error(f"Error serving admin dashboard: {e}")
-        return HTMLResponse(content=f"<h1>Error</h1><p>Failed to load admin dashboard: {e}</p>")
+        logger.error(f"Error generating metrics: {e}")
+        return Response(content="# Error generating metrics", media_type="text/plain")
+
+# Middleware to track metrics
+async def track_metrics_middleware(request, call_next):
+    start_time = time.time()
+    metrics_data["request_count"] += 1
+    
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        metrics_data["error_count"] += 1
+        raise e
+    finally:
+        response_time = time.time() - start_time
+        metrics_data["response_times"].append(response_time)
+        # Keep only last 1000 response times to prevent memory bloat
+        if len(metrics_data["response_times"]) > 1000:
+            metrics_data["response_times"] = metrics_data["response_times"][-1000:]
 
 # Conversational Configuration Endpoints
 @router.get("/conversational/config")

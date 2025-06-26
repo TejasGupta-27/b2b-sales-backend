@@ -53,3 +53,6 @@ elevenlabs>=1.0.0
 
 # PowerPoint generation
 python-pptx>=0.6.21
+
+# Monitoring and metrics
+psutil>=5.9.0
