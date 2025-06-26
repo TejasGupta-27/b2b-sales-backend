@@ -403,6 +403,7 @@ async def update_config_from_grafana(config_data: Dict[str, Any]):
 
 # Legacy endpoints (keeping for backward compatibility)
 @router.get("/", response_class=HTMLResponse)
+@router.head("/", response_class=HTMLResponse)
 async def admin_dashboard():
     """Proxy to Grafana dashboard"""
     try:
