@@ -404,51 +404,52 @@ async def update_config_from_grafana(config_data: Dict[str, Any]):
 # Legacy endpoints (keeping for backward compatibility)
 @router.get("/", response_class=HTMLResponse)
 async def admin_dashboard():
-    """Proxy to Grafana dashboard"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://grafana:3000/")
-            return HTMLResponse(
-                content=response.text,
-                status_code=response.status_code,
-                headers=response.headers
-            )
-    except Exception as e:
-        # Fallback to simple redirect if Grafana is not accessible
-        return HTMLResponse(content=f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>B2B Sales Backend - Admin Dashboard</title>
-            <meta http-equiv="refresh" content="0; url=http://grafana:3000">
-        </head>
-        <body>
-            <h1>Redirecting to Grafana...</h1>
-            <p>If you are not redirected automatically, <a href="http://grafana:3000">click here</a></p>
-            <p>Error: {str(e)}</p>
-        </body>
-        </html>
-        """)
+    """Redirect to Grafana dashboard"""
+    # Redirect to nginx-proxied Grafana URL
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>B2B Sales Backend - Admin Dashboard</title>
+        <meta http-equiv="refresh" content="0; url=http://48.210.58.7/grafana/">
+        <style>
+            body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; }}
+            .container {{ max-width: 600px; margin: 0 auto; }}
+            .btn {{ display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 10px; }}
+            .btn:hover {{ background: #0056b3; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 B2B Sales Backend - Admin Dashboard</h1>
+            <p>Redirecting to Grafana monitoring dashboard...</p>
+            <p>If you are not redirected automatically, click the button below:</p>
+            <a href="http://48.210.58.7/grafana/" class="btn">Open Grafana Dashboard</a>
+            <br><br>
+            <p><strong>Grafana Credentials:</strong> admin / admin123</p>
+            <p><small>Available Services:</small></p>
+            <ul style="list-style: none; padding: 0;">
+                <li>📊 <a href="http://48.210.58.7/grafana/">Grafana Dashboard</a></li>
+                <li>📈 <a href="http://48.210.58.7:9090">Prometheus Metrics</a></li>
+                <li>🔍 <a href="http://48.210.58.7:5601">Kibana (Elasticsearch)</a></li>
+                <li>🗄️ <a href="http://48.210.58.7:8080">Adminer (Database)</a></li>
+                <li>🔧 <a href="http://48.210.58.7/admin/">Admin Panel</a></li>
+            </ul>
+        </div>
+    </body>
+    </html>
+    """)
 
 @router.head("/")
 async def admin_dashboard_head():
     """Handle HEAD requests for admin dashboard"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.head("http://grafana:3000/")
-            return Response(
-                status_code=response.status_code,
-                headers=response.headers
-            )
-    except Exception as e:
-        # Return basic headers for HEAD request
-        return Response(
-            status_code=200,
-            headers={
-                "content-type": "text/html; charset=utf-8",
-                "content-length": "0"
-            }
-        )
+    return Response(
+        status_code=200,
+        headers={
+            "content-type": "text/html; charset=utf-8",
+            "content-length": "0"
+        }
+    )
 
 # Specific proxy routes for Grafana
 @router.get("/login")
