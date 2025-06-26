@@ -356,7 +356,14 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 speech_service.text_to_speech(text=response_content, language="en")
             )
             
-            # Save assistant response
+            # Wait for speech generation first
+            speech_result = await speech_task
+            logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
+            
+            # Update metadata with speech data
+            response_metadata['speech_data'] = speech_result
+            
+            # Save assistant response with speech data included
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
@@ -367,12 +374,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             )
             db.add(assistant_message)
             db.commit()
-            
-            # Wait for speech generation
-            speech_result = await speech_task
-            
-            # Update metadata with speech data
-            response_metadata['speech_data'] = speech_result
+            logger.info(f"💾 Assistant message saved with speech data: {assistant_message.id}")
             
             # Prepare enhanced response
             chat_response = ChatResponse(
@@ -658,6 +660,9 @@ async def get_chat_history(lead_id: str):
                     if speech_data and speech_data.get('audio_data'):
                         voice_data = speech_data
                         has_voice = True
+                        logger.debug(f"🎤 Found voice data for assistant message {msg.id}: {len(speech_data.get('audio_data', ''))} chars")
+                    else:
+                        logger.debug(f"⚠️ No voice data found for assistant message {msg.id}")
                 
                 # For user messages, get transcription metadata
                 elif msg.message_type == MessageType.USER.value:
@@ -668,6 +673,9 @@ async def get_chat_history(lead_id: str):
                             "data": transcription_metadata
                         }
                         has_voice = True
+                        logger.debug(f"🎤 Found transcription data for user message {msg.id}")
+                    else:
+                        logger.debug(f"⚠️ No transcription data found for user message {msg.id}")
                 
                 history.append({
                     "id": msg.id,
