@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
@@ -10,6 +11,8 @@ from datetime import datetime
 import uuid
 from pathlib import Path
 import logging
+import time
+import psutil
 from services import elasticsearch_service
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -68,6 +71,15 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 main_log_handler.setFormatter(formatter)
 logger.addHandler(main_log_handler)
 
+# Metrics storage
+metrics_data = {
+    "start_time": time.time(),
+    "request_count": 0,
+    "error_count": 0,
+    "response_times": [],
+    "token_usage": 0
+}
+
 # Create FastAPI app
 app = FastAPI(
     title="B2B Sales AI Assistant",
@@ -86,6 +98,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add metrics tracking middleware
+@app.middleware("http")
+async def track_metrics_middleware(request, call_next):
+    start_time = time.time()
+    metrics_data["request_count"] += 1
+    
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        metrics_data["error_count"] += 1
+        raise e
+    finally:
+        response_time = time.time() - start_time
+        metrics_data["response_times"].append(response_time)
+        # Keep only last 1000 response times to prevent memory bloat
+        if len(metrics_data["response_times"]) > 1000:
+            metrics_data["response_times"] = metrics_data["response_times"][-1000:]
 
 # Global speech service instance
 speech_service = None
@@ -1323,6 +1354,107 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
     except Exception as e:
         logger.error(f"Quote generation from conversation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/metrics")
+async def get_prometheus_metrics():
+    """Get Prometheus format metrics"""
+    try:
+        # Get system metrics
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        cpu_percent = process.cpu_percent()
+        
+        # Get database metrics
+        db: Session = next(get_db())
+        from db.models import Lead, ChatMessage
+        active_leads = db.query(Lead).count()
+        total_messages = db.query(ChatMessage).count()
+        
+        # Get Elasticsearch metrics
+        elasticsearch_service = get_elasticsearch_service()
+        try:
+            products_count = await elasticsearch_service._safe_count("products")
+            solutions_count = await elasticsearch_service._safe_count("solutions")
+        except:
+            products_count = 0
+            solutions_count = 0
+        
+        # Get token usage
+        token_file = Path("Data/token_usage.json")
+        token_usage = 0
+        if token_file.exists():
+            with open(token_file, 'r') as f:
+                token_data = json.load(f)
+                token_usage = token_data.get("total_tokens", 0)
+        
+        # Calculate response time statistics
+        avg_response_time = 0
+        if metrics_data["response_times"]:
+            avg_response_time = sum(metrics_data["response_times"]) / len(metrics_data["response_times"])
+        
+        # Generate Prometheus format metrics
+        metrics = f"""# HELP b2b_uptime_seconds Total uptime in seconds
+# TYPE b2b_uptime_seconds counter
+b2b_uptime_seconds {time.time() - metrics_data["start_time"]}
+
+# HELP b2b_requests_total Total number of requests
+# TYPE b2b_requests_total counter
+b2b_requests_total {metrics_data["request_count"]}
+
+# HELP b2b_errors_total Total number of errors
+# TYPE b2b_errors_total counter
+b2b_errors_total {metrics_data["error_count"]}
+
+# HELP b2b_response_time_seconds Average response time
+# TYPE b2b_response_time_seconds gauge
+b2b_response_time_seconds {avg_response_time}
+
+# HELP b2b_active_leads Number of active leads
+# TYPE b2b_active_leads gauge
+b2b_active_leads {active_leads}
+
+# HELP b2b_total_messages Total number of chat messages
+# TYPE b2b_total_messages gauge
+b2b_total_messages {total_messages}
+
+# HELP b2b_elasticsearch_products_count Number of products in Elasticsearch
+# TYPE b2b_elasticsearch_products_count gauge
+b2b_elasticsearch_products_count {products_count}
+
+# HELP b2b_elasticsearch_solutions_count Number of solutions in Elasticsearch
+# TYPE b2b_elasticsearch_solutions_count gauge
+b2b_elasticsearch_solutions_count {solutions_count}
+
+# HELP b2b_token_usage_total Total AI token usage
+# TYPE b2b_token_usage_total counter
+b2b_token_usage_total {token_usage}
+
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total {process.cpu_times().user + process.cpu_times().system}
+
+# HELP process_resident_memory_bytes Resident memory size in bytes
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes {memory_info.rss}
+
+# HELP process_virtual_memory_bytes Virtual memory size in bytes
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes {memory_info.vms}
+
+# HELP process_open_fds Number of open file descriptors
+# TYPE process_open_fds gauge
+process_open_fds {len(process.open_files())}
+
+# HELP process_threads Number of OS threads in the process
+# TYPE process_threads gauge
+process_threads {process.num_threads()}
+"""
+        
+        return Response(content=metrics, media_type="text/plain")
+    
+    except Exception as e:
+        logger.error(f"Error generating metrics: {e}")
+        return Response(content="# Error generating metrics", media_type="text/plain")
 
 if __name__ == "__main__":
     import uvicorn
