@@ -403,7 +403,6 @@ async def update_config_from_grafana(config_data: Dict[str, Any]):
 
 # Legacy endpoints (keeping for backward compatibility)
 @router.get("/", response_class=HTMLResponse)
-@router.head("/", response_class=HTMLResponse)
 async def admin_dashboard():
     """Proxy to Grafana dashboard"""
     try:
@@ -430,6 +429,26 @@ async def admin_dashboard():
         </body>
         </html>
         """)
+
+@router.head("/")
+async def admin_dashboard_head():
+    """Handle HEAD requests for admin dashboard"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.head("http://grafana:3000/")
+            return Response(
+                status_code=response.status_code,
+                headers=response.headers
+            )
+    except Exception as e:
+        # Return basic headers for HEAD request
+        return Response(
+            status_code=200,
+            headers={
+                "content-type": "text/html; charset=utf-8",
+                "content-length": "0"
+            }
+        )
 
 # Specific proxy routes for Grafana
 @router.get("/login")
