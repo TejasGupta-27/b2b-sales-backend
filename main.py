@@ -356,7 +356,14 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 speech_service.text_to_speech(text=response_content, language="en")
             )
             
-            # Save assistant response
+            # Wait for speech generation first
+            speech_result = await speech_task
+            logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
+            
+            # Update metadata with speech data
+            response_metadata['speech_data'] = speech_result
+            
+            # Save assistant response with speech data included
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
@@ -367,12 +374,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             )
             db.add(assistant_message)
             db.commit()
-            
-            # Wait for speech generation
-            speech_result = await speech_task
-            
-            # Update metadata with speech data
-            response_metadata['speech_data'] = speech_result
+            logger.info(f"💾 Assistant message saved with speech data: {assistant_message.id}")
             
             # Prepare enhanced response
             chat_response = ChatResponse(
@@ -646,16 +648,47 @@ async def get_chat_history(lead_id: str):
             
             history = []
             for msg in messages:
+                metadata = msg.message_metadata or {}
+                
+                # Extract voice data from metadata
+                voice_data = None
+                has_voice = False
+                
+                # For assistant messages, get speech_data
+                if msg.message_type == MessageType.ASSISTANT.value:
+                    speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                    if speech_data and speech_data.get('audio_data'):
+                        voice_data = speech_data
+                        has_voice = True
+                        logger.debug(f"🎤 Found voice data for assistant message {msg.id}: {len(speech_data.get('audio_data', ''))} chars")
+                    else:
+                        logger.debug(f"⚠️ No voice data found for assistant message {msg.id}")
+                
+                # For user messages, get transcription metadata
+                elif msg.message_type == MessageType.USER.value:
+                    transcription_metadata = metadata.get('transcription_metadata')
+                    if transcription_metadata:
+                        voice_data = {
+                            "type": "transcription",
+                            "data": transcription_metadata
+                        }
+                        has_voice = True
+                        logger.debug(f"🎤 Found transcription data for user message {msg.id}")
+                    else:
+                        logger.debug(f"⚠️ No transcription data found for user message {msg.id}")
+                
                 history.append({
                     "id": msg.id,
                     "role": msg.message_type.value.lower(),
                     "content": msg.content,
                     "timestamp": msg.created_at.isoformat(),
                     "stage": msg.stage,
-                    "metadata": msg.message_metadata
+                    "metadata": metadata,
+                    "has_voice": has_voice,
+                    "voice_data": voice_data
                 })
             
-            logger.info(f"Returning chat history: {history}")
+            logger.info(f"Returning chat history with voice data: {len([h for h in history if h['has_voice']])} voice messages")
             return {"history": history}
         finally:
             db.close()
@@ -821,13 +854,39 @@ async def get_conversation(lead_id: str, db: Session = Depends(get_db)):
         for msg in messages:
             # Fix enum comparison
             role = "user" if msg.message_type == MessageType.USER.value else "assistant"
+            
+            metadata = msg.message_metadata or {}
+            
+            # Extract voice data from metadata
+            voice_data = None
+            has_voice = False
+            
+            # For assistant messages, get speech_data
+            if msg.message_type == MessageType.ASSISTANT.value:
+                speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                if speech_data and speech_data.get('audio_data'):
+                    voice_data = speech_data
+                    has_voice = True
+            
+            # For user messages, get transcription metadata
+            elif msg.message_type == MessageType.USER.value:
+                transcription_metadata = metadata.get('transcription_metadata')
+                if transcription_metadata:
+                    voice_data = {
+                        "type": "transcription",
+                        "data": transcription_metadata
+                    }
+                    has_voice = True
+            
             conversation.append({
                 "id": msg.id,
                 "role": role,
                 "content": msg.content,
                 "timestamp": msg.created_at.isoformat() if msg.created_at else None,
                 "stage": msg.stage,
-                "metadata": msg.message_metadata
+                "metadata": metadata,
+                "has_voice": has_voice,
+                "voice_data": voice_data
             })
         
         return {"conversation": conversation}
