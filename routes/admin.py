@@ -433,6 +433,10 @@ async def admin_dashboard():
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_to_grafana(path: str, request: Request):
     """Proxy all admin routes to Grafana"""
+    # Skip if this is the root path (already handled by admin_dashboard)
+    if path == "" or path == "/":
+        raise HTTPException(status_code=404, detail="Not found")
+    
     # Build the target URL
     target_url = f"http://grafana:3000/{path}"
     
