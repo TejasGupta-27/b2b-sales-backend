@@ -642,23 +642,24 @@ class SpeechService:
         max_retries = 3
         retry_delay = 1  # seconds
         
-        # Try ElevenLabs first if available
+        # Try ElevenLabs first if available - use configurable retry count
         if self.use_elevenlabs and settings.speech_primary_provider == "elevenlabs":
-            for attempt in range(max_retries):
+            primary_retries = settings.speech_tts_primary_retries
+            for attempt in range(primary_retries):
                 try:
-                    logger.info(f"Attempting ElevenLabs TTS (attempt {attempt + 1}/{max_retries})")
+                    logger.info(f"Attempting ElevenLabs TTS (attempt {attempt + 1}/{primary_retries})")
                     result = await self._elevenlabs_text_to_speech(text, language)
                     logger.info("✅ ElevenLabs TTS successful")
                     return result
                     
                 except Exception as e:
-                    logger.error(f"ElevenLabs TTS failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
-                    if attempt < max_retries - 1:
+                    logger.error(f"ElevenLabs TTS failed (attempt {attempt + 1}/{primary_retries}): {str(e)}")
+                    if attempt < primary_retries - 1:
                         logger.info(f"Retrying ElevenLabs in {retry_delay} seconds...")
                         await asyncio.sleep(retry_delay)
                         retry_delay *= 2  # Exponential backoff
                     else:
-                        logger.warning("ElevenLabs TTS failed after all retries, falling back to gTTS")
+                        logger.warning(f"ElevenLabs TTS failed after {primary_retries} attempts, falling back to gTTS")
         
         # Fallback to gTTS if ElevenLabs failed or not configured
         if settings.speech_fallback_enabled:
@@ -736,6 +737,7 @@ class SpeechService:
         status = {
             "primary_provider": settings.speech_primary_provider,
             "fallback_enabled": settings.speech_fallback_enabled,
+            "tts_primary_retries": settings.speech_tts_primary_retries,
             "whisper_model": self.model_name,
             "device": self.device
         }

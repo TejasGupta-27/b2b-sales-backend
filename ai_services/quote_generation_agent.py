@@ -20,7 +20,7 @@ class QuoteLineItem(BaseModel):
     quantity: int = Field(default=1, description="Quantity")
     unit_price: float = Field(description="Price per unit")
     total_price: float = Field(description="Total price for this line item")
-    category: str = Field(default="Technology", description="Product category")
+    category: str = Field(default="", description="Product category (e.g., Hardware, Software, Services, etc.)")
 
 class QuoteCustomerInfo(BaseModel):
     """Customer information for the quote"""
@@ -283,8 +283,8 @@ class QuoteGenerationAgent(AIProvider):
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
                 'created_at': quote_dict.get('created_at', ''),
                 'valid_until': quote_dict.get('valid_until', ''),
-                'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
-                'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
+                'quote_title': quote_dict.get('title', 'Professional Quote'),
+                'company_tagline': quote_dict.get('company_tagline', 'Quality Products & Services'),
                 'customer_info': pdf_customer_info,
                 'line_items': line_items,
                 'subtotal': subtotal,
@@ -310,8 +310,8 @@ class QuoteGenerationAgent(AIProvider):
             return {
                 'quote_number': quote_dict.get('quote_number', 'N/A'),
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
-                'quote_title': quote_dict.get('title', 'Technology Solution Quote'),
-                'company_tagline': quote_dict.get('company_tagline', 'Professional Technology Solutions'),
+                'quote_title': quote_dict.get('title', 'Professional Quote'),
+                'company_tagline': quote_dict.get('company_tagline', 'Quality Products & Services'),
                 'customer_info': {'company': 'Valued Customer', 'contact': 'Dear Customer'},
                 'line_items': [],
                 'subtotal': 0,

@@ -1289,29 +1289,67 @@ class ElasticsearchService:
                     }
                 })
         
-        # Add category filters if specified
+        # Add category filters if specified - REMOVED: Let semantic search find relevant products
+        # Instead, use categories as context in the search query, not as filters
         categories = requirements.get('product_categories', [])
         if categories:
-            search_body["query"]["bool"]["should"].append({
-                "terms": {
-                    "category": categories,
-                    "boost": 3.0
-                }
-            })
+            # Add categories as search terms with high boost, not as filters
+            for category in categories:
+                search_body["query"]["bool"]["should"].append({
+                    "multi_match": {
+                        "query": category,
+                        "fields": [
+                            "name^3",
+                            "category^2", 
+                            "description^1.5",
+                            "tags^2",
+                            "features^1.2"
+                        ],
+                        "type": "best_fields",
+                        "boost": 2.0  # High boost for category matches
+                    }
+                })
         
         # Filter out products with zero price (likely incomplete data)
         search_body["query"]["bool"]["must_not"].append({
             "term": {"price": 0}
         })
         
-        # Add technical requirements matching (simplified - no nested query)
+        # Add technical requirements matching with improved relevance
         tech_reqs = requirements.get('technical_requirements', [])
         for req in tech_reqs:
             if isinstance(req, str) and len(req) > 3:
                 search_body["query"]["bool"]["should"].append({
                     "multi_match": {
                         "query": req,
-                        "fields": ["description", "features", "name"],
+                        "fields": [
+                            "name^3",
+                            "description^2", 
+                            "features^2",
+                            "specifications^1.5",
+                            "tags^1.5"
+                        ],
+                        "type": "best_fields",
+                        "fuzziness": "AUTO",
+                        "boost": 1.8
+                    }
+                })
+        
+        # Add business requirements matching
+        business_reqs = requirements.get('business_requirements', [])
+        for req in business_reqs:
+            if isinstance(req, str) and len(req) > 3:
+                search_body["query"]["bool"]["should"].append({
+                    "multi_match": {
+                        "query": req,
+                        "fields": [
+                            "description^2",
+                            "use_cases^2",
+                            "features^1.5",
+                            "name^1.2"
+                        ],
+                        "type": "best_fields",
+                        "fuzziness": "AUTO",
                         "boost": 1.5
                     }
                 })
@@ -1330,10 +1368,10 @@ class ElasticsearchService:
                 "match_phrase": {"name": noise_pattern}
             })
         
-        # If no search criteria, return category-based results
+        # If no search criteria, use broader search instead of category fallback
         if not search_body["query"]["bool"]["should"]:
-            print("⚠️ No search criteria found, using category fallback")
-            return await self._search_by_categories(["workstation", "server", "computer"], size)
+            print("⚠️ No search criteria found, using broader search")
+            return await self._broader_fallback_search(search_terms, size)
         
         try:
             print(f"🔍 Executing enhanced Elasticsearch search...")
@@ -1383,41 +1421,84 @@ class ElasticsearchService:
     async def _broader_fallback_search(self, search_terms: List[str], size: int) -> List[Dict]:
         """Broader fallback search when precise search returns no results"""
         try:
-            # Try with just the most important terms
-            important_terms = [term for term in search_terms if term.lower() in [
-                'workstation', 'gaming', 'server', 'desktop', 'gpu', 'graphics', 'cpu', 'processor'
-            ]]
+            # Use all search terms, not just important ones
+            if search_terms:
+                search_query = " ".join(search_terms)
+            else:
+                # Default to business technology terms if no search terms
+                search_query = "business technology professional enterprise"
             
-            if important_terms:
-                search_body = {
-                    "query": {
-                        "multi_match": {
-                            "query": " ".join(important_terms),
-                            "fields": ["name", "category", "description"],
-                            "fuzziness": "AUTO",
-                            "operator": "or"
-                        }
-                    },
-                    "size": size
-                }
-                
-                response = await self.client.search(
-                    index=self.products_index,
-                    body=search_body,
-                    ignore_unavailable=True
-                )
-                
-                results = []
-                for hit in response.get('hits', {}).get('hits', []):
-                    product = hit['_source']
-                    if product.get('price', 0) > 0:  # Only include products with prices
-                        product['_score'] = hit['_score']
-                        results.append(product)
-                
-                print(f"✅ Broader search found {len(results)} products")
-                return results
+            print(f"🔄 Broader search query: {search_query}")
             
-            return []
+            search_body = {
+                "query": {
+                    "bool": {
+                        "should": [
+                            # Multi-match across all relevant fields
+                            {
+                                "multi_match": {
+                                    "query": search_query,
+                                    "fields": [
+                                        "name^3",
+                                        "description^2", 
+                                        "category^2",
+                                        "features^1.5",
+                                        "tags^1.5",
+                                        "use_cases^1.2"
+                                    ],
+                                    "type": "best_fields",
+                                    "fuzziness": "AUTO",
+                                    "operator": "or"
+                                }
+                            },
+                            # Also try phrase matching for better precision
+                            {
+                                "multi_match": {
+                                    "query": search_query,
+                                    "fields": [
+                                        "name^2",
+                                        "description^1.5"
+                                    ],
+                                    "type": "phrase",
+                                    "boost": 1.5
+                                }
+                            }
+                        ],
+                        "must_not": [
+                            {"term": {"price": 0}}  # Exclude products with zero price
+                        ]
+                    }
+                },
+                "size": size * 2,  # Get more results for better selection
+                "sort": [
+                    {"_score": {"order": "desc"}},
+                    {"price": {"order": "asc"}}  # Prefer lower prices when scores are similar
+                ]
+            }
+            
+            response = await self.client.search(
+                index=self.products_index,
+                body=search_body,
+                ignore_unavailable=True
+            )
+            
+            results = []
+            for hit in response.get('hits', {}).get('hits', []):
+                product = hit['_source']
+                if product.get('price', 0) > 0:  # Only include products with prices
+                    product['_score'] = hit['_score']
+                    results.append(product)
+            
+            # Take top results based on original size
+            results = results[:size]
+            
+            print(f"✅ Broader search found {len(results)} products")
+            if results:
+                print("🔍 Top broader search results:")
+                for i, product in enumerate(results[:3]):
+                    print(f"  {i+1}. {product.get('name')} (Category: {product.get('category')}, Price: ${product.get('price', 0)}, Score: {product.get('_score', 0):.2f})")
+            
+            return results
             
         except Exception as e:
             print(f"❌ Broader fallback search failed: {e}")

@@ -29,8 +29,8 @@ from routes.admin import router as admin_router
 
 # Import AI services
 from ai_services.factory import AIServiceFactory
-from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
-from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
+from ai_services.simple_conversational_agent import SimpleConversationalAgent
+from ai_services.quote_generation_agent import QuoteGenerationAgent
 from ai_services.base import AIMessage
 
 # Import models
@@ -105,15 +105,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Speech service dependency
-async def get_speech_service():
-    """Dependency to get speech service instance."""
-    service = SpeechService(model_name="medium")
-    await service.initialize()
-    try:
-        yield service
-    finally:
-        await service.close()
+# Global speech service instance
+speech_service = None
 
 # Include routers
 app.include_router(leads_router)
@@ -181,8 +174,21 @@ class ChatSearchRequest(BaseModel):
 # Add Elasticsearch Vector service initialization
 vector_service = None
 
-# Initialize speech service
-speech_service = None
+# Add simple context helper function
+def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Dict[str, Any]]) -> List[AIMessage]:
+    """Add simple context without complex analysis"""
+    context_parts = []
+    
+    if customer_context:
+        context_parts.append(f"Customer: {customer_context.get('company_name', 'Unknown')} in {customer_context.get('industry', 'business')}")
+    
+    context_parts.append("You are a helpful B2B sales assistant. Be conversational, friendly, and human-like. Focus on understanding customer needs and providing relevant information.")
+    
+    if context_parts:
+        context_message = AIMessage(role="system", content=" ".join(context_parts))
+        return [context_message] + messages
+    
+    return messages
 
 @app.on_event("startup")
 async def startup_event():
@@ -242,6 +248,11 @@ async def startup_event():
         else:
             logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
         
+        # Initialize SpeechService ONCE
+        speech_service = SpeechService(model_name="medium")
+        await speech_service.initialize()
+        logger.info("✅ SpeechService initialized successfully")
+        
         logger.info("✅ Application startup completed")
         
     except Exception as e:
@@ -255,6 +266,9 @@ async def shutdown_event():
         elasticsearch_service = get_elasticsearch_service()
         await elasticsearch_service.close()
         logger.info("✅ Elasticsearch connection closed")
+        if speech_service:
+            await speech_service.close()
+            logger.info("✅ SpeechService closed")
     except Exception as e:
         logger.warning(f"⚠️ Error during shutdown: {e}")
 
@@ -264,11 +278,10 @@ async def root():
 
 @app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
-    """Enhanced sales chat endpoint with hybrid retrieval"""
+    """Optimized sales chat endpoint with reduced latency"""
     try:
         # Get speech service
-        speech_service = SpeechService(model_name="medium")
-        await speech_service.initialize()
+        global speech_service
         
         try:
             # Handle lead management
@@ -301,9 +314,10 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             messages = []
             existing_messages = db.query(DBChatMessage).filter(
                 DBChatMessage.lead_id == lead_id
-            ).order_by(DBChatMessage.created_at).limit(20).all()  # Limit to last 20 messages
+            ).order_by(DBChatMessage.created_at.desc()).limit(10).all()  # Reduced to last 10 messages
             
-            for msg in existing_messages:
+            # Reverse to get chronological order
+            for msg in reversed(existing_messages):
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
 
@@ -330,6 +344,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     "timeline": getattr(lead_record, 'decision_timeline', None)
                 }
             
+<<<<<<< HEAD
             # Create Enhanced B2B Sales Agent with better error handling
             try:
                 base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
@@ -385,42 +400,83 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             if response.metadata and 'quote' in response.metadata:
                 response_metadata['quote'] = response.metadata['quote']
             
+=======
+            # Check cache first for similar conversations
+            cache_service = get_cache_service()
+            cache_key = f"chat_response:{hash(request.message + str(customer_context))}"
+            cached_response = await cache_service.get(cache_key)
+            
+            if cached_response:
+                logger.info("✅ Serving response from cache")
+                response_content = cached_response
+                response_metadata = {"cached": True, "provider": "cache"}
+            else:
+                # Create simple conversational agent for natural responses
+                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+                conversational_agent = SimpleConversationalAgent(base_provider)
+                
+                # Initialize the agent (this will initialize hybrid retriever if configured)
+                await conversational_agent.initialize()
+                
+                # Let the conversational agent handle all types of requests naturally
+                # No hardcoded phrase detection - let the AI determine the best response
+                response = await conversational_agent.generate_response(
+                    messages, customer_context
+                )
+                
+                response_content = response.content
+                response_metadata = {
+                    "provider": response.provider,
+                    "model": response.model,
+                    "usage": response.usage,
+                    "agent_type": "simple_conversational",
+                    "cached": False
+                }
+                
+                # Cache the response for 2 minutes
+                await cache_service.set(cache_key, response_content, ttl=120)
+            
+            # Generate speech in parallel (non-blocking)
+            speech_task = asyncio.create_task(
+                speech_service.text_to_speech(text=response_content, language="en")
+            )
+            
+            # Save assistant response
+>>>>>>> a376fd0025fc1cc3c7cdbd2753d7cf7d554e07f1
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
                 message_type=MessageType.ASSISTANT.value,
-                content=response.content,
+                content=response_content,
                 stage=request.conversation_stage or "discovery",
                 message_metadata=response_metadata
             )
             db.add(assistant_message)
             db.commit()
             
+            # Wait for speech generation
+            speech_result = await speech_task
+            
+            # Update metadata with speech data
+            response_metadata['speech_data'] = speech_result
+            
             # Prepare enhanced response
             chat_response = ChatResponse(
-                message=response.content,
+                message=response_content,
                 lead_id=lead_id,
                 conversation_stage=request.conversation_stage or "discovery",
-                metadata={
-                    "enhanced_sales_agent": True,
-                    "provider": response.provider,
-                    "model": response.model,
-                    "usage": response.usage,
-                    "product_intelligence": getattr(enhanced_agent, 'product_recommendations', {}),
-                    "timestamp": datetime.now().isoformat(),
-                    "speech_data": speech_result
-                }
+                metadata=response_metadata
             )
             
-            logger.info(f"✅ Enhanced Sales Chat Response generated for lead: {lead_id}")
+            logger.info(f"✅ Optimized Sales Chat Response generated for lead: {lead_id}")
             return chat_response
             
         finally:
-            await speech_service.close()
+            pass
             
     except Exception as e:
-        logger.exception("Error in sales chat endpoint")
-        db.rollback()  # Add rollback on error
+        logger.exception("Error in optimized sales chat endpoint")
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Keep all your existing working endpoints
@@ -449,55 +505,85 @@ async def get_products():
 
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
-    """Generate a detailed quotation and pitch deck"""
+    """Generate a detailed quotation and pitch deck using QuoteGenerationAgent"""
     try:
-        base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        # Create and initialize the quote generation agent
+        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+        quote_agent = QuoteGenerationAgent(base_provider)
         
-        # Generate the quote
-        quote = await sales_agent.generate_quote(quote_request)
+        # Extract conversation messages from the request
+        conversation_messages = quote_request.get('conversation_messages', [])
+        customer_context = quote_request.get('customer_context', {})
+        
+        # If no conversation messages provided, create a basic one from the request
+        if not conversation_messages:
+            requirements = quote_request.get('requirements', {})
+            customer_info = quote_request.get('customer_info', {})
+            
+            # Create a basic conversation message from the requirements
+            basic_message = f"Customer needs: {requirements.get('description', 'Business technology solution')}"
+            if customer_info.get('company_name'):
+                basic_message += f" for {customer_info['company_name']}"
+            if customer_info.get('industry'):
+                basic_message += f" in {customer_info['industry']} industry"
+            
+            conversation_messages = [AIMessage(role="user", content=basic_message)]
+        
+        # Generate the quote using the QuoteGenerationAgent
+        quote = await quote_agent.generate_quote_from_conversation(
+            conversation_messages=conversation_messages,
+            customer_context=customer_context
+        )
+        
+        # Check if quote generation was successful
+        if not quote:
+            raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
+        
+        if 'error' in quote:
+            raise HTTPException(status_code=500, detail=quote['error'])
         
         # Generate unique IDs
-        quote_id = str(uuid.uuid4())
+        quote_id = quote.get('quote_id', str(uuid.uuid4()))
         deck_id = str(uuid.uuid4())
         
-        # Save the quote to a file
-        quote_path = f"Data/quotes/quote_{quote_id}.pdf"
-        os.makedirs(os.path.dirname(quote_path), exist_ok=True)
-        
-        # Generate PDF for the quote
-        pdf_generator = PDFGenerator()
-        pdf_buffer = pdf_generator.generate_quote_pdf(quote)
-        with open(quote_path, 'wb') as f:
-            f.write(pdf_buffer.getvalue())
-        
-        # Generate pitch deck
-        pitch_deck_service = PitchDeckService()
-        deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
-        
-        # Generate the pitch deck
-        deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
-        os.makedirs(os.path.dirname(deck_path), exist_ok=True)
-        
-        # Generate the PowerPoint file
-        await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+        # Generate pitch deck if quote was successful
+        pitch_deck_path = None
+        if quote.get('pdf_generated'):
+            try:
+                # Generate pitch deck
+                pitch_deck_service = PitchDeckService()
+                deck_structure = await pitch_deck_service.extract_ppt_structure(quote.get('quote_text', ''))
+                
+                # Generate the pitch deck
+                deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+                os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+                
+                # Generate the PowerPoint file
+                await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+                pitch_deck_path = deck_path
+            except Exception as deck_error:
+                logger.warning(f"Pitch deck generation failed: {deck_error}")
         
         return {
             "quote": quote,
             "quote_id": quote_id,
-            "quote_link": f"/api/quotes/download-pdf/{quote_id}",
-            "pitch_deck_id": deck_id,
-            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}"
+            "quote_link": quote.get('pdf_url', f"/api/quotes/download-pdf/{quote_id}"),
+            "pitch_deck_id": deck_id if pitch_deck_path else None,
+            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}" if pitch_deck_path else None,
+            "generated_by": "QuoteGenerationAgent",
+            "pdf_generated": quote.get('pdf_generated', False),
+            "pdf_path": quote.get('pdf_path'),
+            "generation_method": quote.get('generation_method', 'unknown')
         }
     except Exception as e:
+        logger.error(f"Quote generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/send")
 async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # Get speech service
-        speech_service = SpeechService(model_name="medium")
-        await speech_service.initialize()
+        global speech_service
         
         try:
             # Handle lead management
@@ -577,7 +663,7 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             )
             
         finally:
-            await speech_service.close()
+            pass
             
     except Exception as e:
         logger.error(f"Error in send_message endpoint: {str(e)}")
@@ -1120,38 +1206,150 @@ async def health_check():
 
 @app.get("/api/admin/performance")
 async def get_performance_stats():
-    """Get system performance statistics"""
-    cache_service = get_cache_service()
-    
-    # Get cache stats
-    cache_stats = await cache_service.get_stats()
-    
-    # Get Elasticsearch stats
+    """Get comprehensive performance statistics"""
     try:
-        elasticsearch_service = get_elasticsearch_service()
-        es_stats = await elasticsearch_service.get_product_stats()
-    except Exception as e:
-        es_stats = {"error": str(e)}
-    
-    # Get database connection info
-    try:
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"))
-            active_connections = result.scalar()
-    except Exception as e:
-        active_connections = f"Error: {e}"
-    
-    return {
-        "cache": cache_stats,
-        "elasticsearch": es_stats,
-        "database": {
-            "active_connections": active_connections,
+        # Get cache statistics
+        cache_service = get_cache_service()
+        cache_stats = await cache_service.get_stats()
+        
+        # Get database connection pool stats
+        db_pool_stats = {
             "pool_size": engine.pool.size(),
-            "checked_out_connections": engine.pool.checkedout()
-        },
-        "timestamp": datetime.now().isoformat()
-    }
+            "checked_in": engine.pool.checkedin(),
+            "checked_out": engine.pool.checkedout(),
+            "overflow": engine.pool.overflow(),
+            "invalid": engine.pool.invalid()
+        }
+        
+        # Test Elasticsearch health
+        try:
+            elasticsearch_service = get_elasticsearch_service()
+            es_health = await elasticsearch_service.get_cluster_health()
+        except Exception as e:
+            es_health = {"status": "error", "error": str(e)}
+        
+        # Calculate performance metrics
+        performance_metrics = {
+            "timestamp": datetime.now().isoformat(),
+            "cache": {
+                "hit_rate": f"{(cache_stats['active_entries'] / max(cache_stats['total_entries'], 1)) * 100:.1f}%",
+                "total_entries": cache_stats['total_entries'],
+                "active_entries": cache_stats['active_entries'],
+                "cache_size_mb": f"{cache_stats['cache_size_mb']:.2f}MB"
+            },
+            "database": {
+                "connection_pool": db_pool_stats,
+                "pool_utilization": f"{(db_pool_stats['checked_out'] / max(db_pool_stats['pool_size'], 1)) * 100:.1f}%"
+            },
+            "elasticsearch": es_health,
+            "system": {
+                "optimization_status": "enabled",
+                "conversational_agent": "active",
+                "caching_enabled": settings.enable_response_caching,
+                "hybrid_retriever": settings.use_hybrid_retriever
+            },
+            "recommendations": []
+        }
+        
+        # Add performance recommendations
+        if db_pool_stats['checked_out'] > db_pool_stats['pool_size'] * 0.8:
+            performance_metrics["recommendations"].append("High database connection usage - consider increasing pool size")
+        
+        if cache_stats['total_entries'] > 1000:
+            performance_metrics["recommendations"].append("Large cache size - consider reducing TTL or implementing cache eviction")
+        
+        if es_health.get('status') != 'green':
+            performance_metrics["recommendations"].append("Elasticsearch cluster not healthy - check cluster status")
+        
+        return performance_metrics
+        
+    except Exception as e:
+        logger.error(f"Error getting performance stats: {e}")
+        return {"error": str(e)}
+
+@app.post("/api/generate-quote-from-conversation/{lead_id}")
+async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(get_db)):
+    """Generate a quote from existing conversation history"""
+    try:
+        # Get conversation history for the lead
+        messages = db.query(DBChatMessage).filter(
+            DBChatMessage.lead_id == lead_id
+        ).order_by(DBChatMessage.created_at).all()
+        
+        if not messages:
+            raise HTTPException(status_code=404, detail="No conversation history found for this lead")
+        
+        # Convert to AIMessage format
+        conversation_messages = []
+        for msg in messages:
+            role = "user" if msg.message_type == MessageType.USER.value else "assistant"
+            conversation_messages.append(AIMessage(role=role, content=msg.content))
+        
+        # Get customer context from lead
+        lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
+        customer_context = None
+        if lead_record:
+            customer_context = {
+                "company_name": lead_record.company_name,
+                "contact_name": lead_record.contact_name,
+                "email": lead_record.email,
+                "company_size": getattr(lead_record, 'company_size', None),
+                "industry": getattr(lead_record, 'industry', None),
+                "budget_range": getattr(lead_record, 'budget_range', None),
+                "timeline": getattr(lead_record, 'decision_timeline', None)
+            }
+        
+        # Create and initialize the quote generation agent
+        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+        quote_agent = QuoteGenerationAgent(base_provider)
+        
+        # Generate the quote using the QuoteGenerationAgent
+        quote = await quote_agent.generate_quote_from_conversation(
+            conversation_messages=conversation_messages,
+            customer_context=customer_context
+        )
+        
+        # Check if quote generation was successful
+        if not quote:
+            raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
+        
+        if 'error' in quote:
+            raise HTTPException(status_code=500, detail=quote['error'])
+        
+        # Generate pitch deck if quote was successful
+        deck_id = str(uuid.uuid4())
+        pitch_deck_path = None
+        if quote.get('pdf_generated'):
+            try:
+                # Generate pitch deck
+                pitch_deck_service = PitchDeckService()
+                deck_structure = await pitch_deck_service.extract_ppt_structure(quote.get('quote_text', ''))
+                
+                # Generate the pitch deck
+                deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
+                os.makedirs(os.path.dirname(deck_path), exist_ok=True)
+                
+                # Generate the PowerPoint file
+                await pitch_deck_service.generate_ppt(deck_structure, deck_path)
+                pitch_deck_path = deck_path
+            except Exception as deck_error:
+                logger.warning(f"Pitch deck generation failed: {deck_error}")
+        
+        return {
+            "quote": quote,
+            "lead_id": lead_id,
+            "conversation_messages_count": len(conversation_messages),
+            "quote_link": quote.get('pdf_url', f"/api/quotes/download-pdf/{quote.get('quote_id', 'unknown')}"),
+            "pitch_deck_id": deck_id if pitch_deck_path else None,
+            "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}" if pitch_deck_path else None,
+            "generated_by": "QuoteGenerationAgent",
+            "pdf_generated": quote.get('pdf_generated', False),
+            "pdf_path": quote.get('pdf_path'),
+            "generation_method": quote.get('generation_method', 'unknown')
+        }
+    except Exception as e:
+        logger.error(f"Quote generation from conversation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
