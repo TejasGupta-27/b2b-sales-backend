@@ -405,13 +405,13 @@ async def update_config_from_grafana(config_data: Dict[str, Any]):
 @router.get("/", response_class=HTMLResponse)
 async def admin_dashboard():
     """Redirect to Grafana dashboard"""
-    # Redirect to nginx-proxied Grafana URL
+    # Redirect to direct Grafana URL
     return HTMLResponse(content=f"""
     <!DOCTYPE html>
     <html>
     <head>
         <title>B2B Sales Backend - Admin Dashboard</title>
-        <meta http-equiv="refresh" content="0; url=http://48.210.58.7/grafana/">
+        <meta http-equiv="refresh" content="0; url=http://48.210.58.7:3000">
         <style>
             body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; }}
             .container {{ max-width: 600px; margin: 0 auto; }}
@@ -424,12 +424,12 @@ async def admin_dashboard():
             <h1>🚀 B2B Sales Backend - Admin Dashboard</h1>
             <p>Redirecting to Grafana monitoring dashboard...</p>
             <p>If you are not redirected automatically, click the button below:</p>
-            <a href="http://48.210.58.7/grafana/" class="btn">Open Grafana Dashboard</a>
+            <a href="http://48.210.58.7:3000" class="btn">Open Grafana Dashboard</a>
             <br><br>
             <p><strong>Grafana Credentials:</strong> admin / admin123</p>
             <p><small>Available Services:</small></p>
             <ul style="list-style: none; padding: 0;">
-                <li>📊 <a href="http://48.210.58.7/grafana/">Grafana Dashboard</a></li>
+                <li>📊 <a href="http://48.210.58.7:3000">Grafana Dashboard</a></li>
                 <li>📈 <a href="http://48.210.58.7:9090">Prometheus Metrics</a></li>
                 <li>🔍 <a href="http://48.210.58.7:5601">Kibana (Elasticsearch)</a></li>
                 <li>🗄️ <a href="http://48.210.58.7:8080">Adminer (Database)</a></li>
