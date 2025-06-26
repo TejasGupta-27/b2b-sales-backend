@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from db.database import get_db
 from config import settings
 import aiofiles
 import shutil
+import httpx
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -403,161 +404,64 @@ async def update_config_from_grafana(config_data: Dict[str, Any]):
 # Legacy endpoints (keeping for backward compatibility)
 @router.get("/", response_class=HTMLResponse)
 async def admin_dashboard():
-    """Serve the admin dashboard HTML with embedded Grafana"""
-    return HTMLResponse(content="""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>B2B Sales Backend - Admin Dashboard</title>
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
+    """Proxy to Grafana dashboard"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:3000/")
+            return HTMLResponse(
+                content=response.text,
+                status_code=response.status_code,
+                headers=response.headers
+            )
+    except Exception as e:
+        # Fallback to simple redirect if Grafana is not accessible
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>B2B Sales Backend - Admin Dashboard</title>
+            <meta http-equiv="refresh" content="0; url=http://localhost:3000">
+        </head>
+        <body>
+            <h1>Redirecting to Grafana...</h1>
+            <p>If you are not redirected automatically, <a href="http://localhost:3000">click here</a></p>
+            <p>Error: {str(e)}</p>
+        </body>
+        </html>
+        """)
+
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_to_grafana(path: str, request: Request):
+    """Proxy all admin routes to Grafana"""
+    # Build the target URL
+    target_url = f"http://localhost:3000/{path}"
+    
+    # Get the request method and body
+    method = request.method
+    body = await request.body()
+    
+    # Get headers
+    headers = dict(request.headers)
+    # Remove host header to avoid conflicts
+    headers.pop("host", None)
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=method,
+                url=target_url,
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
             
-            body { 
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-                background: #f4f6f8;
-                height: 100vh;
-                overflow: hidden;
-            }
-            
-            .header {
-                background: #fff;
-                padding: 16px 24px;
-                border-bottom: 1px solid #e5e7eb;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }
-            
-            .header h1 {
-                color: #1a202c;
-                font-size: 1.5rem;
-                font-weight: 600;
-            }
-            
-            .header-info {
-                display: flex;
-                align-items: center;
-                gap: 16px;
-                font-size: 0.875rem;
-                color: #64748b;
-            }
-            
-            .grafana-link {
-                color: #2563eb;
-                text-decoration: none;
-                font-weight: 500;
-            }
-            
-            .grafana-link:hover {
-                text-decoration: underline;
-            }
-            
-            .iframe-container {
-                height: calc(100vh - 80px);
-                width: 100%;
-                position: relative;
-            }
-            
-            .grafana-iframe {
-                width: 100%;
-                height: 100%;
-                border: none;
-                background: #fff;
-            }
-            
-            .loading {
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                color: #64748b;
-                font-size: 1rem;
-            }
-            
-            .error-message {
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center;
-                color: #dc2626;
-                background: #fef2f2;
-                padding: 24px;
-                border-radius: 8px;
-                border: 1px solid #fecaca;
-                max-width: 400px;
-            }
-            
-            .error-message h3 {
-                margin-bottom: 12px;
-                color: #991b1b;
-            }
-            
-            .error-message p {
-                margin-bottom: 16px;
-                color: #7f1d1d;
-            }
-            
-            .error-message a {
-                color: #2563eb;
-                text-decoration: none;
-                font-weight: 500;
-            }
-            
-            .error-message a:hover {
-                text-decoration: underline;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>B2B Sales Backend - Admin Dashboard</h1>
-            <div class="header-info">
-                <span>Powered by Grafana</span>
-                <a href="http://localhost:3000" target="_blank" class="grafana-link">Open in New Tab</a>
-            </div>
-        </div>
-        
-        <div class="iframe-container">
-            <iframe 
-                src="http://localhost:3000" 
-                class="grafana-iframe"
-                onload="hideLoading()"
-                onerror="showError()"
-                title="Grafana Admin Dashboard">
-            </iframe>
-            <div id="loading" class="loading">Loading Grafana Dashboard...</div>
-            <div id="error" class="error-message" style="display: none;">
-                <h3>Unable to Load Grafana</h3>
-                <p>Grafana may not be running or accessible. Please ensure Grafana is started and try again.</p>
-                <p><strong>Default credentials:</strong> admin / admin123</p>
-                <a href="http://localhost:3000" target="_blank">Open Grafana Directly</a>
-            </div>
-        </div>
-        
-        <script>
-            function hideLoading() {
-                document.getElementById('loading').style.display = 'none';
-            }
-            
-            function showError() {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').style.display = 'block';
-            }
-            
-            // Hide loading after 10 seconds if iframe doesn't load
-            setTimeout(function() {
-                if (document.getElementById('loading').style.display !== 'none') {
-                    showError();
-                }
-            }, 10000);
-        </script>
-    </body>
-    </html>
-    """)
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=response.headers
+            )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Grafana proxy error: {str(e)}")
 
 @router.get("/metrics")
 async def get_prometheus_metrics():
