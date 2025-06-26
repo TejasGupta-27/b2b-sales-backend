@@ -430,35 +430,47 @@ async def admin_dashboard():
         </html>
         """)
 
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def proxy_to_grafana(path: str, request: Request):
-    """Proxy all admin routes to Grafana"""
-    # Skip if this is the root path (already handled by admin_dashboard)
-    if path == "" or path == "/":
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    # Build the target URL
-    target_url = f"http://grafana:3000/{path}"
-    
-    # Get the request method and body
-    method = request.method
-    body = await request.body()
+# Specific proxy routes for Grafana
+@router.get("/login")
+async def proxy_grafana_login():
+    """Proxy Grafana login page"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://grafana:3000/login")
+            return HTMLResponse(
+                content=response.text,
+                status_code=response.status_code,
+                headers=response.headers
+            )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Grafana proxy error: {str(e)}")
+
+@router.get("/d/{dashboard_id}")
+async def proxy_grafana_dashboard(dashboard_id: str):
+    """Proxy Grafana dashboard"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://grafana:3000/d/{dashboard_id}")
+            return HTMLResponse(
+                content=response.text,
+                status_code=response.status_code,
+                headers=response.headers
+            )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Grafana proxy error: {str(e)}")
+
+@router.get("/api/{path:path}")
+async def proxy_grafana_api(path: str, request: Request):
+    """Proxy Grafana API calls"""
+    target_url = f"http://grafana:3000/api/{path}"
     
     # Get headers
     headers = dict(request.headers)
-    # Remove host header to avoid conflicts
     headers.pop("host", None)
     
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.request(
-                method=method,
-                url=target_url,
-                headers=headers,
-                content=body,
-                params=request.query_params
-            )
-            
+            response = await client.get(target_url, headers=headers, params=request.query_params)
             return Response(
                 content=response.content,
                 status_code=response.status_code,
