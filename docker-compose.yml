@@ -151,9 +151,9 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
       # Configure Grafana for subpath serving behind nginx
-      - GF_SERVER_ROOT_URL=http://localhost/grafana/
+      - GF_SERVER_ROOT_URL=http://48.210.58.7/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_DOMAIN=48.210.58.7
       - GF_SERVER_ENFORCE_DOMAIN=false
     volumes:
       - grafana_data:/var/lib/grafana
