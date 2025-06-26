@@ -580,6 +580,34 @@ process_threads {process.num_threads()}
         logger.error(f"Error generating metrics: {e}")
         return Response(content="# Error generating metrics", media_type="text/plain")
 
+@router.get("/metrics/json")
+async def get_metrics():
+    """Get performance metrics in JSON format"""
+    try:
+        # Load token usage
+        token_file = Path("Data/token_usage.json")
+        token_usage = 0
+        if token_file.exists():
+            with open(token_file, 'r') as f:
+                token_data = json.load(f)
+                token_usage = token_data.get("total_tokens", 0)
+        
+        return {
+            "avg_response_time": "150ms",
+            "success_rate": "98.5%",
+            "token_usage": f"{token_usage:,}",
+            "active_sessions": "12"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        return {
+            "avg_response_time": "N/A",
+            "success_rate": "N/A", 
+            "token_usage": "N/A",
+            "active_sessions": "N/A"
+        }
+
 # Middleware to track metrics
 async def track_metrics_middleware(request, call_next):
     start_time = time.time()
@@ -1238,34 +1266,6 @@ async def get_system_status(db: Session = Depends(get_db)):
             "total_requests": "Unknown",
             "active_leads": 0,
             "status": "error"
-        }
-
-@router.get("/metrics")
-async def get_metrics():
-    """Get performance metrics"""
-    try:
-        # Load token usage
-        token_file = Path("Data/token_usage.json")
-        token_usage = 0
-        if token_file.exists():
-            with open(token_file, 'r') as f:
-                token_data = json.load(f)
-                token_usage = token_data.get("total_tokens", 0)
-        
-        return {
-            "avg_response_time": "150ms",
-            "success_rate": "98.5%",
-            "token_usage": f"{token_usage:,}",
-            "active_sessions": "12"
-        }
-    
-    except Exception as e:
-        logger.error(f"Error getting metrics: {e}")
-        return {
-            "avg_response_time": "N/A",
-            "success_rate": "N/A", 
-            "token_usage": "N/A",
-            "active_sessions": "N/A"
         }
 
 @router.post("/reindex")
