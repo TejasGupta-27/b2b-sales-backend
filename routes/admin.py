@@ -407,7 +407,7 @@ async def admin_dashboard():
     """Proxy to Grafana dashboard"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:3000/")
+            response = await client.get("http://grafana:3000/")
             return HTMLResponse(
                 content=response.text,
                 status_code=response.status_code,
@@ -420,11 +420,11 @@ async def admin_dashboard():
         <html>
         <head>
             <title>B2B Sales Backend - Admin Dashboard</title>
-            <meta http-equiv="refresh" content="0; url=http://localhost:3000">
+            <meta http-equiv="refresh" content="0; url=http://grafana:3000">
         </head>
         <body>
             <h1>Redirecting to Grafana...</h1>
-            <p>If you are not redirected automatically, <a href="http://localhost:3000">click here</a></p>
+            <p>If you are not redirected automatically, <a href="http://grafana:3000">click here</a></p>
             <p>Error: {str(e)}</p>
         </body>
         </html>
@@ -434,7 +434,7 @@ async def admin_dashboard():
 async def proxy_to_grafana(path: str, request: Request):
     """Proxy all admin routes to Grafana"""
     # Build the target URL
-    target_url = f"http://localhost:3000/{path}"
+    target_url = f"http://grafana:3000/{path}"
     
     # Get the request method and body
     method = request.method
