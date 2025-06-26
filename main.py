@@ -646,16 +646,41 @@ async def get_chat_history(lead_id: str):
             
             history = []
             for msg in messages:
+                metadata = msg.message_metadata or {}
+                
+                # Extract voice data from metadata
+                voice_data = None
+                has_voice = False
+                
+                # For assistant messages, get speech_data
+                if msg.message_type == MessageType.ASSISTANT.value:
+                    speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                    if speech_data and speech_data.get('audio_data'):
+                        voice_data = speech_data
+                        has_voice = True
+                
+                # For user messages, get transcription metadata
+                elif msg.message_type == MessageType.USER.value:
+                    transcription_metadata = metadata.get('transcription_metadata')
+                    if transcription_metadata:
+                        voice_data = {
+                            "type": "transcription",
+                            "data": transcription_metadata
+                        }
+                        has_voice = True
+                
                 history.append({
                     "id": msg.id,
                     "role": msg.message_type.value.lower(),
                     "content": msg.content,
                     "timestamp": msg.created_at.isoformat(),
                     "stage": msg.stage,
-                    "metadata": msg.message_metadata
+                    "metadata": metadata,
+                    "has_voice": has_voice,
+                    "voice_data": voice_data
                 })
             
-            logger.info(f"Returning chat history: {history}")
+            logger.info(f"Returning chat history with voice data: {len([h for h in history if h['has_voice']])} voice messages")
             return {"history": history}
         finally:
             db.close()
@@ -821,13 +846,39 @@ async def get_conversation(lead_id: str, db: Session = Depends(get_db)):
         for msg in messages:
             # Fix enum comparison
             role = "user" if msg.message_type == MessageType.USER.value else "assistant"
+            
+            metadata = msg.message_metadata or {}
+            
+            # Extract voice data from metadata
+            voice_data = None
+            has_voice = False
+            
+            # For assistant messages, get speech_data
+            if msg.message_type == MessageType.ASSISTANT.value:
+                speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                if speech_data and speech_data.get('audio_data'):
+                    voice_data = speech_data
+                    has_voice = True
+            
+            # For user messages, get transcription metadata
+            elif msg.message_type == MessageType.USER.value:
+                transcription_metadata = metadata.get('transcription_metadata')
+                if transcription_metadata:
+                    voice_data = {
+                        "type": "transcription",
+                        "data": transcription_metadata
+                    }
+                    has_voice = True
+            
             conversation.append({
                 "id": msg.id,
                 "role": role,
                 "content": msg.content,
                 "timestamp": msg.created_at.isoformat() if msg.created_at else None,
                 "stage": msg.stage,
-                "metadata": msg.message_metadata
+                "metadata": metadata,
+                "has_voice": has_voice,
+                "voice_data": voice_data
             })
         
         return {"conversation": conversation}
