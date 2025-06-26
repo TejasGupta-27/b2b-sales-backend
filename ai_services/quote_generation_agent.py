@@ -1,21 +1,15 @@
 import json
 import uuid
-import re
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
-from io import BytesIO
 import logging
 from .base import AIProvider, AIMessage, AIResponse
-from .function_models import QuoteData, CustomerInfo, QuoteLineItem
+from .function_models import QuoteLineItem
 from services.pdf_generator import PDFGenerator
 from services.elasticsearch_service import get_elasticsearch_service
 from .dynamic_extraction_agent import DynamicExtractionAgent
 from services.localisation import get_quote_translations
 from pydantic import BaseModel, Field
-from pathlib import Path
-from services.prompt_manager import get_prompt_manager
 import os
-from langdetect import detect
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +162,7 @@ class QuoteGenerationAgent(AIProvider):
             print("🔍 Debug - Starting PDF generation...")
             
             # Generate PDF
-            quote_dict = await self._generate_quote_pdf(quote_dict, lang=lang)
+            quote_dict = await self._generate_quote_pdf(quote_dict, lang=self.language)
             print(f"🔍 Debug - PDF generation completed")
             print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
@@ -185,8 +179,6 @@ class QuoteGenerationAgent(AIProvider):
         """Generate PDF for the quote with comprehensive debugging"""
         try:
             logger.info(f"🔍 Starting PDF generation with language: {language}")
-            
-            from services.pdf_generator import PDFGenerator
             pdf_generator = PDFGenerator()
             
             # Get quote ID for file naming
@@ -195,9 +187,6 @@ class QuoteGenerationAgent(AIProvider):
             
             # Create filename
             filename = f"quote_{quote_id}_{language}.pdf"
-            
-            # Convert the quote dict to match the PDF generator's expected format with translations
-            pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
             
             # When calling the PDF generator, pass the lang or set font accordingly
             pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
@@ -245,6 +234,7 @@ class QuoteGenerationAgent(AIProvider):
             # Get translations for the specified language
             t = get_quote_translations(self.language)
             pdf_labels = t["pdf_labels"]
+            exchange_rate = 150 if self.language == "ja" else 1  # Example exchange rate for USD to JPY
             
             # Handle customer_info format conversion
             customer_info = quote_dict.get('customer_info', {})
@@ -267,7 +257,6 @@ class QuoteGenerationAgent(AIProvider):
             # Adjust amounts for Japanese currency (multiply by exchange rate if needed)
             if self.language == "ja" and financials.get('currency', 'USD') == 'USD':
                 # Convert USD to JPY (approximate rate: 1 USD = 150 JPY)
-                exchange_rate = 150
                 subtotal = financials.get('subtotal', 0) * exchange_rate
                 tax_amount = financials.get('tax_amount', 0) * exchange_rate
                 total = financials.get('total', 0) * exchange_rate
@@ -337,9 +326,9 @@ class QuoteGenerationAgent(AIProvider):
                 'labels': t["pdf_labels"]
             }
 
-    def format_quote_response(self, quote_dict: Dict[str, Any]) -> str:
+    def format_quote_response(self, quote_dict: Dict[str, Any], language: str = "en") -> str:
         """Format the quote response with proper translations"""
-        t = get_quote_translations(self.language)
+        t = get_quote_translations(language)
         
         # Extract financial info
         financials = quote_dict.get('financials', {})

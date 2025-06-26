@@ -11,6 +11,7 @@ from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
 from services.pdf_generator import PDFGenerator
 from services.pitch_deck_service import PitchDeckService
 from services.email_sender import send_quote_email  # You must have this implemented
+from ai_services.azure_openai import AzureOpenAIProvider as AIServiceFactory  # Fixed relative import
 
 router = APIRouter()
 
