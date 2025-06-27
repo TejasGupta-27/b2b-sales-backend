@@ -344,63 +344,6 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     "timeline": getattr(lead_record, 'decision_timeline', None)
                 }
             
-<<<<<<< HEAD
-            # Create Enhanced B2B Sales Agent with better error handling
-            try:
-                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-                enhanced_agent = EnhancedB2BSalesAgent(
-                    base_provider=base_provider,
-                    use_hybrid_retriever=settings.use_hybrid_retriever,
-                    language = lang
-                )
-                
-                # Initialize if needed
-                await enhanced_agent.initialize()
-                
-                # Generate response with error handling
-                response = await enhanced_agent.generate_response(
-                    messages, 
-                    customer_context=customer_context,
-                    language=lang 
-                )
-                
-            except Exception as agent_error:
-                logger.error(f"Agent error: {agent_error}")
-                # Fallback to basic response
-                base_provider = AIServiceFactory.create_provider(request.provider)
-                response = await base_provider.generate_response(messages)
-                
-                # Add error metadata
-                if not response.metadata:
-                    response.metadata = {}
-                response.metadata['agent_error'] = str(agent_error)
-                response.metadata['fallback_used'] = True
-
-            # 🗣️ Generate speech for the response
-            speech_result = await speech_service.text_to_speech(
-                text=response.content,
-                language=lang
-            )
-
-            # Save assistant response with enhanced metadata
-            response_metadata = {
-                "model": response.model,
-                "provider": response.provider,
-                "usage": response.usage,
-                "enhanced_sales_agent": True,
-                "speech_data": speech_result,
-                "language": lang  # ✅ include it for clarity
-            }
-            
-            # Add product intelligence if available
-            if hasattr(enhanced_agent, 'product_recommendations'):
-                response_metadata['product_recommendations'] = enhanced_agent.product_recommendations
-            
-            # Add quote information if generated
-            if response.metadata and 'quote' in response.metadata:
-                response_metadata['quote'] = response.metadata['quote']
-            
-=======
             # Check cache first for similar conversations
             cache_service = get_cache_service()
             cache_key = f"chat_response:{hash(request.message + str(customer_context))}"
@@ -421,7 +364,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 # Let the conversational agent handle all types of requests naturally
                 # No hardcoded phrase detection - let the AI determine the best response
                 response = await conversational_agent.generate_response(
-                    messages, customer_context
+                    messages, customer_context, language=lang
                 )
                 
                 response_content = response.content
@@ -430,7 +373,8 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     "model": response.model,
                     "usage": response.usage,
                     "agent_type": "simple_conversational",
-                    "cached": False
+                    "cached": False,
+                    "language": lang
                 }
                 
                 # Cache the response for 2 minutes
@@ -438,11 +382,10 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             
             # Generate speech in parallel (non-blocking)
             speech_task = asyncio.create_task(
-                speech_service.text_to_speech(text=response_content, language="en")
+                speech_service.text_to_speech(text=response_content, language=lang)
             )
             
             # Save assistant response
->>>>>>> a376fd0025fc1cc3c7cdbd2753d7cf7d554e07f1
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,

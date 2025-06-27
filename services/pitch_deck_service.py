@@ -7,8 +7,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
-from pptx.oxml import parse_xml
-from config import settings
+#from config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,6 +20,100 @@ class PitchDeckService:
             azure_endpoint=settings.azure_openai_endpoint
         )
         self.deployment_name = settings.azure_openai_deployment_name
+        
+        # Font configuration for Japanese support
+        self.japanese_fonts = [
+            "Yu Gothic UI",      # Windows 10/11 default
+            "Meiryo UI",         # Windows 7/8
+            "MS Gothic",         # Fallback Windows
+            "Hiragino Kaku Gothic ProN",  # macOS
+            "Hiragino Sans",     # macOS newer
+            "Noto Sans CJK JP",  # Linux/Cross-platform
+            "Arial Unicode MS",  # Cross-platform fallback
+        ]
+        
+        # Detect if system supports Japanese fonts
+        self.title_font = self._get_available_font(bold=True)
+        self.body_font = self._get_available_font(bold=False)
+        
+        logger.info(f"Using fonts - Title: {self.title_font}, Body: {self.body_font}")
+    
+    def _get_available_font(self, bold=False):
+        """Get the best available font for Japanese text"""
+        # For PowerPoint, we'll use fonts that are commonly available
+        # PowerPoint will fallback gracefully if the font isn't available
+        
+        if bold:
+            # For titles/headers - prefer stronger fonts
+            preferred_fonts = [
+                "Yu Gothic UI Semibold",
+                "Yu Gothic UI",
+                "Meiryo UI",
+                "MS Gothic",
+                "Hiragino Kaku Gothic ProN",
+                "Arial Unicode MS",
+                "Segoe UI"  # Fallback
+            ]
+        else:
+            # For body text - prefer readable fonts
+            preferred_fonts = [
+                "Yu Gothic UI",
+                "Meiryo UI", 
+                "MS Gothic",
+                "Hiragino Sans",
+                "Noto Sans CJK JP",
+                "Arial Unicode MS",
+                "Segoe UI"  # Fallback
+            ]
+        
+        # Return the first font (PowerPoint will handle fallbacks)
+        return preferred_fonts[0]
+    
+    def _detect_japanese_text(self, text):
+        """Detect if text contains Japanese characters"""
+        if not text:
+            return False
+        
+        # Check for Japanese character ranges
+        for char in text:
+            code = ord(char)
+            # Hiragana: 0x3040-0x309F
+            # Katakana: 0x30A0-0x30FF  
+            # Kanji: 0x4E00-0x9FAF
+            # Japanese punctuation: 0x3000-0x303F
+            if (0x3000 <= code <= 0x303F or  # Japanese punctuation
+                0x3040 <= code <= 0x309F or  # Hiragana
+                0x30A0 <= code <= 0x30FF or  # Katakana
+                0x4E00 <= code <= 0x9FAF):   # Kanji
+                return True
+        return False
+    
+    def _apply_font_to_paragraph(self, paragraph, text, is_title=False):
+        """Apply appropriate font to paragraph based on text content"""
+        paragraph.text = text
+        
+        # Detect if Japanese text is present
+        has_japanese = self._detect_japanese_text(text)
+        
+        if has_japanese:
+            # Use Japanese-compatible font
+            font_name = self.title_font if is_title else self.body_font
+        else:
+            # Use standard fonts for English text
+            font_name = "Segoe UI Semibold" if is_title else "Segoe UI"
+        
+        # Apply font settings
+        paragraph.font.name = font_name
+        
+        # Set font for Asian text specifically (this helps with mixed content)
+        if has_japanese:
+            try:
+                # This helps PowerPoint use the correct font for Asian characters
+                paragraph.font._element.set(qn('a:eastAsianTheme'), 'minor')
+            except:
+                pass  # Ignore if this advanced setting fails
+        
+        return paragraph
 
     def hide_placeholders(self, slide):
         """Safely hide placeholders without corrupting the slide structure"""
@@ -82,7 +175,7 @@ class PitchDeckService:
     async def extract_ppt_structure(self, quotation: str) -> dict:
         """Use Azure OpenAI to generate a detailed and persuasive sales pitch deck structure from the quotation."""
         prompt = f"""
-You are a business assistant. Respond in {language.upper()}. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
+You are a business assistant. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
 
 ### QUOTATION
 \"\"\"
@@ -162,6 +255,7 @@ Return your response as valid JSON:
             raise
 
     def add_comparison_table(self, slide, table_data):
+        """Add comparison table with Japanese font support"""
         rows = len(table_data["rows"]) + 1  # +1 for header
         cols = len(table_data["columns"])
         left = Inches(0.5)
@@ -174,67 +268,82 @@ Return your response as valid JSON:
         # Header row
         for col, header in enumerate(table_data["columns"]):
             cell = table_shape.cell(0, col)
-            cell.text = header
-            cell.text_frame.paragraphs[0].font.bold = True
-            cell.text_frame.paragraphs[0].font.size = Pt(14)
+            
+            # Clear existing content and add with proper font
+            cell.text_frame.clear()
+            p = cell.text_frame.paragraphs[0]
+            self._apply_font_to_paragraph(p, header, is_title=True)
+            p.font.bold = True
+            p.font.size = Pt(14)
 
         # Data rows
         for i, row in enumerate(table_data["rows"], start=1):
             for j, value in enumerate(row):
                 cell = table_shape.cell(i, j)
-                cell.text = str(value)  # Ensure it's a string
-                cell.text_frame.paragraphs[0].font.size = Pt(12)
+                
+                # Clear existing content and add with proper font
+                cell.text_frame.clear()
+                p = cell.text_frame.paragraphs[0]
+                self._apply_font_to_paragraph(p, str(value), is_title=False)
+                p.font.size = Pt(12)
 
     async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx"):
-        """Generate a PowerPoint presentation from the structured data"""
+        """Generate a PowerPoint presentation from the structured data with Japanese support"""
         # Load template if it exists, otherwise create new presentation
         template_path = "../Data/assets/template.pptx"
         if os.path.exists(template_path):
             logger.info("Using template.pptx")
-            prs = Presentation('template.pptx')
+            prs = Presentation(template_path)
         else:
             logger.info("Creating new presentation (no template found)")
             prs = Presentation()
         
-        TITLE_FONT = "Segoe UI Semibold"
-        BODY_FONT = "Segoe UI"
+        # Color scheme
         TITLE_COLOR = RGBColor(44, 62, 80)
         ACCENT_COLOR = RGBColor(52, 152, 219)
+        BODY_COLOR = RGBColor(80, 80, 80)
 
         # Create cover slide
         cover_slide = prs.slides.add_slide(prs.slide_layouts[0])
         self.hide_placeholders(cover_slide)  # Hide template placeholders
         
-        # Add cover slide content
+        # Add cover slide content with Japanese support
         title_box = cover_slide.shapes.add_textbox(Inches(1.5), Inches(1.5), Inches(7), Inches(2))
         tf = title_box.text_frame
-        tf.text = "Sales Pitch Deck"
-        tf.paragraphs[0].font.size = Pt(44)
-        tf.paragraphs[0].font.bold = True
-        tf.paragraphs[0].font.name = TITLE_FONT
-        tf.paragraphs[0].font.color.rgb = TITLE_COLOR
-        tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+        tf.clear()
         
-        subtitle = tf.add_paragraph()
-        subtitle.text = "Generated from Quotation"
-        subtitle.font.size = Pt(24)
-        subtitle.font.name = BODY_FONT
-        subtitle.font.color.rgb = ACCENT_COLOR
-        subtitle.alignment = PP_ALIGN.CENTER
+        # Main title
+        title_p = tf.paragraphs[0]
+        main_title = "Sales Pitch Deck"
+        self._apply_font_to_paragraph(title_p, main_title, is_title=True)
+        title_p.font.size = Pt(44)
+        title_p.font.bold = True
+        title_p.font.color.rgb = TITLE_COLOR
+        title_p.alignment = PP_ALIGN.CENTER
+        
+        # Subtitle
+        subtitle_p = tf.add_paragraph()
+        subtitle_text = "Generated from Quotation"
+        self._apply_font_to_paragraph(subtitle_p, subtitle_text, is_title=False)
+        subtitle_p.font.size = Pt(24)
+        subtitle_p.font.color.rgb = ACCENT_COLOR
+        subtitle_p.alignment = PP_ALIGN.CENTER
 
         # Create content slides
         for slide_data in data.get("slides", []):
             slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
             self.hide_placeholders(slide)  # Hide template placeholders
             
-            # Add title
+            # Add title with Japanese support
             title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8), Inches(1))
             tf = title_box.text_frame
-            tf.text = slide_data["title"]
-            tf.paragraphs[0].font.size = Pt(32)
-            tf.paragraphs[0].font.bold = True
-            tf.paragraphs[0].font.name = TITLE_FONT
-            tf.paragraphs[0].font.color.rgb = TITLE_COLOR
+            tf.clear()
+            
+            title_p = tf.paragraphs[0]
+            self._apply_font_to_paragraph(title_p, slide_data["title"], is_title=True)
+            title_p.font.size = Pt(32)
+            title_p.font.bold = True
+            title_p.font.color.rgb = TITLE_COLOR
 
             # Add accent line
             line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.5), Inches(1.5), Inches(0.1), Inches(4))
@@ -242,10 +351,11 @@ Return your response as valid JSON:
             line.fill.fore_color.rgb = ACCENT_COLOR
             line.line.fill.background()
 
-            # Add content
+            # Add content with Japanese support
             content_box = slide.shapes.add_textbox(Inches(0.8), Inches(1.5), Inches(8), Inches(5))
             tf = content_box.text_frame
             tf.word_wrap = True
+            tf.clear()
 
             for i, line_text in enumerate(slide_data["content"]):
                 if i == 0:
@@ -254,10 +364,10 @@ Return your response as valid JSON:
                 else:
                     p = tf.add_paragraph()
                 
-                p.text = f"• {line_text}"
+                bullet_text = f"• {line_text}"
+                self._apply_font_to_paragraph(p, bullet_text, is_title=False)
                 p.font.size = Pt(20)
-                p.font.name = BODY_FONT
-                p.font.color.rgb = RGBColor(80, 80, 80)
+                p.font.color.rgb = BODY_COLOR
                 p.space_after = Pt(12)
 
         # Create table slides
@@ -265,16 +375,18 @@ Return your response as valid JSON:
             slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
             self.hide_placeholders(slide)  # Hide template placeholders
             
-            # Add title
+            # Add title with Japanese support
             title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8), Inches(1))
             tf = title_box.text_frame
-            tf.text = table_data["title"]
-            tf.paragraphs[0].font.size = Pt(32)
-            tf.paragraphs[0].font.bold = True
-            tf.paragraphs[0].font.name = TITLE_FONT
-            tf.paragraphs[0].font.color.rgb = TITLE_COLOR
+            tf.clear()
             
-            # Add table
+            title_p = tf.paragraphs[0]
+            self._apply_font_to_paragraph(title_p, table_data["title"], is_title=True)
+            title_p.font.size = Pt(32)
+            title_p.font.bold = True
+            title_p.font.color.rgb = TITLE_COLOR
+            
+            # Add table with Japanese support
             self.add_comparison_table(slide, table_data)
 
         # Save presentation
@@ -284,4 +396,63 @@ Return your response as valid JSON:
             return output_path
         except Exception as e:
             logger.error("Error saving presentation: %s", e)
-            raise 
+            raise
+
+# Test function for Japanese PowerPoint generation
+def test_japanese_ppt():
+    """Test Japanese text in PowerPoint generation"""
+    import asyncio
+    
+    async def run_test():
+        service = PitchDeckService()
+        
+        # Test data with Japanese content
+        test_data = {
+            "slides": [
+                {
+                    "title": "お客様のニーズ",
+                    "content": [
+                        "高性能なワークステーションが必要",
+                        "信頼性の高いシステムを求めています",
+                        "効率的な作業環境の構築",
+                        "長期サポートが重要",
+                        "コストパフォーマンスを重視"
+                    ]
+                },
+                {
+                    "title": "私たちのソリューション",
+                    "content": [
+                        "最新技術を活用した高性能PC",
+                        "24時間365日のサポート体制",
+                        "カスタマイズ可能な構成",
+                        "長期保証による安心",
+                        "競争力のある価格設定"
+                    ]
+                }
+            ],
+            "tables": [
+                {
+                    "title": "製品比較表",
+                    "columns": ["製品名", "価格", "CPU", "メモリ", "ストレージ", "保証", "サポート"],
+                    "rows": [
+                        ["ワークステーション Pro", "¥300,000", "Intel i7", "32GB", "1TB SSD", "3年", "24/7"],
+                        ["ワークステーション Advanced", "¥350,000", "Intel i7", "32GB", "1TB SSD", "3年", "24/7"],
+                        ["ワークステーション Premium", "¥400,000", "Intel i7", "32GB", "1TB SSD", "3年", "24/7"]
+                    ]
+                }
+            ]
+        }
+        
+        output_path = await service.generate_ppt(test_data, "japanese_test_presentation.pptx")
+        print(f"✅ Japanese test PowerPoint saved to: {output_path}")
+    
+    # Note: You'll need to handle the async call appropriately in your application
+    # This is just for demonstration
+    try:
+        asyncio.run(run_test())
+    except RuntimeError:
+        # If already in an async context, use this instead
+        print("Run test_japanese_ppt() in an async context")
+
+if __name__ == "__main__":
+    test_japanese_ppt()

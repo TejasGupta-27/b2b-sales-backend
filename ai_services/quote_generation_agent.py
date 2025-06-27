@@ -162,7 +162,7 @@ class QuoteGenerationAgent(AIProvider):
             print("🔍 Debug - Starting PDF generation...")
             
             # Generate PDF
-            quote_dict = await self._generate_quote_pdf(quote_dict, lang=self.language)
+            quote_dict = await self._generate_quote_pdf(quote_dict, language=self.language)
             print(f"🔍 Debug - PDF generation completed")
             print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
