@@ -1,0 +1,342 @@
+{
+  "dataset": {
+    "name": "hybrid_product_retriever_test_dataset",
+    "description": "Test dataset for hybrid product retriever agent using RAGAS evaluation framework",
+    "version": "1.0",
+    "created_date": "2024-01-15",
+    "total_samples": 10,
+    "scenarios": [
+      {
+        "id": "scenario_001",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Hi, I need a high-performance workstation for video editing and 3D rendering. My budget is around $3000."
+          },
+          {
+            "role": "assistant", 
+            "content": "I'd be happy to help you find a workstation for video editing and 3D rendering. Could you tell me more about your specific requirements? What software do you use, and do you need any specific storage or memory requirements?"
+          },
+          {
+            "role": "user",
+            "content": "I use Adobe Premiere Pro, After Effects, and Blender. I need at least 32GB RAM and a good GPU for rendering."
+          }
+        ],
+        "customer_context": {
+          "industry": "creative_media",
+          "company_size": "small_business",
+          "use_case": "video_editing_3d_rendering"
+        },
+        "expected_requirements": {
+          "technical_requirements": [
+            "High-performance CPU for video editing",
+            "32GB+ RAM",
+            "Dedicated GPU for 3D rendering",
+            "Fast storage for video files"
+          ],
+          "business_requirements": [
+            "Video editing workflow",
+            "3D rendering capabilities",
+            "Budget around $3000"
+          ],
+          "product_categories": [
+            "workstation",
+            "cpu",
+            "memory",
+            "video_card",
+            "storage"
+          ],
+          "search_terms": [
+            "workstation",
+            "video editing",
+            "3D rendering",
+            "32GB RAM",
+            "GPU"
+          ]
+        },
+        "ground_truth_products": [
+          {
+            "id": "cpu_001",
+            "name": "AMD Ryzen 9 7950X",
+            "category": "cpu",
+            "reason": "High core count and performance for video editing and rendering"
+          },
+          {
+            "id": "memory_001", 
+            "name": "32GB DDR5 RAM",
+            "category": "memory",
+            "reason": "Meets minimum RAM requirement for video editing"
+          },
+          {
+            "id": "gpu_001",
+            "name": "NVIDIA RTX 4080",
+            "category": "video_card", 
+            "reason": "Excellent GPU for 3D rendering and video acceleration"
+          }
+        ]
+      },
+      {
+        "id": "scenario_002",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "I'm setting up a small office network and need reliable storage for file sharing. We have about 10 employees."
+          },
+          {
+            "role": "assistant",
+            "content": "For a small office network with 10 employees, I'd recommend a NAS (Network Attached Storage) solution. How much storage do you think you'll need, and do you have any specific requirements for backup or redundancy?"
+          },
+          {
+            "role": "user", 
+            "content": "We need about 5TB total storage and want RAID for data protection. Budget is flexible but reasonable."
+          }
+        ],
+        "customer_context": {
+          "industry": "general_business",
+          "company_size": "small_business", 
+          "use_case": "file_sharing_storage"
+        },
+        "expected_requirements": {
+          "technical_requirements": [
+            "5TB storage capacity",
+            "RAID configuration",
+            "Network connectivity",
+            "Data protection"
+          ],
+          "business_requirements": [
+            "File sharing for 10 employees",
+            "Data backup and protection",
+            "Cost-effective solution"
+          ],
+          "product_categories": [
+            "storage",
+            "nas",
+            "network"
+          ],
+          "search_terms": [
+            "NAS",
+            "network storage",
+            "RAID",
+            "5TB",
+            "file sharing"
+          ]
+        },
+        "ground_truth_products": [
+          {
+            "id": "nas_001",
+            "name": "Synology DS920+",
+            "category": "storage",
+            "reason": "4-bay NAS with RAID support, perfect for small office"
+          },
+          {
+            "id": "hdd_001",
+            "name": "WD Red 4TB HDD",
+            "category": "storage", 
+            "reason": "NAS-optimized drives for reliable storage"
+          }
+        ]
+      },
+      {
+        "id": "scenario_003",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "I need a gaming PC that can run the latest games at 1440p with high settings. My budget is $2000."
+          },
+          {
+            "role": "assistant",
+            "content": "Great! For 1440p gaming at high settings, we'll need a solid GPU and CPU combination. Do you have any preference for AMD vs Intel, or any specific games you play most often?"
+          },
+          {
+            "role": "user",
+            "content": "I play mostly AAA games like Cyberpunk 2077 and want ray tracing. I prefer NVIDIA for the GPU."
+          }
+        ],
+        "customer_context": {
+          "industry": "gaming",
+          "company_size": "individual",
+          "use_case": "gaming_1440p"
+        },
+        "expected_requirements": {
+          "technical_requirements": [
+            "1440p gaming performance",
+            "Ray tracing support",
+            "NVIDIA GPU",
+            "High settings capability"
+          ],
+          "business_requirements": [
+            "AAA gaming performance",
+            "Budget $2000",
+            "Ray tracing gaming"
+          ],
+          "product_categories": [
+            "gaming_pc",
+            "cpu",
+            "video_card",
+            "memory",
+            "storage"
+          ],
+          "search_terms": [
+            "gaming PC",
+            "1440p",
+            "ray tracing",
+            "NVIDIA",
+            "RTX"
+          ]
+        },
+        "ground_truth_products": [
+          {
+            "id": "gpu_002",
+            "name": "NVIDIA RTX 4070 Ti",
+            "category": "video_card",
+            "reason": "Excellent 1440p performance with ray tracing support"
+          },
+          {
+            "id": "cpu_002",
+            "name": "AMD Ryzen 7 7700X",
+            "category": "cpu",
+            "reason": "Great gaming performance and value"
+          }
+        ]
+      },
+      {
+        "id": "scenario_004",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "We're a startup developing AI/ML applications and need a server for training models. We have a team of 5 data scientists."
+          },
+          {
+            "role": "assistant",
+            "content": "For AI/ML model training, you'll need significant computational power. What types of models are you training, and do you have any specific requirements for GPU memory or storage?"
+          },
+          {
+            "role": "user",
+            "content": "We're training deep learning models with large datasets. Need at least 24GB GPU memory and fast NVMe storage."
+          }
+        ],
+        "customer_context": {
+          "industry": "technology",
+          "company_size": "startup",
+          "use_case": "ai_ml_training"
+        },
+        "expected_requirements": {
+          "technical_requirements": [
+            "24GB+ GPU memory",
+            "Fast NVMe storage",
+            "High CPU performance",
+            "Large memory capacity"
+          ],
+          "business_requirements": [
+            "AI/ML model training",
+            "Deep learning workloads",
+            "Startup budget considerations"
+          ],
+          "product_categories": [
+            "server",
+            "gpu",
+            "storage",
+            "cpu",
+            "memory"
+          ],
+          "search_terms": [
+            "AI training",
+            "deep learning",
+            "24GB GPU",
+            "NVMe",
+            "server"
+          ]
+        },
+        "ground_truth_products": [
+          {
+            "id": "gpu_003",
+            "name": "NVIDIA RTX 4090",
+            "category": "video_card",
+            "reason": "24GB VRAM perfect for large model training"
+          },
+          {
+            "id": "storage_001",
+            "name": "Samsung 990 Pro 2TB NVMe",
+            "category": "storage",
+            "reason": "Fast NVMe storage for dataset access"
+          }
+        ]
+      },
+      {
+        "id": "scenario_005",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "I need a home office setup for remote work. I do web development and need multiple monitors."
+          },
+          {
+            "role": "assistant",
+            "content": "For web development with multiple monitors, we'll need a good CPU and graphics solution. How many monitors are you planning to use, and do you have any specific requirements for the monitors themselves?"
+          },
+          {
+            "role": "user",
+            "content": "I want 3 monitors, 27-inch each, and need good color accuracy for design work too."
+          }
+        ],
+        "customer_context": {
+          "industry": "technology",
+          "company_size": "individual",
+          "use_case": "remote_work_web_development"
+        },
+        "expected_requirements": {
+          "technical_requirements": [
+            "Multiple monitor support",
+            "Good color accuracy",
+            "Web development performance",
+            "27-inch monitors"
+          ],
+          "business_requirements": [
+            "Remote work setup",
+            "Web development workflow",
+            "Design work capability"
+          ],
+          "product_categories": [
+            "monitor",
+            "cpu",
+            "video_card",
+            "workstation"
+          ],
+          "search_terms": [
+            "multiple monitors",
+            "27-inch",
+            "color accurate",
+            "web development"
+          ]
+        },
+        "ground_truth_products": [
+          {
+            "id": "monitor_001",
+            "name": "LG 27UL850-W",
+            "category": "monitor",
+            "reason": "27-inch 4K monitor with excellent color accuracy"
+          },
+          {
+            "id": "gpu_004",
+            "name": "NVIDIA RTX 4060",
+            "category": "video_card",
+            "reason": "Good multi-monitor support for productivity"
+          }
+        ]
+      }
+    ],
+    "evaluation_metrics": {
+      "retrieval_accuracy": "Percentage of ground truth products found in top results",
+      "requirement_extraction": "Accuracy of extracted technical and business requirements",
+      "semantic_relevance": "Semantic similarity between query and retrieved products",
+      "hybrid_performance": "Performance comparison between keyword and semantic search",
+      "response_time": "Time taken for hybrid search completion"
+    },
+    "expected_behaviors": {
+      "keyword_search": "Should find products matching specific technical terms",
+      "semantic_search": "Should understand context and find conceptually related products",
+      "hybrid_merging": "Should combine and rank results from both search methods",
+      "requirement_analysis": "Should extract both explicit and implicit requirements",
+      "context_awareness": "Should consider industry and use case context"
+    }
+  }
+} 
