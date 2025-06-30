@@ -233,12 +233,47 @@ class ElasticsearchVectorService:
         # Create products vector index
         try:
             exists = await self.client.indices.exists(index=self.products_index)
-            if not exists:
-                await self.client.indices.delete(index=self.products_index)
-                logger.info(f"Deleted existing products index: {self.products_index}")
             
-            await self.client.indices.create(index=self.products_index, **products_mapping)
-            logger.info(f"Created products vector index: {self.products_index}")
+            # Check if we should force reload data
+            force_reload = getattr(settings, 'force_reload_data', False)
+            
+            if exists and not force_reload:
+                # Check if we need to update the mapping (only if index is empty or mapping needs changes)
+                try:
+                    # Get current mapping
+                    current_mapping = await self.client.indices.get_mapping(index=self.products_index)
+                    current_properties = current_mapping[self.products_index]['mappings']['properties']
+                    
+                    # Check if we have the new field mappings we need
+                    needs_update = False
+                    required_fields = ['form_factor', 'airflow', 'noise_level', 'rpm', 'size', 'capacity', 'speed']
+                    
+                    for field in required_fields:
+                        if field not in current_properties:
+                            needs_update = True
+                            break
+                    
+                    if needs_update:
+                        logger.info(f"Updating products index mapping: {self.products_index}")
+                        # Delete and recreate with new mapping
+                        await self.client.indices.delete(index=self.products_index)
+                        await self.client.indices.create(index=self.products_index, **products_mapping)
+                        logger.info(f"Updated products index with new mapping: {self.products_index}")
+                    else:
+                        logger.info(f"Products index already exists with correct mapping: {self.products_index}")
+                        
+                except Exception as mapping_error:
+                    logger.warning(f"Could not check mapping, recreating index: {mapping_error}")
+                    await self.client.indices.delete(index=self.products_index)
+                    await self.client.indices.create(index=self.products_index, **products_mapping)
+                    logger.info(f"Recreated products index: {self.products_index}")
+            else:
+                if exists and force_reload:
+                    logger.info(f"Force reload requested - deleting existing products index: {self.products_index}")
+                    await self.client.indices.delete(index=self.products_index)
+                
+                await self.client.indices.create(index=self.products_index, **products_mapping)
+                logger.info(f"Created products vector index: {self.products_index}")
         except Exception as e:
             logger.warning(f"Products vector index creation issue: {e}")
         
@@ -593,6 +628,17 @@ class ElasticsearchVectorService:
     async def load_data_from_json(self, max_per_file: int = 50):
         """Load data from JSON files with vector embeddings, passing filename for category inference"""
         try:
+            # Check if data loading should be skipped
+            skip_loading = getattr(settings, 'skip_data_loading', False)
+            if skip_loading:
+                logger.info("Data loading skipped due to SKIP_DATA_LOADING configuration")
+                return {
+                    "files_processed": 0,
+                    "products_indexed": 0,
+                    "solutions_indexed": 0,
+                    "skipped": True
+                }
+            
             logger.info(f"Loading data into Elasticsearch with vector embeddings...")
             data_dir = settings.data_dir
             total_products_indexed = 0
