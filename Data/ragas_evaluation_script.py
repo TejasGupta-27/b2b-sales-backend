@@ -10,11 +10,17 @@ import json
 import asyncio
 import time
 import re
+import sys
+import os
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
-from difflib import SequenceMatcher
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Add the app directory to Python path for imports
+sys.path.append('/app')
 
 @dataclass
 class EvaluationResult:
@@ -34,12 +40,32 @@ class EvaluationResult:
 class RAGASEvaluator:
     """RAGAS-style evaluator for hybrid product retriever agent"""
     
-    def __init__(self):
-        """Initialize the evaluator"""
-        pass
+    def __init__(self, embedding_model_name: str = "all-MiniLM-L6-v2"):
+        """Initialize the evaluator with embedding model"""
+        try:
+            self.embedding_model = SentenceTransformer(embedding_model_name)
+            self.use_embeddings = True
+            print(f"✅ Using sentence-transformers with model: {embedding_model_name}")
+        except Exception as e:
+            print(f"⚠️  Failed to load sentence-transformers: {e}")
+            print("   Falling back to text similarity method")
+            self.embedding_model = None
+            self.use_embeddings = False
         
-    def calculate_text_similarity(self, text1: str, text2: str) -> float:
-        """Calculate text similarity using sequence matcher"""
+    def calculate_semantic_similarity(self, text1: str, text2: str) -> float:
+        """Calculate semantic similarity between two texts"""
+        if self.use_embeddings and self.embedding_model:
+            try:
+                embeddings = self.embedding_model.encode([text1, text2])
+                similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
+                return float(similarity)
+            except Exception as e:
+                print(f"⚠️  Embedding similarity failed: {e}")
+                # Fall back to text similarity
+                pass
+        
+        # Fallback to text similarity
+        from difflib import SequenceMatcher
         return SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
     
     def extract_requirements_from_conversation(self, conversation: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -94,8 +120,8 @@ class RAGASEvaluator:
         
         retrieved_info = set()
         for product in retrieved:
-            retrieved_info.add(product["name"].lower())
-            retrieved_info.add(product["category"].lower())
+            retrieved_info.add(product.get("name", "").lower())
+            retrieved_info.add(product.get("category", "").lower())
         
         matches = len(ground_truth_info.intersection(retrieved_info))
         return matches / len(ground_truth_info) if ground_truth_info else 0.0
@@ -136,17 +162,45 @@ class RAGASEvaluator:
         # Calculate average similarity
         similarities = []
         for product_text in product_texts:
-            similarity = self.calculate_text_similarity(query, product_text)
+            similarity = self.calculate_semantic_similarity(query, product_text)
             similarities.append(similarity)
         
         return np.mean(similarities) if similarities else 0.0
 
-async def run_ragas_evaluation(agent, dataset_path: str = "Data/ragas_test_dataset.json") -> Dict[str, Any]:
+async def initialize_hybrid_retriever():
+    """Initialize the hybrid product retriever agent"""
+    try:
+        from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
+        from ai_services.openai_agent import OpenAIAgent
+        from config import settings
+        
+        # Initialize base provider (OpenAI)
+        base_provider = OpenAIAgent()
+        
+        # Initialize hybrid retriever
+        hybrid_retriever = HybridProductRetrieverAgent(
+            base_provider=base_provider,
+            azure_embedding_endpoint=settings.azure_embedding_endpoint,
+            azure_embedding_key=settings.azure_embedding_api_key
+        )
+        
+        # Initialize the retriever
+        await hybrid_retriever.initialize()
+        
+        print("✅ Hybrid Product Retriever initialized successfully")
+        return hybrid_retriever
+        
+    except Exception as e:
+        print(f"❌ Failed to initialize hybrid retriever: {e}")
+        print("   Will use simulation mode instead")
+        return None
+
+async def run_ragas_evaluation(agent=None, dataset_path: str = "Data/ragas_test_dataset.json") -> Dict[str, Any]:
     """
     Run RAGAS evaluation on the hybrid product retriever agent
     
     Args:
-        agent: Initialized HybridProductRetrieverAgent instance
+        agent: Initialized HybridProductRetrieverAgent instance (optional)
         dataset_path: Path to the test dataset JSON file
     
     Returns:
@@ -160,55 +214,77 @@ async def run_ragas_evaluation(agent, dataset_path: str = "Data/ragas_test_datas
     evaluator = RAGASEvaluator()
     results = []
     
+    # Initialize agent if not provided
+    if agent is None:
+        print("🔧 Initializing Hybrid Product Retriever Agent...")
+        agent = await initialize_hybrid_retriever()
+    
     print(f"Starting RAGAS evaluation with {len(dataset['dataset']['scenarios'])} scenarios...")
+    print(f"Agent type: {'Hybrid Product Retriever' if agent else 'Simulation Mode'}")
     
     for scenario in dataset['dataset']['scenarios']:
         print(f"\nEvaluating scenario: {scenario['id']}")
         
-        # Combine conversation into a single query
-        conversation_text = " ".join([
-            msg["content"] for msg in scenario['conversation']
-        ])
+        # Convert conversation to AIMessage format
+        from ai_services.base import AIMessage
+        conversation_messages = [
+            AIMessage(role=msg["role"], content=msg["content"])
+            for msg in scenario['conversation']
+        ]
         
         # Extract requirements using our evaluator
         extracted_requirements = evaluator.extract_requirements_from_conversation(
             scenario['conversation']
         )
         
-        # Simulate agent retrieval (you'll need to adapt this to your actual agent)
+        # Use actual agent or simulation
         start_time = time.time()
         
         try:
-            # This is a placeholder - you'll need to call your actual agent
-            # retrieved_products = await agent.search_products(conversation_text)
-            
-            # For now, we'll simulate some retrieved products based on the scenario
-            if "video editing" in conversation_text.lower():
-                retrieved_products = [
-                    {"name": "AMD Ryzen 9 7950X", "category": "cpu"},
-                    {"name": "32GB DDR5 RAM", "category": "memory"},
-                    {"name": "NVIDIA RTX 4080", "category": "video_card"}
-                ]
-            elif "nas" in conversation_text.lower() or "storage" in conversation_text.lower():
-                retrieved_products = [
-                    {"name": "Synology DS920+", "category": "storage"},
-                    {"name": "WD Red 4TB HDD", "category": "storage"}
-                ]
-            elif "gaming" in conversation_text.lower():
-                retrieved_products = [
-                    {"name": "NVIDIA RTX 4070 Ti", "category": "video_card"},
-                    {"name": "AMD Ryzen 7 7700X", "category": "cpu"}
-                ]
-            elif "ai" in conversation_text.lower() or "training" in conversation_text.lower():
-                retrieved_products = [
-                    {"name": "NVIDIA RTX 4090", "category": "video_card"},
-                    {"name": "Samsung 990 Pro 2TB NVMe", "category": "storage"}
-                ]
+            if agent:
+                # Use actual hybrid retriever
+                retrieval_result = await agent.retrieve_products(
+                    conversation_messages, 
+                    scenario['customer_context']
+                )
+                
+                retrieved_products = retrieval_result.get('products', [])
+                print(f"  - Agent found {len(retrieved_products)} products")
+                print(f"  - Retrieval confidence: {retrieval_result.get('retrieval_confidence', 0.0):.2f}")
+                print(f"  - Search methods: {retrieval_result.get('search_methods', {}).get('methods', [])}")
+                
             else:
-                retrieved_products = [
-                    {"name": "Sample Product 1", "category": "cpu"},
-                    {"name": "Sample Product 2", "category": "memory"}
-                ]
+                # Fallback to simulation
+                conversation_text = " ".join([
+                    msg["content"] for msg in scenario['conversation']
+                ])
+                
+                if "video editing" in conversation_text.lower():
+                    retrieved_products = [
+                        {"name": "AMD Ryzen 9 7950X", "category": "cpu"},
+                        {"name": "32GB DDR5 RAM", "category": "memory"},
+                        {"name": "NVIDIA RTX 4080", "category": "video_card"}
+                    ]
+                elif "nas" in conversation_text.lower() or "storage" in conversation_text.lower():
+                    retrieved_products = [
+                        {"name": "Synology DS920+", "category": "storage"},
+                        {"name": "WD Red 4TB HDD", "category": "storage"}
+                    ]
+                elif "gaming" in conversation_text.lower():
+                    retrieved_products = [
+                        {"name": "NVIDIA RTX 4070 Ti", "category": "video_card"},
+                        {"name": "AMD Ryzen 7 7700X", "category": "cpu"}
+                    ]
+                elif "ai" in conversation_text.lower() or "training" in conversation_text.lower():
+                    retrieved_products = [
+                        {"name": "NVIDIA RTX 4090", "category": "video_card"},
+                        {"name": "Samsung 990 Pro 2TB NVMe", "category": "storage"}
+                    ]
+                else:
+                    retrieved_products = [
+                        {"name": "Sample Product 1", "category": "cpu"},
+                        {"name": "Sample Product 2", "category": "memory"}
+                    ]
             
             response_time = time.time() - start_time
             
@@ -224,7 +300,7 @@ async def run_ragas_evaluation(agent, dataset_path: str = "Data/ragas_test_datas
             )
             
             semantic_relevance = evaluator.calculate_semantic_relevance(
-                conversation_text,
+                " ".join([msg["content"] for msg in scenario['conversation']]),
                 retrieved_products
             )
             
@@ -256,6 +332,8 @@ async def run_ragas_evaluation(agent, dataset_path: str = "Data/ragas_test_datas
             
         except Exception as e:
             print(f"  - Error evaluating scenario: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     # Calculate overall metrics
@@ -282,7 +360,8 @@ async def run_ragas_evaluation(agent, dataset_path: str = "Data/ragas_test_datas
             "dataset_name": dataset['dataset']['name'],
             "total_scenarios": len(dataset['dataset']['scenarios']),
             "evaluated_scenarios": len(results),
-            "overall_metrics": overall_metrics
+            "overall_metrics": overall_metrics,
+            "agent_used": "Hybrid Product Retriever" if agent else "Simulation Mode"
         },
         "detailed_results": [
             {
@@ -331,6 +410,7 @@ def print_evaluation_report(report: Dict[str, Any]):
     metrics = summary["overall_metrics"]
     
     print(f"\nDataset: {summary['dataset_name']}")
+    print(f"Agent Used: {summary['agent_used']}")
     print(f"Scenarios Evaluated: {metrics['total_scenarios_evaluated']}/{summary['total_scenarios']}")
     
     print(f"\nOverall Metrics:")
@@ -348,12 +428,8 @@ def print_evaluation_report(report: Dict[str, Any]):
 # Example usage
 if __name__ == "__main__":
     async def main():
-        # This is an example - you'll need to initialize your actual agent
-        # agent = HybridProductRetrieverAgent(...)
-        # await agent.initialize()
-        
-        # For demonstration, we'll run without an actual agent
-        report = await run_ragas_evaluation(None)
+        # Run evaluation with actual agent
+        report = await run_ragas_evaluation()
         print_evaluation_report(report)
     
     asyncio.run(main()) 
