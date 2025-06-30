@@ -47,11 +47,26 @@
             "storage"
           ],
           "search_terms": [
-            "workstation",
-            "video editing",
-            "3D rendering",
-            "32GB RAM",
-            "GPU"
+            "AMD Ryzen 9 7950X 16-core processor",
+            "Intel Core i9-13900K workstation CPU",
+            "32GB DDR5-6000 RAM memory",
+            "64GB DDR5 workstation memory",
+            "NVIDIA RTX 4080 16GB graphics card",
+            "NVIDIA RTX 4070 Ti 12GB GPU",
+            "AMD Radeon RX 7900 XTX graphics",
+            "Samsung 990 Pro 2TB NVMe SSD",
+            "WD Black SN850X 2TB NVMe storage",
+            "Seagate FireCuda 530 2TB SSD",
+            "workstation motherboard X670E",
+            "Intel Z790 motherboard platform",
+            "high-performance CPU for video editing",
+            "professional GPU for 3D rendering",
+            "fast NVMe storage for video files",
+            "Adobe Premiere Pro compatible hardware",
+            "Blender 3D rendering workstation",
+            "After Effects video editing system",
+            "professional video editing workstation",
+            "3D modeling and rendering PC"
           ]
         },
         "llm_generated_product_names": [
@@ -116,11 +131,26 @@
             "network"
           ],
           "search_terms": [
-            "NAS",
-            "network storage",
-            "RAID",
-            "5TB",
-            "file sharing"
+            "Synology DS920+ 4-bay NAS",
+            "Synology DS923+ network storage",
+            "QNAP TS-453D-4G NAS server",
+            "WD Red Pro 4TB NAS hard drive",
+            "Seagate IronWolf Pro 4TB HDD",
+            "Toshiba N300 4TB NAS drive",
+            "Synology DiskStation DS220+",
+            "QNAP TS-251D-2G NAS",
+            "5TB RAID storage solution",
+            "network attached storage NAS",
+            "RAID 5 data protection",
+            "RAID 1 mirroring setup",
+            "small office file sharing",
+            "10 employee network storage",
+            "business NAS with RAID",
+            "reliable storage for office",
+            "data backup and protection",
+            "network file server",
+            "enterprise storage solution",
+            "business data management"
           ]
         },
         "llm_generated_product_names": [
@@ -181,11 +211,26 @@
             "storage"
           ],
           "search_terms": [
-            "gaming PC",
-            "1440p",
-            "ray tracing",
-            "NVIDIA",
-            "RTX"
+            "NVIDIA RTX 4070 Ti 12GB gaming GPU",
+            "NVIDIA RTX 4060 Ti 8GB graphics card",
+            "AMD Radeon RX 7700 XT 12GB",
+            "AMD Ryzen 7 7700X 8-core CPU",
+            "Intel Core i7-13700K processor",
+            "AMD Ryzen 5 7600X gaming CPU",
+            "32GB DDR5-6000 gaming memory",
+            "16GB DDR5-5600 RAM",
+            "Samsung 970 EVO Plus 1TB SSD",
+            "WD Black SN770 1TB NVMe",
+            "Crucial P5 Plus 1TB SSD",
+            "1440p gaming performance",
+            "ray tracing capable GPU",
+            "Cyberpunk 2077 gaming PC",
+            "AAA gaming at 1440p",
+            "high refresh rate gaming",
+            "NVIDIA DLSS support",
+            "gaming motherboard B650",
+            "Intel Z690 gaming platform",
+            "high-end gaming system"
           ]
         },
         "llm_generated_product_names": [
@@ -246,11 +291,26 @@
             "memory"
           ],
           "search_terms": [
-            "AI training",
-            "deep learning",
-            "24GB GPU",
-            "NVMe",
-            "server"
+            "NVIDIA RTX 4090 24GB AI training GPU",
+            "NVIDIA RTX 4080 16GB deep learning",
+            "NVIDIA RTX 3090 24GB machine learning",
+            "AMD Radeon RX 7900 XTX 24GB",
+            "Intel Core i9-13900K server CPU",
+            "AMD Ryzen 9 7950X workstation",
+            "Intel Xeon W-3400 series processor",
+            "128GB DDR5 ECC server memory",
+            "64GB DDR5 workstation RAM",
+            "Samsung 990 Pro 2TB NVMe SSD",
+            "WD Black SN850X 4TB NVMe",
+            "Sabrent Rocket 4 Plus 2TB",
+            "AI model training server",
+            "deep learning workstation",
+            "machine learning GPU with 24GB",
+            "large dataset training system",
+            "neural network training hardware",
+            "PyTorch TensorFlow compatible",
+            "CUDA deep learning acceleration",
+            "high-performance AI server"
           ]
         },
         "llm_generated_product_names": [
@@ -310,10 +370,26 @@
             "workstation"
           ],
           "search_terms": [
-            "multiple monitors",
-            "27-inch",
-            "color accurate",
-            "web development"
+            "LG 27UL850-W 27-inch 4K monitor",
+            "Dell UltraSharp U2723QE 27-inch",
+            "ASUS ProArt PA279CV 27-inch",
+            "BenQ PD2700U 27-inch 4K",
+            "Samsung U28R550UQNX 28-inch 4K",
+            "NVIDIA RTX 4060 8GB multi-monitor",
+            "AMD Radeon RX 7600 8GB graphics",
+            "Intel Arc A750 8GB GPU",
+            "AMD Ryzen 7 7700X productivity CPU",
+            "Intel Core i7-13700K workstation",
+            "32GB DDR5-6000 workstation memory",
+            "Samsung 970 EVO Plus 1TB SSD",
+            "WD Black SN770 1TB NVMe",
+            "multiple monitor setup",
+            "triple monitor configuration",
+            "color accurate display",
+            "web development workstation",
+            "remote work productivity setup",
+            "design work color calibration",
+            "professional development environment"
           ]
         },
         "llm_generated_product_names": [

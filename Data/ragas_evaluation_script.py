@@ -294,8 +294,17 @@ async def run_ragas_evaluation(agent=None, dataset_path: str = "/app/Data/ragas_
             response_time = time.time() - start_time
             
             # Calculate metrics
+            # Use llm_generated_product_names as ground truth, fallback to empty list if not found
+            ground_truth_products = scenario.get('llm_generated_product_names', [])
+            if ground_truth_products:
+                # Convert the structure to match expected format
+                ground_truth_products = [
+                    {"name": item.get("product_name", ""), "category": item.get("category", "")}
+                    for item in ground_truth_products
+                ]
+            
             retrieval_accuracy = evaluator.calculate_retrieval_accuracy(
-                scenario['ground_truth_products'], 
+                ground_truth_products, 
                 retrieved_products
             )
             
@@ -315,7 +324,7 @@ async def run_ragas_evaluation(agent=None, dataset_path: str = "/app/Data/ragas_
                 conversation=scenario['conversation'],
                 customer_context=scenario['customer_context'],
                 expected_requirements=scenario['expected_requirements'],
-                ground_truth_products=scenario['ground_truth_products'],
+                ground_truth_products=ground_truth_products,
                 retrieved_products=retrieved_products,
                 retrieval_accuracy=retrieval_accuracy,
                 requirement_extraction_accuracy=requirement_extraction_accuracy,
