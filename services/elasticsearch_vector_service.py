@@ -103,6 +103,83 @@ class ElasticsearchVectorService:
                     "compatibility": {"type": "text"},
                     "warranty": {"type": "text"},
                     "support_level": {"type": "keyword"},
+                    
+                    # Dynamic fields that can be strings, numbers, or arrays
+                    "form_factor": {"type": "text"},
+                    "airflow": {"type": "text"},
+                    "noise_level": {"type": "text"},
+                    "rpm": {"type": "text"},
+                    "size": {"type": "text"},
+                    "capacity": {"type": "text"},
+                    "speed": {"type": "text"},
+                    "modules": {"type": "text"},
+                    "core_count": {"type": "text"},
+                    "core_clock": {"type": "text"},
+                    "boost_clock": {"type": "text"},
+                    "tdp": {"type": "text"},
+                    "memory": {"type": "text"},
+                    "wattage": {"type": "text"},
+                    "screen_size": {"type": "text"},
+                    "resolution": {"type": "text"},
+                    "refresh_rate": {"type": "text"},
+                    "response_time": {"type": "text"},
+                    "panel_type": {"type": "text"},
+                    "aspect_ratio": {"type": "text"},
+                    "type": {"type": "text"},
+                    "color": {"type": "text"},
+                    "interface": {"type": "text"},
+                    "efficiency": {"type": "text"},
+                    "modular": {"type": "text"},
+                    "socket": {"type": "text"},
+                    "max_memory": {"type": "text"},
+                    "memory_slots": {"type": "text"},
+                    "side_panel": {"type": "text"},
+                    "external_volume": {"type": "text"},
+                    "internal_35_bays": {"type": "text"},
+                    "channels": {"type": "text"},
+                    "channel_wattage": {"type": "text"},
+                    "pwm": {"type": "text"},
+                    "frequency_response": {"type": "text"},
+                    "microphone": {"type": "text"},
+                    "wireless": {"type": "text"},
+                    "enclosure_type": {"type": "text"},
+                    "style": {"type": "text"},
+                    "switches": {"type": "text"},
+                    "backlit": {"type": "text"},
+                    "tenkeyless": {"type": "text"},
+                    "connection_type": {"type": "text"},
+                    "tracking_method": {"type": "text"},
+                    "max_dpi": {"type": "text"},
+                    "hand_orientation": {"type": "text"},
+                    "bd": {"type": "text"},
+                    "dvd": {"type": "text"},
+                    "cd": {"type": "text"},
+                    "bd_write": {"type": "text"},
+                    "dvd_write": {"type": "text"},
+                    "cd_write": {"type": "text"},
+                    "mode": {"type": "text"},
+                    "digital_audio": {"type": "text"},
+                    "snr": {"type": "text"},
+                    "sample_rate": {"type": "text"},
+                    "chipset": {"type": "text"},
+                    "configuration": {"type": "text"},
+                    "amount": {"type": "text"},
+                    "capacity_w": {"type": "text"},
+                    "capacity_va": {"type": "text"},
+                    "chipset": {"type": "text"},
+                    "length": {"type": "text"},
+                    "resolutions": {"type": "text"},
+                    "focus_type": {"type": "text"},
+                    "os": {"type": "text"},
+                    "fov": {"type": "text"},
+                    "protocol": {"type": "text"},
+                    "price_per_gb": {"type": "text"},
+                    "first_word_latency": {"type": "text"},
+                    "cas_latency": {"type": "text"},
+                    "cache": {"type": "text"},
+                    "graphics": {"type": "text"},
+                    "smt": {"type": "text"},
+                    
                     # Vector fields
                     "content_vector": {
                         "type": "dense_vector",
@@ -157,10 +234,11 @@ class ElasticsearchVectorService:
         try:
             exists = await self.client.indices.exists(index=self.products_index)
             if not exists:
-                await self.client.indices.create(index=self.products_index, **products_mapping)
-                logger.info(f"Created products vector index: {self.products_index}")
-            else:
-                logger.info(f"Products vector index already exists: {self.products_index}")
+                await self.client.indices.delete(index=self.products_index)
+                logger.info(f"Deleted existing products index: {self.products_index}")
+            
+            await self.client.indices.create(index=self.products_index, **products_mapping)
+            logger.info(f"Created products vector index: {self.products_index}")
         except Exception as e:
             logger.warning(f"Products vector index creation issue: {e}")
         
