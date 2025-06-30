@@ -171,11 +171,16 @@ async def initialize_hybrid_retriever():
     """Initialize the hybrid product retriever agent"""
     try:
         from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
-        from ai_services.openai_agent import OpenAIAgent
+        from ai_services.azure_openai import AzureOpenAIProvider
         from config import settings
         
-        # Initialize base provider (OpenAI)
-        base_provider = OpenAIAgent()
+        # Initialize base provider (Azure OpenAI)
+        base_provider = AzureOpenAIProvider(
+            api_key=settings.azure_openai_api_key,
+            endpoint=settings.azure_openai_endpoint,
+            deployment_name=settings.azure_openai_deployment_name,
+            api_version=settings.azure_openai_api_version
+        )
         
         # Initialize hybrid retriever
         hybrid_retriever = HybridProductRetrieverAgent(
