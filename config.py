@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     request_timeout: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
     
     # Database Configuration
-    postgres_user: str = os.getenv("POSTGRES_USER", "postgres")
-    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "postgres")
-    postgres_db: str = os.getenv("POSTGRES_DB", "b2b_sales")
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/b2b_sales")
+    postgres_user: str = os.getenv("POSTGRES_USER", "myuser")
+    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "mypassword")
+    postgres_db: str = os.getenv("POSTGRES_DB", "chat_db")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://myuser:mypassword@db:5432/chat_db")
     
     # Database Performance Settings
     db_echo_sql: bool = os.getenv("DB_ECHO_SQL", "False").lower() == "true"  # Disable SQL logging by default
@@ -73,7 +73,6 @@ class Settings(BaseSettings):
     # Speech Service Configuration
     speech_primary_provider: str = os.getenv("SPEECH_PRIMARY_PROVIDER", "elevenlabs")  # elevenlabs or whisper
     speech_fallback_enabled: bool = os.getenv("SPEECH_FALLBACK_ENABLED", "True").lower() == "true"
-    speech_tts_primary_retries: int = int(os.getenv("SPEECH_TTS_PRIMARY_RETRIES", "1"))  # Number of retries for primary TTS before fallback
     
     # Data loading configuration
     force_reload_data: bool = os.getenv("FORCE_RELOAD_DATA", "False").lower() == "true"
@@ -83,16 +82,6 @@ class Settings(BaseSettings):
     use_hybrid_retriever: bool = os.getenv("USE_HYBRID_RETRIEVER", "True").lower() == "true"
     elasticsearch_weight: float = float(os.getenv("ELASTICSEARCH_WEIGHT", "0.4"))
     semantic_weight: float = float(os.getenv("SEMANTIC_WEIGHT", "0.6"))
-    
-    # RRF (Reciprocal Rank Fusion) configuration for hybrid search
-    use_rrf_merging: bool = os.getenv("USE_RRF_MERGING", "True").lower() == "true"
-    rrf_k: float = float(os.getenv("RRF_K", "60.0"))  # RRF constant, default 60
-    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.5"))
-    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.5"))
-    
-    # Search result configuration
-    max_search_results_per_source: int = int(os.getenv("MAX_SEARCH_RESULTS_PER_SOURCE", "50"))
-    final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "20"))
     
     @property
     def cors_origins_list(self) -> List[str]:
