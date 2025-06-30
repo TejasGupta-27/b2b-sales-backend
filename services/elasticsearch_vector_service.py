@@ -8,6 +8,7 @@ import asyncio
 from elasticsearch.exceptions import ConnectionError, RequestError
 import aiohttp
 import numpy as np
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -207,24 +208,62 @@ class ElasticsearchVectorService:
             raise
     
     def _infer_category_from_filename(self, filename: str) -> str:
-        """Infer product category from filename (e.g., cpu.json -> cpu)"""
-        return filename.replace(".json", "").replace("-", "_")
+        """Infer product category from filename with flexible pattern matching"""
+        # Remove .json extension
+        base_name = filename.replace(".json", "")
+        
+        # Try to match against known categories in FIELD_MAP
+        for category in FIELD_MAP.keys():
+            # Handle various separators and formats
+            if re.match(rf'^{re.escape(category)}$', base_name, re.IGNORECASE):
+                return category
+            # Handle underscore variants
+            if re.match(rf'^{re.escape(category).replace("-", "_")}$', base_name, re.IGNORECASE):
+                return category
+            # Handle space variants
+            if re.match(rf'^{re.escape(category).replace("-", " ")}$', base_name, re.IGNORECASE):
+                return category
+        
+        # If no exact match, try to normalize and find closest match
+        normalized = re.sub(r'[_\s]+', '-', base_name.lower())
+        for category in FIELD_MAP.keys():
+            if normalized == category:
+                return category
+        
+        # Fallback: return the base name as-is
+        return base_name
 
     def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: str = None) -> str:
         """Create searchable text content for embedding, category-aware"""
         text_parts = []
         category = None
+        
         if filename:
             category = self._infer_category_from_filename(Path(filename).name)
-        if item_type == "product" and category in FIELD_MAP:
+        
+        if item_type == "product" and category and category in FIELD_MAP:
+            # Use category-specific field mapping
             text_parts.append(f"Category: {category}")
             for field in FIELD_MAP[category]:
                 value = item.get(field)
                 if value is not None:
                     text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
         else:
-            # Fallback to previous logic
-            return super()._create_searchable_content(item, item_type)
+            # Fallback to general field extraction
+            text_parts.append(f"Type: {item_type}")
+            
+            # Add common fields
+            common_fields = ['name', 'description', 'category', 'type', 'price', 'features', 'tags']
+            for field in common_fields:
+                value = item.get(field)
+                if value is not None:
+                    text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
+            
+            # Add any other fields that might be useful
+            for key, value in item.items():
+                if key not in common_fields and value is not None and isinstance(value, (str, int, float)):
+                    text_parts.append(f"{key.replace('_', ' ').capitalize()}: {value}")
+        
         return " | ".join(text_parts)
     
     async def index_product(self, product: Dict[str, Any], filename: str = None):
