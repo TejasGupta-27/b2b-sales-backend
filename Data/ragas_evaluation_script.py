@@ -195,7 +195,7 @@ async def initialize_hybrid_retriever():
         print("   Will use simulation mode instead")
         return None
 
-async def run_ragas_evaluation(agent=None, dataset_path: str = "Data/ragas_test_dataset.json") -> Dict[str, Any]:
+async def run_ragas_evaluation(agent=None, dataset_path: str = "/app/Data/ragas_test_dataset.json") -> Dict[str, Any]:
     """
     Run RAGAS evaluation on the hybrid product retriever agent
     
