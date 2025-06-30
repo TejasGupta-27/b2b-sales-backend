@@ -10,7 +10,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.elasticsearch_service import ElasticsearchService
+from services.elasticsearch_vector_service import ElasticsearchVectorService as ElasticsearchService
 from config import settings
 
 

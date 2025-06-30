@@ -11,6 +11,36 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Add a field mapping for each product category
+FIELD_MAP = {
+    "cpu": ["name", "core_count", "core_clock", "boost_clock", "tdp", "graphics", "smt"],
+    "monitor": ["name", "screen_size", "resolution", "refresh_rate", "response_time", "panel_type", "aspect_ratio"],
+    "memory": ["name", "speed", "modules", "price_per_gb", "color", "first_word_latency", "cas_latency"],
+    "motherboard": ["name", "socket", "form_factor", "max_memory", "memory_slots", "color"],
+    "case": ["name", "type", "color", "side_panel", "external_volume", "internal_35_bays"],
+    "power-supply": ["name", "price", "type", "efficiency", "wattage", "modular", "color"],
+    "case-accessory": ["name", "type", "form_factor"],
+    "case-fan": ["name", "size", "color", "rpm", "airflow", "noise_level", "pwm"],
+    "cpu-cooler": ["name", "rpm", "noise_level", "color", "size"],
+    "external-hard-drive": ["name", "type", "interface", "capacity", "price_per_gb", "color"],
+    "fan-controller": ["name", "channels", "channel_wattage", "pwm", "form_factor", "color"],
+    "headphones": ["name", "type", "frequency_response", "microphone", "wireless", "enclosure_type", "color"],
+    "internal-hard-drive": ["name", "capacity", "price_per_gb", "type", "cache", "form_factor", "interface"],
+    "keyboard": ["name", "style", "switches", "backlit", "tenkeyless", "connection_type", "color"],
+    "mouse": ["name", "tracking_method", "connection_type", "max_dpi", "hand_orientation", "color"],
+    "optical-drive": ["name", "bd", "dvd", "cd", "bd_write", "dvd_write", "cd_write"],
+    "os": ["name", "mode", "max_memory"],
+    "sound-card": ["name", "channels", "digital_audio", "snr", "sample_rate", "chipset", "interface"],
+    "speakers": ["name", "configuration", "wattage", "frequency_response", "color"],
+    "thermal-paste": ["name", "amount"],
+    "ups": ["name", "capacity_w", "capacity_va"],
+    "video-card": ["name", "price", "chipset", "memory", "core_clock", "boost_clock", "color", "length"],
+    "webcam": ["name", "price", "resolutions", "connection", "focus_type", "os", "fov"],
+    "wired-network-card": ["name", "price", "interface", "color"],
+    "wireless-network-card": ["name", "price", "protocol", "interface", "color"],
+   
+}
+
 class ElasticsearchVectorService:
     """Enhanced Elasticsearch service with vector search capabilities"""
     
@@ -176,53 +206,32 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to get embeddings: {e}")
             raise
     
-    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product") -> str:
-        """Create searchable text content for embedding"""
+    def _infer_category_from_filename(self, filename: str) -> str:
+        """Infer product category from filename (e.g., cpu.json -> cpu)"""
+        return filename.replace(".json", "").replace("-", "_")
+
+    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: str = None) -> str:
+        """Create searchable text content for embedding, category-aware"""
         text_parts = []
-        
-        if item_type == "product":
-            # Product-specific content
-            if item.get("name"):
-                text_parts.append(f"Product: {item['name']}")
-            if item.get("category"):
-                text_parts.append(f"Category: {item['category']}")
-            if item.get("subcategory"):
-                text_parts.append(f"Subcategory: {item['subcategory']}")
-            if item.get("description"):
-                text_parts.append(f"Description: {item['description']}")
-            if item.get("features"):
-                text_parts.append(f"Features: {item['features']}")
-            if item.get("use_cases"):
-                text_parts.append(f"Use cases: {item['use_cases']}")
-            if item.get("tags"):
-                tags = item["tags"] if isinstance(item["tags"], list) else [item["tags"]]
-                text_parts.append(f"Tags: {', '.join(tags)}")
-            if item.get("target_industries"):
-                industries = item["target_industries"] if isinstance(item["target_industries"], list) else [item["target_industries"]]
-                text_parts.append(f"Industries: {', '.join(industries)}")
-                
-        else:  # solution
-            if item.get("name"):
-                text_parts.append(f"Solution: {item['name']}")
-            if item.get("description"):
-                text_parts.append(f"Description: {item['description']}")
-            if item.get("use_case"):
-                text_parts.append(f"Use case: {item['use_case']}")
-            if item.get("industry"):
-                industries = item["industry"] if isinstance(item["industry"], list) else [item["industry"]]
-                text_parts.append(f"Industries: {', '.join(industries)}")
-            if item.get("benefits"):
-                text_parts.append(f"Benefits: {item['benefits']}")
-            if item.get("requirements"):
-                text_parts.append(f"Requirements: {item['requirements']}")
-        
+        category = None
+        if filename:
+            category = self._infer_category_from_filename(Path(filename).name)
+        if item_type == "product" and category in FIELD_MAP:
+            text_parts.append(f"Category: {category}")
+            for field in FIELD_MAP[category]:
+                value = item.get(field)
+                if value is not None:
+                    text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
+        else:
+            # Fallback to previous logic
+            return super()._create_searchable_content(item, item_type)
         return " | ".join(text_parts)
     
-    async def index_product(self, product: Dict[str, Any]):
-        """Index a product with vector embedding"""
+    async def index_product(self, product: Dict[str, Any], filename: str = None):
+        """Index a product with vector embedding, using category-aware content"""
         try:
             # Generate searchable content
-            searchable_content = self._create_searchable_content(product, "product")
+            searchable_content = self._create_searchable_content(product, "product", filename)
             
             # Get embedding
             embeddings = await self.get_embeddings([searchable_content])
@@ -465,62 +474,49 @@ class ElasticsearchVectorService:
             return []
     
     async def load_data_from_json(self, max_per_file: int = 50):
-        """Load data from JSON files with vector embeddings"""
+        """Load data from JSON files with vector embeddings, passing filename for category inference"""
         try:
             logger.info(f"Loading data into Elasticsearch with vector embeddings...")
-            
             data_dir = settings.data_dir
             total_products_indexed = 0
             total_solutions_indexed = 0
             files_processed = 0
-            
-            # Process all JSON files
             for json_file in data_dir.glob("*.json"):
                 try:
                     logger.info(f"Processing file: {json_file.name}")
-                    
                     with open(json_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    
                     file_products = 0
                     file_solutions = 0
-                    
-                    # Handle different JSON structures
                     if isinstance(data, list):
                         items = data[:max_per_file]
                         for item in items:
                             if self._is_product_data(item):
-                                await self.index_product(item)
+                                await self.index_product(item, filename=json_file.name)
                                 file_products += 1
                             elif self._is_solution_data(item):
                                 await self.index_solution(item)
                                 file_solutions += 1
-                    
                     elif isinstance(data, dict):
                         if 'products' in data:
                             products = data['products'][:max_per_file]
                             for product in products:
                                 if self._is_valid_product(product):
-                                    await self.index_product(product)
+                                    await self.index_product(product, filename=json_file.name)
                                     file_products += 1
-                        
                         if 'solutions' in data:
                             solutions = data['solutions'][:max_per_file]
                             for solution in solutions:
                                 if self._is_valid_solution(solution):
                                     await self.index_solution(solution)
                                     file_solutions += 1
-                    
                     total_products_indexed += file_products
                     total_solutions_indexed += file_solutions
                     files_processed += 1
-                    
                     logger.info(f"✅ {json_file.name}: {file_products} products, {file_solutions} solutions")
-                    
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to process {json_file.name}: {e}")
                     continue
-            
             # Refresh indices - only if they exist and have data
             try:
                 if total_products_indexed > 0:
@@ -611,6 +607,243 @@ class ElasticsearchVectorService:
         """Close Elasticsearch connection"""
         await self.client.close()
 
+    # ===== COMPATIBILITY METHODS FOR OLD SERVICE INTERFACE =====
+    
+    async def search_products(self, query_body: dict, index: str = "products") -> List[Dict]:
+        """Compatibility method for old service interface - converts to vector search"""
+        try:
+            # Extract query from query_body if it's a string
+            if isinstance(query_body, str):
+                query = query_body
+            elif isinstance(query_body, dict):
+                # Try to extract query from various possible structures
+                if "query" in query_body:
+                    query_part = query_body["query"]
+                    if isinstance(query_part, dict) and "multi_match" in query_part:
+                        query = query_part["multi_match"]["query"]
+                    elif isinstance(query_part, dict) and "match" in query_part:
+                        query = query_part["match"].get("name", "")
+                    else:
+                        query = str(query_part)
+                else:
+                    query = str(query_body)
+            else:
+                query = str(query_body)
+            
+            # Use vector search with hybrid approach
+            return await self.vector_search_products(query, size=20, hybrid_weight=0.2)
+            
+        except Exception as e:
+            logger.error(f"Compatibility search_products failed: {e}")
+            return []
+    
+    async def search_products_by_requirements(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
+        """Compatibility method for old service interface - converts requirements to vector search"""
+        try:
+            # Build query from requirements
+            search_terms = requirements.get('search_terms', [])
+            categories = requirements.get('product_categories', [])
+            tech_reqs = requirements.get('technical_requirements', [])
+            business_reqs = requirements.get('business_requirements', [])
+            
+            # Combine all search terms
+            all_terms = search_terms + categories + tech_reqs + business_reqs
+            query = " ".join([str(term) for term in all_terms if term])
+            
+            if not query:
+                query = "business technology professional enterprise"
+            
+            # Use vector search with hybrid approach
+            return await self.vector_search_products(query, size=size, hybrid_weight=0.2)
+            
+        except Exception as e:
+            logger.error(f"Compatibility search_products_by_requirements failed: {e}")
+            return []
+    
+    async def search_products_with_fallback(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
+        """Compatibility method for old service interface - uses vector search with fallback"""
+        try:
+            results = await self.search_products_by_requirements(requirements, size)
+            if results:
+                return results
+            
+            # Fallback to random products
+            return await self.get_random_products(size)
+            
+        except Exception as e:
+            logger.error(f"Compatibility search_products_with_fallback failed: {e}")
+            return []
+    
+    async def get_random_products(self, size: int = 10) -> List[Dict]:
+        """Compatibility method for old service interface - get random products"""
+        try:
+            search_body = {
+                "size": size,
+                "query": {
+                    "function_score": {
+                        "query": {"match_all": {}},
+                        "random_score": {},
+                        "boost_mode": "replace"
+                    }
+                }
+            }
+            
+            response = await self.client.search(index=self.products_index, body=search_body)
+            
+            results = []
+            for hit in response["hits"]["hits"]:
+                product = hit["_source"]
+                results.append(product)
+            
+            logger.info(f"Retrieved {len(results)} random products")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Random products retrieval failed: {e}")
+            return []
+    
+    async def search_solutions(self, requirements: Dict[str, Any], size: int = 5) -> List[Dict]:
+        """Compatibility method for old service interface - search solutions"""
+        try:
+            # Build query from requirements
+            use_case = requirements.get('use_case', '')
+            industry = requirements.get('industry', '')
+            company_size = requirements.get('company_size', '')
+            
+            query = f"{use_case} {industry} {company_size}".strip()
+            if not query:
+                query = "business solution"
+            
+            return await self.vector_search_solutions(query, size=size, hybrid_weight=0.2)
+            
+        except Exception as e:
+            logger.error(f"Solution search failed: {e}")
+            return []
+    
+    async def get_product_categories(self) -> List[str]:
+        """Compatibility method for old service interface - get product categories"""
+        try:
+            response = await self.client.search(
+                index=self.products_index,
+                body={
+                    "size": 0,
+                    "aggs": {
+                        "categories": {
+                            "terms": {
+                                "field": "category",
+                                "size": 100
+                            }
+                        }
+                    }
+                }
+            )
+            
+            categories = []
+            for bucket in response["aggregations"]["categories"]["buckets"]:
+                categories.append(bucket["key"])
+            
+            return categories
+        except Exception as e:
+            logger.error(f"Failed to get categories: {e}")
+            return []
+    
+    async def get_product_stats(self) -> Dict[str, Any]:
+        """Compatibility method for old service interface - get product statistics"""
+        try:
+            # Get total count
+            count_response = await self.client.count(index=self.products_index)
+            total_products = count_response['count']
+            
+            # Get category breakdown
+            categories_response = await self.client.search(
+                index=self.products_index,
+                body={
+                    "size": 0,
+                    "aggs": {
+                        "categories": {
+                            "terms": {"field": "category", "size": 20}
+                        },
+                        "price_stats": {
+                            "stats": {"field": "price"}
+                        }
+                    }
+                }
+            )
+            
+            categories = {}
+            for bucket in categories_response["aggregations"]["categories"]["buckets"]:
+                categories[bucket["key"]] = bucket["doc_count"]
+            
+            price_stats = categories_response["aggregations"]["price_stats"]
+            
+            return {
+                "total_products": total_products,
+                "categories": categories,
+                "price_range": {
+                    "min": price_stats.get("min", 0),
+                    "max": price_stats.get("max", 0),
+                    "avg": price_stats.get("avg", 0)
+                }
+            }
+        except Exception as e:
+            logger.error(f"Failed to get product stats: {e}")
+            return {"total_products": 0, "categories": {}, "price_range": {}}
+    
+    async def reindex_all_data(self, force_replace: bool = False):
+        """Compatibility method for old service interface - reindex all data"""
+        try:
+            logger.info("Reindexing all data with vector embeddings...")
+            await self.load_data_from_json(max_per_file=50)
+            logger.info("Successfully reindexed all data with vectors")
+        except Exception as e:
+            logger.error(f"Failed to reindex data: {e}")
+            raise
+    
+    async def get_cluster_health(self) -> Dict[str, Any]:
+        """Compatibility method for old service interface - get cluster health"""
+        try:
+            health = await self.client.cluster.health()
+            return {
+                "status": health["status"],
+                "number_of_nodes": health["number_of_nodes"],
+                "active_primary_shards": health["active_primary_shards"],
+                "active_shards": health["active_shards"]
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cluster health: {e}")
+            return {"status": "red", "error": str(e)}
+    
+    async def _safe_count(self, index: str) -> int:
+        """Compatibility method for old service interface - safe count"""
+        try:
+            response = await self.client.count(index=index)
+            return response.get('count', 0)
+        except Exception as e:
+            logger.error(f"Count failed for {index}: {e}")
+            return 0
+    
+    async def _wait_for_cluster_ready(self, max_attempts: int = 10, delay: float = 2.0):
+        """Compatibility method for old service interface - wait for cluster"""
+        for attempt in range(max_attempts):
+            try:
+                health = await self.client.cluster.health(
+                    wait_for_status='yellow',
+                    timeout='2s',
+                    request_timeout=3
+                )
+                
+                if health['status'] in ['green', 'yellow']:
+                    logger.info(f"Cluster ready: {health['status']} status")
+                    return True
+                    
+            except Exception as e:
+                logger.warning(f"Cluster not ready (attempt {attempt + 1}/{max_attempts}): {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(delay)
+        
+        logger.warning("Cluster readiness timeout - proceeding anyway")
+        return False
+
 # Global instance
 _elasticsearch_vector_service = None
 
@@ -619,4 +852,18 @@ def get_elasticsearch_vector_service(azure_embedding_endpoint: str, azure_embedd
     global _elasticsearch_vector_service
     if _elasticsearch_vector_service is None:
         _elasticsearch_vector_service = ElasticsearchVectorService(azure_embedding_endpoint, azure_embedding_key)
-    return _elasticsearch_vector_service 
+    return _elasticsearch_vector_service
+
+# Compatibility wrapper for drop-in replacement
+def get_elasticsearch_service() -> ElasticsearchVectorService:
+    """Compatibility function to replace the old service - uses vector service with default Azure credentials"""
+    from config import settings
+    
+    # Use the same Azure credentials as the main AI service
+    azure_embedding_endpoint = settings.azure_embedding_endpoint
+    azure_embedding_key = settings.azure_embedding_api_key
+    
+    if not azure_embedding_endpoint or not azure_embedding_key:
+        raise ValueError("Azure embedding credentials not configured. Please set AZURE_EMBEDDING_ENDPOINT and AZURE_OPENAI_API_KEY environment variables.")
+    
+    return get_elasticsearch_vector_service(azure_embedding_endpoint, azure_embedding_key) 

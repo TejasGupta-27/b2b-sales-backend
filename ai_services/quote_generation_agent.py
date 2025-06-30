@@ -8,7 +8,7 @@ import logging
 from .base import AIProvider, AIMessage, AIResponse
 from .function_models import QuoteData, CustomerInfo, QuoteLineItem
 from services.pdf_generator import PDFGenerator
-from services.elasticsearch_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_service
 from .dynamic_extraction_agent import DynamicExtractionAgent
 from pydantic import BaseModel, Field
 from pathlib import Path

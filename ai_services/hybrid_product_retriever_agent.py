@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from .base import AIProvider, AIMessage, AIResponse
-from services.elasticsearch_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from .function_models import RequirementExtraction, ProductAnalysis
 from config import settings

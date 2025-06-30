@@ -10,7 +10,6 @@ from datetime import datetime
 import uuid
 from pathlib import Path
 import logging
-from services import elasticsearch_service
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text, func, and_
@@ -38,9 +37,9 @@ from models.chat import MessageType, ChatRequest, ChatResponse
 from models.lead import Lead
 
 # Import services
-from services.elasticsearch_service import get_elasticsearch_service
-from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from services.cache_service import get_cache_service, start_cache_cleanup_task
+from services.elasticsearch_vector_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 
 # Import configuration
 from config import settings
