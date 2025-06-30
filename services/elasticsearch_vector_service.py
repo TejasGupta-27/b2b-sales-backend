@@ -63,12 +63,47 @@ class ElasticsearchVectorService:
     async def initialize(self):
         """Initialize Elasticsearch with vector search capabilities"""
         try:
+            # Wait for Elasticsearch to be healthy before proceeding
+            await self._wait_for_elasticsearch_ready()
             await self.test_connection()
             await self.create_vector_indices()
             logger.info("Elasticsearch Vector Service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Elasticsearch Vector Service: {e}")
             raise
+    
+    async def _wait_for_elasticsearch_ready(self, max_attempts: int = 30, delay: float = 2.0):
+        """Wait for Elasticsearch to be healthy and ready"""
+        logger.info("Waiting for Elasticsearch to be ready...")
+        
+        for attempt in range(max_attempts):
+            try:
+                # Test basic connectivity
+                info = await self.client.info()
+                cluster_name = info.get('cluster_name', 'unknown')
+                
+                # Check cluster health
+                health = await self.client.cluster.health(
+                    wait_for_status='yellow',
+                    timeout='5s',
+                    request_timeout=10
+                )
+                
+                status = health['status']
+                if status in ['green', 'yellow']:
+                    logger.info(f"✅ Elasticsearch ready: {cluster_name} (status: {status})")
+                    return True
+                else:
+                    logger.info(f"⏳ Elasticsearch status: {status} (attempt {attempt + 1}/{max_attempts})")
+                    
+            except Exception as e:
+                logger.info(f"⏳ Waiting for Elasticsearch... (attempt {attempt + 1}/{max_attempts}): {str(e)[:100]}")
+            
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(delay)
+        
+        logger.error(f"❌ Elasticsearch not ready after {max_attempts} attempts")
+        raise Exception("Elasticsearch failed to become ready within the timeout period")
     
     async def test_connection(self):
         """Test Elasticsearch connection"""
