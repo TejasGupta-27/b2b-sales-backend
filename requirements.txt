@@ -53,3 +53,32 @@ elevenlabs>=1.0.0
 
 # PowerPoint generation
 python-pptx>=0.6.21
+
+# RAGAS Evaluation Framework Dependencies
+
+
+# Enhanced evaluation metrics
+scikit-learn>=1.0.0
+scipy>=1.7.0
+
+# Visualization of evaluation results
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Advanced NLP metrics for evaluation
+nltk>=3.7
+spacy>=3.4.0
+
+# Semantic similarity calculations (sentence-transformers already included above)
+# sentence-transformers>=2.2.0
+# torch>=1.12.0 (already included above)
+
+# JSON schema validation for test datasets
+jsonschema>=3.2.0
+
+# Async support for evaluation
+asyncio-compat>=0.1.0
+
+# Development and testing for evaluation framework
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
