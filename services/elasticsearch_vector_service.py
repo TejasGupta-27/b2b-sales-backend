@@ -97,10 +97,16 @@ class ElasticsearchVectorService:
                     logger.info(f"⏳ Elasticsearch status: {status} (attempt {attempt + 1}/{max_attempts})")
                     
             except Exception as e:
-                logger.info(f"⏳ Waiting for Elasticsearch... (attempt {attempt + 1}/{max_attempts}): {str(e)[:100]}")
+                error_msg = str(e)
+                if "Connection error" in error_msg or "Cannot connect" in error_msg:
+                    logger.info(f"⏳ Waiting for Elasticsearch connection... (attempt {attempt + 1}/{max_attempts})")
+                else:
+                    logger.info(f"⏳ Elasticsearch not ready... (attempt {attempt + 1}/{max_attempts}): {error_msg[:100]}")
             
             if attempt < max_attempts - 1:
-                await asyncio.sleep(delay)
+                # Use exponential backoff with max delay of 10 seconds
+                current_delay = min(delay * (1.5 ** attempt), 10.0)
+                await asyncio.sleep(current_delay)
         
         logger.error(f"❌ Elasticsearch not ready after {max_attempts} attempts")
         raise Exception("Elasticsearch failed to become ready within the timeout period")
@@ -637,6 +643,9 @@ class ElasticsearchVectorService:
                     "solutions_indexed": 0,
                     "skipped": True
                 }
+            
+            # Ensure Elasticsearch is ready before loading data
+            await self._wait_for_elasticsearch_ready()
             
             logger.info(f"Loading data into Elasticsearch with vector embeddings...")
             data_dir = settings.data_dir

@@ -188,25 +188,15 @@ async def startup_event():
             elasticsearch_service = get_elasticsearch_service()
             await elasticsearch_service.initialize()
             logger.info("✅ Elasticsearch initialized successfully")
-        except Exception as e:
-            logger.error(f"❌ Elasticsearch initialization failed: {e}")
-            raise  # Re-raise the exception since Elasticsearch is critical
-        
-        # Test database connection (remove await since it's not async)
-        test_connection()
-        
-        # Create database tables
-        create_tables()
-        
-        # Initialize Elasticsearch Vector Service if hybrid retriever is enabled
-        if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
-            try:
-                vector_service = get_elasticsearch_vector_service(
-                    azure_embedding_endpoint=settings.azure_embedding_endpoint,
-                    azure_embedding_key=settings.azure_embedding_api_key
-                )
-                await vector_service.initialize()
-                logger.info("✅ Elasticsearch Vector Service initialized successfully")
+            
+            # If hybrid retriever is enabled, the vector service is already initialized
+            # since get_elasticsearch_service() returns the vector service
+            if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
+                vector_service = elasticsearch_service
+                logger.info("✅ Elasticsearch Vector Service ready (using same instance)")
+                
+                # Add a small delay to ensure Elasticsearch is fully ready
+                await asyncio.sleep(2)
                 
                 # Check if vector indices are empty and need population
                 stats = await vector_service.get_collection_stats()
@@ -220,13 +210,18 @@ async def startup_event():
                     logger.info(f"✅ Vector force reload completed: {result}")
                 else:
                     logger.info(f"✅ Vector indices already have data: {stats}")
-                
-            except Exception as vector_error:
-                logger.error(f"❌ Elasticsearch Vector Service initialization failed: {vector_error}")
-                vector_service = None
-                logger.info("🔄 Continuing without vector search...")
-        else:
-            logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
+            else:
+                logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
+            
+        except Exception as e:
+            logger.error(f"❌ Elasticsearch initialization failed: {e}")
+            raise  # Re-raise the exception since Elasticsearch is critical
+        
+        # Test database connection (remove await since it's not async)
+        test_connection()
+        
+        # Create database tables
+        create_tables()
         
         # Initialize SpeechService ONCE
         speech_service = SpeechService(model_name="medium")
