@@ -9,11 +9,11 @@ def wait_for_db():
     retry_count = 0
     
     db_config = {
-        'host': 'db',
+        'host': 'postgres',
         'port': 5432,
-        'user': os.getenv('POSTGRES_USER', 'myuser'),
-        'password': os.getenv('POSTGRES_PASSWORD', 'mypassword'),
-        'database': os.getenv('POSTGRES_DB', 'chat_db')
+        'user': os.getenv('POSTGRES_USER', 'postgres'),
+        'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+        'database': os.getenv('POSTGRES_DB', 'b2b_sales')
     }
     
     while retry_count < max_retries:

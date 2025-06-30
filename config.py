@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     request_timeout: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
     
     # Database Configuration
-    postgres_user: str = os.getenv("POSTGRES_USER", "myuser")
-    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "mypassword")
-    postgres_db: str = os.getenv("POSTGRES_DB", "chat_db")
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://myuser:mypassword@db:5432/chat_db")
+    postgres_user: str = os.getenv("POSTGRES_USER", "postgres")
+    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "postgres")
+    postgres_db: str = os.getenv("POSTGRES_DB", "b2b_sales")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/b2b_sales")
     
     # Database Performance Settings
     db_echo_sql: bool = os.getenv("DB_ECHO_SQL", "False").lower() == "true"  # Disable SQL logging by default
