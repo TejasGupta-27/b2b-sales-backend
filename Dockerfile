@@ -25,7 +25,7 @@ RUN pip install uv
 COPY requirements.txt .
 
 # Install Python dependencies using uv (better dependency resolution)
-RUN uv pip install --no-cache -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy the application code
 COPY . .
