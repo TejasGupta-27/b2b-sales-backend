@@ -42,6 +42,38 @@ FIELD_MAP = {
    
 }
 
+# Category to index mapping for per-category indices
+CATEGORY_INDEX_MAP = {
+    "cpu": "cpu_vector",
+    "video-card": "gpu_vector", 
+    "memory": "memory_vector",
+    "monitor": "monitor_vector",
+    "motherboard": "motherboard_vector",
+    "power-supply": "power_vector",
+    "case": "case_vector",
+    "case-accessory": "case_accessory_vector",
+    "case-fan": "case_fan_vector",
+    "cpu-cooler": "cpu_cooler_vector",
+    "external-hard-drive": "external_storage_vector",
+    "internal-hard-drive": "internal_storage_vector",
+    "fan-controller": "fan_controller_vector",
+    "headphones": "headphones_vector",
+    "keyboard": "keyboard_vector",
+    "mouse": "mouse_vector",
+    "optical-drive": "optical_drive_vector",
+    "os": "os_vector",
+    "sound-card": "sound_card_vector",
+    "speakers": "speakers_vector",
+    "thermal-paste": "thermal_paste_vector",
+    "ups": "ups_vector",
+    "webcam": "webcam_vector",
+    "wired-network-card": "network_wired_vector",
+    "wireless-network-card": "network_wireless_vector",
+}
+
+# Default index for uncategorized products
+DEFAULT_PRODUCTS_INDEX = "other_products_vector"
+
 class ElasticsearchVectorService:
     """Enhanced Elasticsearch service with vector search capabilities"""
     
@@ -54,7 +86,7 @@ class ElasticsearchVectorService:
             retry_on_timeout=True,
             max_retries=3
         )
-        self.products_index = f"{settings.elasticsearch_index_products}_vector"
+        # Remove single index approach - we'll use per-category indices
         self.solutions_index = f"{settings.elasticsearch_index_solutions}_vector"
         self.azure_embedding_endpoint = azure_embedding_endpoint
         self.azure_embedding_key = azure_embedding_key
@@ -122,7 +154,7 @@ class ElasticsearchVectorService:
             return False
     
     async def create_vector_indices(self):
-        """Create Elasticsearch indices with vector search mappings"""
+        """Create Elasticsearch indices with vector search mappings - one per category"""
         
         # Products index with vector mapping
         products_mapping = {
@@ -238,7 +270,30 @@ class ElasticsearchVectorService:
             }
         }
         
-        # Solutions index with vector mapping
+        # Create per-category product indices
+        for category, index_name in CATEGORY_INDEX_MAP.items():
+            try:
+                exists = await self.client.indices.exists(index=index_name)
+                if not exists:
+                    await self.client.indices.create(index=index_name, **products_mapping)
+                    logger.info(f"Created category vector index: {index_name} for category: {category}")
+                else:
+                    logger.info(f"Category index already exists: {index_name}")
+            except Exception as e:
+                logger.warning(f"Category vector index creation issue for {index_name}: {e}")
+        
+        # Create default index for uncategorized products
+        try:
+            exists = await self.client.indices.exists(index=DEFAULT_PRODUCTS_INDEX)
+            if not exists:
+                await self.client.indices.create(index=DEFAULT_PRODUCTS_INDEX, **products_mapping)
+                logger.info(f"Created default products vector index: {DEFAULT_PRODUCTS_INDEX}")
+            else:
+                logger.info(f"Default products index already exists: {DEFAULT_PRODUCTS_INDEX}")
+        except Exception as e:
+            logger.warning(f"Default products vector index creation issue: {e}")
+
+        # Solutions index with vector mapping (keep as single index for now)
         solutions_mapping = {
             "mappings": {
                 "properties": {
@@ -270,17 +325,6 @@ class ElasticsearchVectorService:
                 "index.knn": True
             }
         }
-        
-        # Create products vector index
-        try:
-            exists = await self.client.indices.exists(index=self.products_index)
-            if not exists:
-                await self.client.indices.create(index=self.products_index, **products_mapping)
-                logger.info(f"Created products vector index: {self.products_index}")
-            else:
-                logger.info(f"Products index already exists: {self.products_index}")
-        except Exception as e:
-            logger.warning(f"Products vector index creation issue: {e}")
         
         # Create solutions vector index
         try:
@@ -385,7 +429,7 @@ class ElasticsearchVectorService:
         return " | ".join(text_parts)
     
     async def index_product(self, product: Dict[str, Any], filename: str = None):
-        """Index a product with vector embedding, using category-aware content"""
+        """Index a product with vector embedding into category-specific index"""
         try:
             # Generate searchable content
             searchable_content = self._create_searchable_content(product, "product", filename)
@@ -403,14 +447,24 @@ class ElasticsearchVectorService:
             if not doc.get("id"):
                 doc["id"] = f"product_{hash(str(product))}"
             
-            # Index document
+            # Determine which index to use based on category
+            category = product.get("category")
+            if not category and filename:
+                # Try to infer category from filename if not present in product
+                category = self._infer_category_from_filename(Path(filename).name)
+                doc["category"] = category
+            
+            # Get the appropriate index for this category
+            index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+            
+            # Index document into category-specific index
             await self.client.index(
-                index=self.products_index,
+                index=index_name,
                 id=doc["id"],
                 document=doc
             )
             
-            logger.debug(f"Indexed product with vector: {doc.get('name', 'Unknown')}")
+            logger.debug(f"Indexed product '{doc.get('name', 'Unknown')}' in category '{category}' to index '{index_name}'")
             
         except Exception as e:
             logger.error(f"Failed to index product: {e}")
@@ -453,13 +507,27 @@ class ElasticsearchVectorService:
         query: str, 
         size: int = 10,
         filters: Optional[Dict] = None,
-        hybrid_weight: float = 0.1
+        hybrid_weight: float = 0.1,
+        categories: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Perform vector search on products with optional hybrid scoring"""
+        """Perform vector search on products with optional category filtering"""
         try:
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
+            
+            # Determine which indices to search
+            if categories:
+                # Search only in specified category indices
+                index_names = []
+                for category in categories:
+                    index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+                    index_names.append(index_name)
+                # Remove duplicates
+                index_names = list(set(index_names))
+            else:
+                # Search in all category indices
+                index_names = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
             
             # Build the search query
             search_query = {
@@ -521,8 +589,8 @@ class ElasticsearchVectorService:
                     else:
                         search_query["query"]["bool"]["filter"].append({"term": {field: value}})
             
-            # Execute search
-            response = await self.client.search(index=self.products_index, body=search_query)
+            # Execute search across relevant indices
+            response = await self.client.search(index=index_names, body=search_query)
             
             # Process results
             products = []
@@ -530,9 +598,10 @@ class ElasticsearchVectorService:
                 product = hit["_source"]
                 product["_score"] = hit["_score"]
                 product["_similarity_score"] = hit["_score"]  # For compatibility
+                product["_index"] = hit["_index"]  # Track which index this came from
                 products.append(product)
             
-            logger.info(f"Vector search returned {len(products)} products for query: '{query}'")
+            logger.info(f"Vector search returned {len(products)} products for query: '{query}' in indices: {index_names}")
             return products
             
         except Exception as e:
@@ -689,13 +758,33 @@ class ElasticsearchVectorService:
                     logger.warning(f"⚠️ Failed to process {json_file.name}: {e}")
                     continue
             # Refresh indices - only if they exist and have data
-            try:
-                if total_products_indexed > 0:
-                    await self.client.indices.refresh(index=self.products_index)
-                    logger.info(f"✅ Refreshed products index with {total_products_indexed} documents")
-            except Exception as e:
-                logger.warning(f"Failed to refresh products index: {e}")
+            category_counts = {}
             
+            # Refresh category indices that have data
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    count_response = await self.client.count(index=index_name)
+                    count = count_response.get('count', 0)
+                    category_counts[category] = count
+                    if count > 0:
+                        await self.client.indices.refresh(index=index_name)
+                        logger.info(f"✅ Refreshed {category} index ({index_name}) with {count} documents")
+                except Exception as e:
+                    logger.debug(f"Category index {index_name} not found or empty: {e}")
+                    category_counts[category] = 0
+            
+            # Refresh default index if it has data
+            try:
+                count_response = await self.client.count(index=DEFAULT_PRODUCTS_INDEX)
+                default_count = count_response.get('count', 0)
+                if default_count > 0:
+                    await self.client.indices.refresh(index=DEFAULT_PRODUCTS_INDEX)
+                    logger.info(f"✅ Refreshed default products index with {default_count} documents")
+            except Exception as e:
+                logger.debug(f"Default products index not found or empty: {e}")
+                default_count = 0
+            
+            # Refresh solutions index
             try:
                 if total_solutions_indexed > 0:
                     await self.client.indices.refresh(index=self.solutions_index)
@@ -709,6 +798,14 @@ class ElasticsearchVectorService:
             logger.info(f"   Files processed: {files_processed}")
             logger.info(f"   Products indexed: {total_products_indexed}")
             logger.info(f"   Solutions indexed: {total_solutions_indexed}")
+            
+            # Log category breakdown
+            logger.info(f"📊 Products by category:")
+            for category, count in category_counts.items():
+                if count > 0:
+                    logger.info(f"   {category}: {count} products")
+            if default_count > 0:
+                logger.info(f"   other/uncategorized: {default_count} products")
             
             return {
                 "files_processed": files_processed,
@@ -741,14 +838,31 @@ class ElasticsearchVectorService:
     async def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about vector indices"""
         try:
-            # Get products stats
+            # Get products stats across all category indices
             products_count = 0
-            try:
-                products_stats = await self.client.count(index=self.products_index)
-                products_count = products_stats["count"]
-            except Exception as e:
-                logger.warning(f"Failed to get products stats: {e}")
+            category_stats = {}
             
+            # Count products in each category index
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    category_stats_response = await self.client.count(index=index_name)
+                    count = category_stats_response["count"]
+                    category_stats[category] = count
+                    products_count += count
+                except Exception as e:
+                    logger.debug(f"Failed to get stats for {category} index ({index_name}): {e}")
+                    category_stats[category] = 0
+            
+            # Count products in default index
+            try:
+                default_stats = await self.client.count(index=DEFAULT_PRODUCTS_INDEX)
+                default_count = default_stats["count"]
+                category_stats["other"] = default_count
+                products_count += default_count
+            except Exception as e:
+                logger.debug(f"Failed to get stats for default products index: {e}")
+                category_stats["other"] = 0
+
             # Get solutions stats - handle missing index gracefully
             solutions_count = 0
             try:
@@ -756,9 +870,10 @@ class ElasticsearchVectorService:
                 solutions_count = solutions_stats["count"]
             except Exception as e:
                 logger.debug(f"Solutions index not found or empty: {e}")
-            
+
             return {
                 "products_count": products_count,
+                "category_breakdown": category_stats,
                 "solutions_count": solutions_count,
                 "status": "healthy",
                 "service": "elasticsearch_vector",
@@ -768,6 +883,7 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to get vector service stats: {e}")
             return {
                 "products_count": 0,
+                "category_breakdown": {},
                 "solutions_count": 0,
                 "status": "error",
                 "error": str(e),
@@ -778,14 +894,49 @@ class ElasticsearchVectorService:
         """Close Elasticsearch connection"""
         await self.client.close()
 
+    def _extract_categories_from_requirements(self, requirements: Dict[str, Any]) -> List[str]:
+        """Extract relevant categories from user requirements"""
+        categories = []
+        
+        # Check if categories are explicitly mentioned in requirements
+        if isinstance(requirements, dict):
+            # Check for explicit category mentions
+            for key, value in requirements.items():
+                if key == "product_categories" and isinstance(value, list):
+                    categories.extend(value)
+                elif key in ["technical_requirements", "business_requirements", "search_terms"]:
+                    if isinstance(value, list):
+                        text = " ".join(str(item).lower() for item in value)
+                    else:
+                        text = str(value).lower()
+                    
+                    # Look for category keywords in the text
+                    category_keywords = {
+                        "cpu": ["cpu", "processor", "ryzen", "intel", "core"],
+                        "video-card": ["gpu", "graphics", "video card", "nvidia", "rtx", "radeon"],
+                        "memory": ["ram", "memory", "ddr", "gb ram"],
+                        "monitor": ["monitor", "display", "screen", "inch"],
+                        "storage": ["storage", "ssd", "hdd", "nvme", "tb"],
+                        "motherboard": ["motherboard", "mobo", "socket"],
+                        "power-supply": ["power supply", "psu", "wattage"],
+                    }
+                    
+                    for category, keywords in category_keywords.items():
+                        if any(keyword in text for keyword in keywords):
+                            categories.append(category)
+        
+        # Remove duplicates and return
+        return list(set(categories))
+
     # ===== COMPATIBILITY METHODS FOR OLD SERVICE INTERFACE =====
     
     async def search_products(self, query_body: dict, index: str = "products") -> List[Dict]:
-        """Compatibility method for old service interface - converts to vector search"""
+        """Compatibility method for old service interface - converts to vector search with category awareness"""
         try:
             # Extract query from query_body if it's a string
             if isinstance(query_body, str):
                 query = query_body
+                categories = None
             elif isinstance(query_body, dict):
                 # Try to extract query from various possible structures
                 if "query" in query_body:
@@ -798,18 +949,27 @@ class ElasticsearchVectorService:
                         query = str(query_part)
                 else:
                     query = str(query_body)
+                
+                # Try to extract categories if available
+                categories = self._extract_categories_from_requirements(query_body)
             else:
                 query = str(query_body)
+                categories = None
             
-            # Use vector search with hybrid approach
-            return await self.vector_search_products(query, size=20, hybrid_weight=0.2)
+            # Use vector search with hybrid approach and category filtering
+            return await self.vector_search_products(
+                query, 
+                size=20, 
+                hybrid_weight=0.2, 
+                categories=categories
+            )
             
         except Exception as e:
             logger.error(f"Compatibility search_products failed: {e}")
             return []
     
     async def search_products_by_requirements(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
-        """Compatibility method for old service interface - converts requirements to vector search"""
+        """Compatibility method for old service interface - converts requirements to vector search with category filtering"""
         try:
             # Build query from requirements
             search_terms = requirements.get('search_terms', [])
@@ -824,8 +984,16 @@ class ElasticsearchVectorService:
             if not query:
                 query = "business technology professional enterprise"
             
-            # Use vector search with hybrid approach
-            return await self.vector_search_products(query, size=size, hybrid_weight=0.2)
+            # Extract relevant categories from requirements
+            relevant_categories = self._extract_categories_from_requirements(requirements)
+            
+            # Use vector search with hybrid approach and category filtering
+            return await self.vector_search_products(
+                query, 
+                size=size, 
+                hybrid_weight=0.2,
+                categories=relevant_categories if relevant_categories else None
+            )
             
         except Exception as e:
             logger.error(f"Compatibility search_products_by_requirements failed: {e}")
@@ -846,8 +1014,11 @@ class ElasticsearchVectorService:
             return []
     
     async def get_random_products(self, size: int = 10) -> List[Dict]:
-        """Compatibility method for old service interface - get random products"""
+        """Compatibility method for old service interface - get random products from all categories"""
         try:
+            # Get indices to search
+            all_indices = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
+            
             search_body = {
                 "size": size,
                 "query": {
@@ -859,14 +1030,15 @@ class ElasticsearchVectorService:
                 }
             }
             
-            response = await self.client.search(index=self.products_index, body=search_body)
+            response = await self.client.search(index=all_indices, body=search_body)
             
             results = []
             for hit in response["hits"]["hits"]:
                 product = hit["_source"]
+                product["_index"] = hit["_index"]  # Track source index
                 results.append(product)
             
-            logger.info(f"Retrieved {len(results)} random products")
+            logger.info(f"Retrieved {len(results)} random products from all categories")
             return results
             
         except Exception as e:
@@ -894,24 +1066,15 @@ class ElasticsearchVectorService:
     async def get_product_categories(self) -> List[str]:
         """Compatibility method for old service interface - get product categories"""
         try:
-            response = await self.client.search(
-                index=self.products_index,
-                body={
-                    "size": 0,
-                    "aggs": {
-                        "categories": {
-                            "terms": {
-                                "field": "category",
-                                "size": 100
-                            }
-                        }
-                    }
-                }
-            )
-            
+            # Return available categories based on indices that have data
             categories = []
-            for bucket in response["aggregations"]["categories"]["buckets"]:
-                categories.append(bucket["key"])
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    count_response = await self.client.count(index=index_name)
+                    if count_response.get('count', 0) > 0:
+                        categories.append(category)
+                except Exception:
+                    continue  # Index doesn't exist or is empty
             
             return categories
         except Exception as e:
@@ -921,40 +1084,69 @@ class ElasticsearchVectorService:
     async def get_product_stats(self) -> Dict[str, Any]:
         """Compatibility method for old service interface - get product statistics"""
         try:
-            # Get total count
-            count_response = await self.client.count(index=self.products_index)
-            total_products = count_response['count']
-            
-            # Get category breakdown
-            categories_response = await self.client.search(
-                index=self.products_index,
-                body={
-                    "size": 0,
-                    "aggs": {
-                        "categories": {
-                            "terms": {"field": "category", "size": 20}
-                        },
-                        "price_stats": {
-                            "stats": {"field": "price"}
-                        }
-                    }
-                }
-            )
-            
+            total_products = 0
             categories = {}
-            for bucket in categories_response["aggregations"]["categories"]["buckets"]:
-                categories[bucket["key"]] = bucket["doc_count"]
+            price_stats = {"min": None, "max": None, "avg": None}
             
-            price_stats = categories_response["aggregations"]["price_stats"]
+            # Get stats from each category index
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    # Get count
+                    count_response = await self.client.count(index=index_name)
+                    count = count_response.get('count', 0)
+                    if count > 0:
+                        categories[category] = count
+                        total_products += count
+                        
+                        # Get price stats for this category
+                        price_agg_response = await self.client.search(
+                            index=index_name,
+                            body={
+                                "size": 0,
+                                "aggs": {
+                                    "price_stats": {
+                                        "stats": {"field": "price"}
+                                    }
+                                }
+                            }
+                        )
+                        
+                        if "aggregations" in price_agg_response:
+                            category_price_stats = price_agg_response["aggregations"]["price_stats"]
+                            if category_price_stats.get("count", 0) > 0:
+                                min_price = category_price_stats.get("min")
+                                max_price = category_price_stats.get("max")
+                                
+                                if min_price is not None:
+                                    if price_stats["min"] is None or min_price < price_stats["min"]:
+                                        price_stats["min"] = min_price
+                                
+                                if max_price is not None:
+                                    if price_stats["max"] is None or max_price > price_stats["max"]:
+                                        price_stats["max"] = max_price
+                        
+                except Exception as e:
+                    logger.debug(f"Failed to get stats for {category}: {e}")
+                    continue
+            
+            # Check default index
+            try:
+                count_response = await self.client.count(index=DEFAULT_PRODUCTS_INDEX)
+                default_count = count_response.get('count', 0)
+                if default_count > 0:
+                    categories["other"] = default_count
+                    total_products += default_count
+            except Exception:
+                pass
+            
+            # Calculate average price (simplified)
+            if price_stats["min"] is not None and price_stats["max"] is not None:
+                price_stats["avg"] = (price_stats["min"] + price_stats["max"]) / 2
             
             return {
                 "total_products": total_products,
                 "categories": categories,
-                "price_range": {
-                    "min": price_stats.get("min", 0),
-                    "max": price_stats.get("max", 0),
-                    "avg": price_stats.get("avg", 0)
-                }
+                "price_range": price_stats
             }
         except Exception as e:
             logger.error(f"Failed to get product stats: {e}")
