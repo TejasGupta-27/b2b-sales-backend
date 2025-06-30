@@ -1,8 +1,8 @@
 {
   "dataset": {
-    "name": "hybrid_product_retriever_test_dataset",
-    "description": "Test dataset for hybrid product retriever agent using RAGAS evaluation framework",
-    "version": "1.0",
+    "name": "hybrid_product_retriever_test_dataset_v2",
+    "description": "Test dataset for hybrid product retriever agent using RAGAS evaluation framework - updated for realistic LLM + vector search behavior",
+    "version": "2.0",
     "created_date": "2024-01-15",
     "total_samples": 10,
     "scenarios": [
@@ -54,26 +54,28 @@
             "GPU"
           ]
         },
-        "ground_truth_products": [
+        "llm_generated_product_descriptions": [
           {
-            "id": "cpu_001",
-            "name": "AMD Ryzen 9 7950X",
             "category": "cpu",
-            "reason": "High core count and performance for video editing and rendering"
+            "description": "High-performance CPU with 8+ cores for video editing and rendering workloads",
+            "expected_specs": ["8+ cores", "high clock speed", "good for video editing"]
           },
           {
-            "id": "memory_001", 
-            "name": "32GB DDR5 RAM",
-            "category": "memory",
-            "reason": "Meets minimum RAM requirement for video editing"
+            "category": "memory", 
+            "description": "32GB or more DDR4/DDR5 RAM for handling large video files and rendering",
+            "expected_specs": ["32GB+", "DDR4 or DDR5", "high speed"]
           },
           {
-            "id": "gpu_001",
-            "name": "NVIDIA RTX 4080",
-            "category": "video_card", 
-            "reason": "Excellent GPU for 3D rendering and video acceleration"
+            "category": "video_card",
+            "description": "High-end GPU with 8GB+ VRAM for 3D rendering and video acceleration",
+            "expected_specs": ["8GB+ VRAM", "good for rendering", "video acceleration"]
           }
-        ]
+        ],
+        "expected_retrieval_criteria": {
+          "cpu_criteria": ["core_count >= 8", "high performance", "video editing capable"],
+          "memory_criteria": ["capacity >= 32GB", "high speed", "DDR4 or DDR5"],
+          "gpu_criteria": ["memory >= 8GB", "rendering capable", "video acceleration"]
+        }
       },
       {
         "id": "scenario_002",
@@ -121,20 +123,22 @@
             "file sharing"
           ]
         },
-        "ground_truth_products": [
+        "llm_generated_product_descriptions": [
           {
-            "id": "nas_001",
-            "name": "Synology DS920+",
             "category": "storage",
-            "reason": "4-bay NAS with RAID support, perfect for small office"
+            "description": "Network-attached storage device with multiple drive bays for RAID configuration",
+            "expected_specs": ["multiple bays", "RAID support", "network connectivity"]
           },
           {
-            "id": "hdd_001",
-            "name": "WD Red 4TB HDD",
-            "category": "storage", 
-            "reason": "NAS-optimized drives for reliable storage"
+            "category": "storage",
+            "description": "High-capacity hard drives suitable for NAS use with reliability features",
+            "expected_specs": ["high capacity", "NAS optimized", "reliable"]
           }
-        ]
+        ],
+        "expected_retrieval_criteria": {
+          "nas_criteria": ["multiple drive bays", "RAID support", "network connectivity"],
+          "drive_criteria": ["high capacity", "NAS optimized", "reliability features"]
+        }
       },
       {
         "id": "scenario_003",
@@ -184,20 +188,22 @@
             "RTX"
           ]
         },
-        "ground_truth_products": [
+        "llm_generated_product_descriptions": [
           {
-            "id": "gpu_002",
-            "name": "NVIDIA RTX 4070 Ti",
             "category": "video_card",
-            "reason": "Excellent 1440p performance with ray tracing support"
+            "description": "NVIDIA RTX series GPU with ray tracing support for 1440p gaming",
+            "expected_specs": ["NVIDIA", "RTX series", "ray tracing", "1440p capable"]
           },
           {
-            "id": "cpu_002",
-            "name": "AMD Ryzen 7 7700X",
             "category": "cpu",
-            "reason": "Great gaming performance and value"
+            "description": "High-performance CPU for gaming with good single-thread performance",
+            "expected_specs": ["gaming optimized", "high performance", "good single-thread"]
           }
-        ]
+        ],
+        "expected_retrieval_criteria": {
+          "gpu_criteria": ["NVIDIA", "RTX series", "ray tracing support", "1440p performance"],
+          "cpu_criteria": ["gaming performance", "high clock speed", "good single-thread"]
+        }
       },
       {
         "id": "scenario_004",
@@ -247,20 +253,22 @@
             "server"
           ]
         },
-        "ground_truth_products": [
+        "llm_generated_product_descriptions": [
           {
-            "id": "gpu_003",
-            "name": "NVIDIA RTX 4090",
             "category": "video_card",
-            "reason": "24GB VRAM perfect for large model training"
+            "description": "High-end GPU with 24GB+ VRAM for large model training and deep learning",
+            "expected_specs": ["24GB+ VRAM", "AI training", "deep learning", "high memory"]
           },
           {
-            "id": "storage_001",
-            "name": "Samsung 990 Pro 2TB NVMe",
             "category": "storage",
-            "reason": "Fast NVMe storage for dataset access"
+            "description": "Fast NVMe SSD for quick access to large training datasets",
+            "expected_specs": ["NVMe", "fast access", "large capacity", "dataset storage"]
           }
-        ]
+        ],
+        "expected_retrieval_criteria": {
+          "gpu_criteria": ["24GB+ VRAM", "AI training capable", "deep learning optimized"],
+          "storage_criteria": ["NVMe", "fast read/write", "high capacity"]
+        }
       },
       {
         "id": "scenario_005",
@@ -308,35 +316,48 @@
             "web development"
           ]
         },
-        "ground_truth_products": [
+        "llm_generated_product_descriptions": [
           {
-            "id": "monitor_001",
-            "name": "LG 27UL850-W",
             "category": "monitor",
-            "reason": "27-inch 4K monitor with excellent color accuracy"
+            "description": "27-inch monitor with good color accuracy for design and development work",
+            "expected_specs": ["27-inch", "color accurate", "good for design", "development suitable"]
           },
           {
-            "id": "gpu_004",
-            "name": "NVIDIA RTX 4060",
             "category": "video_card",
-            "reason": "Good multi-monitor support for productivity"
+            "description": "GPU with multiple display outputs for 3-monitor setup",
+            "expected_specs": ["multiple outputs", "3 monitor support", "productivity focused"]
           }
-        ]
+        ],
+        "expected_retrieval_criteria": {
+          "monitor_criteria": ["27-inch", "color accuracy", "design suitable", "development friendly"],
+          "gpu_criteria": ["multiple display outputs", "3 monitor support", "productivity"]
+        }
       }
     ],
     "evaluation_metrics": {
-      "retrieval_accuracy": "Percentage of ground truth products found in top results",
+      "retrieval_accuracy": "Percentage of relevant products found that match LLM-generated descriptions",
       "requirement_extraction": "Accuracy of extracted technical and business requirements",
-      "semantic_relevance": "Semantic similarity between query and retrieved products",
+      "semantic_relevance": "Semantic similarity between LLM descriptions and retrieved products",
+      "category_matching": "Accuracy of product category identification and retrieval",
+      "specification_alignment": "How well retrieved products match expected specifications",
       "hybrid_performance": "Performance comparison between keyword and semantic search",
       "response_time": "Time taken for hybrid search completion"
     },
     "expected_behaviors": {
-      "keyword_search": "Should find products matching specific technical terms",
-      "semantic_search": "Should understand context and find conceptually related products",
-      "hybrid_merging": "Should combine and rank results from both search methods",
-      "requirement_analysis": "Should extract both explicit and implicit requirements",
-      "context_awareness": "Should consider industry and use case context"
+      "llm_description_generation": "Should generate realistic product descriptions based on requirements",
+      "vector_search_matching": "Should find products that semantically match LLM descriptions",
+      "category_awareness": "Should correctly identify and search within relevant product categories",
+      "specification_matching": "Should retrieve products that meet specified technical requirements",
+      "hybrid_merging": "Should combine and rank results from both search methods effectively",
+      "requirement_analysis": "Should extract both explicit and implicit requirements accurately",
+      "context_awareness": "Should consider industry and use case context in recommendations"
+    },
+    "evaluation_approach": {
+      "realistic_scoring": "Score based on semantic similarity and specification matching, not exact name matching",
+      "category_accuracy": "Evaluate if retrieved products belong to the expected categories",
+      "specification_coverage": "Check if retrieved products meet the technical specifications mentioned",
+      "business_relevance": "Assess if recommendations align with business requirements and budget",
+      "semantic_quality": "Measure how well the LLM descriptions match the actual retrieved products"
     }
   }
 } 
