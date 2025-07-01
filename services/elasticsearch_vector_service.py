@@ -539,13 +539,18 @@ class ElasticsearchVectorService:
         hybrid_weight: float = 0.1,
         categories: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Perform vector search on products with optional category filtering"""
+        """Perform vector search on products with optional category filtering and balanced results"""
         try:
             logger.info(f"🔍 Vector search called with categories: {categories}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
+            
+            # If categories are specified, search each category separately for balanced results
+            if categories and len(categories) > 1:
+                logger.info(f"🎯 Performing balanced search across {len(categories)} categories")
+                return await self._balanced_category_search(query_vector, query, categories, size, filters, hybrid_weight)
             
             # Determine which indices to search
             if categories:
@@ -645,6 +650,140 @@ class ElasticsearchVectorService:
             
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
+            return []
+
+    async def _balanced_category_search(
+        self, 
+        query_vector: List[float], 
+        query: str, 
+        categories: List[str], 
+        total_size: int, 
+        filters: Optional[Dict] = None,
+        hybrid_weight: float = 0.1
+    ) -> List[Dict[str, Any]]:
+        """Perform balanced search across multiple categories to ensure diverse results"""
+        try:
+            # Calculate how many results to get from each category
+            results_per_category = max(2, total_size // len(categories))  # At least 2 per category
+            remainder = total_size % len(categories)
+            
+            logger.info(f"🎯 Balanced search: {results_per_category} products per category + {remainder} extra")
+            
+            all_products = []
+            category_results = {}
+            
+            # Search each category separately
+            for i, category in enumerate(categories):
+                # Get index name for this category
+                index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+                
+                # Check if this category should get extra results
+                category_size = results_per_category
+                if i < remainder:
+                    category_size += 1
+                
+                try:
+                    # Build the search query for this specific category
+                    search_query = {
+                        "size": category_size,
+                        "query": {
+                            "bool": {
+                                "should": []
+                            }
+                        },
+                        "_source": {"excludes": ["content_vector"]}
+                    }
+                    
+                    # Add vector similarity search
+                    knn_query = {
+                        "script_score": {
+                            "query": {"match_all": {}},
+                            "script": {
+                                "source": "cosineSimilarity(params.query_vector, 'content_vector') + 1.0",
+                                "params": {"query_vector": query_vector}
+                            }
+                        }
+                    }
+                    
+                    # Add text search for hybrid approach
+                    text_query = {
+                        "multi_match": {
+                            "query": query,
+                            "fields": [
+                                "name^4",                    
+                                "description^3",             
+                                "features^2",                
+                                "use_cases^2",               
+                                "tags^2",                    
+                                "category^1.5",              
+                                "searchable_content^1.5"     
+                            ],
+                            "type": "best_fields",
+                            "fuzziness": "AUTO",
+                            "operator": "or"
+                        }
+                    }
+                    
+                    if hybrid_weight > 0:
+                        # Hybrid search
+                        search_query["query"]["bool"]["should"].extend([
+                            {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
+                            {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
+                        ])
+                    else:
+                        # Pure vector search
+                        search_query["query"] = knn_query
+                    
+                    # Add filters if provided
+                    if filters:
+                        search_query["query"]["bool"]["filter"] = []
+                        for field, value in filters.items():
+                            if isinstance(value, list):
+                                search_query["query"]["bool"]["filter"].append({"terms": {field: value}})
+                            else:
+                                search_query["query"]["bool"]["filter"].append({"term": {field: value}})
+                    
+                    # Execute search for this category
+                    response = await self.client.search(index=index_name, body=search_query)
+                    
+                    # Process results for this category
+                    category_products = []
+                    for hit in response["hits"]["hits"]:
+                        product = hit["_source"]
+                        product["_score"] = hit["_score"]
+                        product["_similarity_score"] = hit["_score"]
+                        product["_index"] = hit["_index"]
+                        product["_category_search"] = category  # Mark which category search this came from
+                        category_products.append(product)
+                    
+                    category_results[category] = len(category_products)
+                    all_products.extend(category_products)
+                    
+                    logger.info(f"   📦 {category}: {len(category_products)} products from {index_name}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to search category {category} ({index_name}): {e}")
+                    category_results[category] = 0
+            
+            # Sort all results by similarity score to maintain quality ranking
+            all_products.sort(key=lambda x: x.get('_similarity_score', 0), reverse=True)
+            
+            # Limit to requested total size
+            final_products = all_products[:total_size]
+            
+            logger.info(f"🎯 Balanced search complete: {len(final_products)} total products")
+            logger.info(f"   Category breakdown: {category_results}")
+            
+            # Log final diversity
+            if final_products:
+                final_categories = [p.get('category', 'unknown') for p in final_products]
+                category_counts = {cat: final_categories.count(cat) for cat in set(final_categories)}
+                logger.info(f"   Final category distribution: {category_counts}")
+            
+            return final_products
+            
+        except Exception as e:
+            logger.error(f"Balanced category search failed: {e}")
             return []
     
     async def vector_search_solutions(
@@ -936,11 +1075,19 @@ class ElasticsearchVectorService:
     async def _extract_categories_from_requirements(self, requirements: Dict[str, Any]) -> List[str]:
         """Extract relevant product categories from requirements using LLM intelligence"""
         
-        # Use LLM-powered category extraction
-        categories = await self._extract_categories_with_llm(requirements)
-        
-        # If no categories found, try the fallback method
-        if not categories:
+        try:
+            # Use LLM-powered category extraction
+            logger.info("🧠 Attempting LLM-powered category analysis...")
+            categories = await self._extract_categories_with_llm(requirements)
+            
+            # If no categories found, try the fallback method
+            if not categories:
+                logger.info("🔄 LLM analysis returned no categories, using enhanced fallback...")
+                categories = await self._extract_categories_fallback(requirements)
+            
+        except Exception as e:
+            logger.warning(f"LLM-powered category extraction failed: {e}")
+            logger.info("🔄 Using enhanced fallback category analysis...")
             categories = await self._extract_categories_fallback(requirements)
         
         # If still no categories, default to core categories based on common use cases
@@ -959,15 +1106,20 @@ class ElasticsearchVectorService:
             
             if any(term in combined_text for term in ['workstation', 'professional', 'video', 'ai', 'ml', 'rendering']):
                 categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
+                logger.info("🎯 Applied workstation default categories")
             elif any(term in combined_text for term in ['gaming', 'game', 'fps']):
                 categories = ['video-card', 'cpu', 'memory', 'monitor']
+                logger.info("🎯 Applied gaming default categories")
             elif any(term in combined_text for term in ['storage', 'nas', 'file']):
                 categories = ['internal-hard-drive', 'external-hard-drive']
+                logger.info("🎯 Applied storage default categories")
             elif any(term in combined_text for term in ['office', 'business', 'productivity']):
                 categories = ['cpu', 'memory', 'monitor']
+                logger.info("🎯 Applied office default categories")
             else:
                 # Default to most common categories
                 categories = ['cpu', 'memory', 'internal-hard-drive']
+                logger.info("🎯 Applied general default categories")
         
         logger.info(f"🎯 Final categories selected: {categories}")
         return categories
@@ -1412,28 +1564,103 @@ Analyze the requirements and provide structured category recommendations."""
                 else:
                     text_parts.append(str(value))
         
+        # Add LLM context if available
+        llm_context = requirements.get('llm_context', {})
+        if llm_context.get('primary_need'):
+            text_parts.append(str(llm_context['primary_need']))
+        if llm_context.get('business_context'):
+            text_parts.append(str(llm_context['business_context']))
+        if llm_context.get('technical_requirements'):
+            if isinstance(llm_context['technical_requirements'], list):
+                text_parts.extend([str(req) for req in llm_context['technical_requirements']])
+            else:
+                text_parts.append(str(llm_context['technical_requirements']))
+        
         text = " ".join(text_parts).lower()
         
-        # Simple pattern matching as fallback
-        if any(word in text for word in ['storage', 'nas', 'file sharing', 'raid', 'backup']):
+        logger.info(f"🔍 Fallback category analysis for text: {text[:200]}...")
+        
+        # Enhanced pattern matching with more specific keywords
+        
+        # Storage solutions
+        if any(word in text for word in ['storage', 'nas', 'file sharing', 'raid', 'backup', 'ssd', 'hdd', 'nvme', 'drive']):
             categories.update(['internal-hard-drive', 'external-hard-drive'])
+            logger.info("🗂️ Detected storage needs")
         
-        if any(word in text for word in ['gaming', '1440p', 'fps', 'ray tracing', 'gpu', 'graphics']):
-            categories.update(['video-card', 'cpu', 'memory'])
+        # Gaming and graphics
+        if any(word in text for word in ['gaming', '1440p', '4k gaming', 'fps', 'ray tracing', 'gpu', 'graphics', 'rtx', 'radeon']):
+            categories.update(['video-card', 'cpu', 'memory', 'monitor'])
+            logger.info("🎮 Detected gaming needs")
         
-        if any(word in text for word in ['workstation', 'professional', 'video editing', '3d rendering']):
+        # Professional workstation
+        if any(word in text for word in ['workstation', 'professional', 'video editing', '3d rendering', 'cad', 'autocad', 'blender']):
             categories.update(['video-card', 'cpu', 'memory', 'internal-hard-drive'])
+            logger.info("💼 Detected workstation needs")
         
-        if any(word in text for word in ['ai', 'ml', 'machine learning', 'training', 'dataset']):
+        # AI/ML and compute
+        if any(word in text for word in ['ai', 'ml', 'machine learning', 'training', 'dataset', 'tensorflow', 'pytorch', 'cuda']):
             categories.update(['video-card', 'cpu', 'memory', 'internal-hard-drive'])
+            logger.info("🤖 Detected AI/ML needs")
         
-        if any(word in text for word in ['monitor', 'display', 'screen', '27-inch', '4k']):
+        # Display and monitors
+        if any(word in text for word in ['monitor', 'display', 'screen', '27-inch', '32-inch', '4k', '1440p', 'ultrawide']):
             categories.add('monitor')
+            logger.info("🖥️ Detected monitor needs")
         
-        if any(word in text for word in ['office', 'productivity', 'business']):
+        # Productivity and office
+        if any(word in text for word in ['office', 'productivity', 'business', 'excel', 'word', 'spreadsheet']):
             categories.update(['cpu', 'memory', 'monitor'])
+            logger.info("📊 Detected office/productivity needs")
         
-        return list(categories)
+        # Input devices
+        if any(word in text for word in ['keyboard', 'typing', 'mechanical', 'wireless keyboard']):
+            categories.add('keyboard')
+            logger.info("⌨️ Detected keyboard needs")
+        
+        if any(word in text for word in ['mouse', 'pointing', 'trackball', 'wireless mouse']):
+            categories.add('mouse')
+            logger.info("🖱️ Detected mouse needs")
+        
+        # Audio devices
+        if any(word in text for word in ['headphones', 'headset', 'audio', 'microphone', 'streaming']):
+            categories.add('headphones')
+            logger.info("🎧 Detected audio needs")
+        
+        if any(word in text for word in ['speakers', 'sound system', 'multimedia']):
+            categories.add('speakers')
+            logger.info("🔊 Detected speaker needs")
+        
+        # Webcam and communication
+        if any(word in text for word in ['webcam', 'camera', 'video call', 'conference', 'zoom', 'teams']):
+            categories.add('webcam')
+            logger.info("📹 Detected webcam needs")
+        
+        # Networking
+        if any(word in text for word in ['wifi', 'wireless', 'network card', 'ethernet', 'networking']):
+            categories.update(['wireless-network-card', 'wired-network-card'])
+            logger.info("🌐 Detected networking needs")
+        
+        # Power management
+        if any(word in text for word in ['ups', 'backup power', 'power supply', 'psu']):
+            categories.add('power-supply')
+            if 'ups' in text or 'backup power' in text:
+                categories.add('ups')
+            logger.info("⚡ Detected power needs")
+        
+        # System building
+        if any(word in text for word in ['build', 'custom', 'system', 'motherboard', 'case', 'cooling']):
+            categories.update(['motherboard', 'case', 'cpu-cooler'])
+            logger.info("🔧 Detected system building needs")
+        
+        # If no specific categories found, provide sensible defaults based on context
+        if not categories:
+            logger.info("🔄 No specific categories detected, using default business categories")
+            categories.update(['cpu', 'memory', 'internal-hard-drive'])
+        
+        final_categories = list(categories)
+        logger.info(f"🎯 Fallback analysis selected categories: {final_categories}")
+        
+        return final_categories
 
     async def _get_active_categories(self) -> List[str]:
         """Get categories that actually have data"""

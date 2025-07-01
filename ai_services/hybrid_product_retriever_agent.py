@@ -267,16 +267,30 @@ class RRFHybridFusion:
             'fan-controller': 'power_cooling'
         }
         
+        # Track categories found for logging
+        categories_found = {}
+        
         # Group products by their actual category
         for product in products:
             # Get the actual product category from the product data
             category = product.get('category', '').lower()
+            
+            # Track categories found
+            if category:
+                categories_found[category] = categories_found.get(category, 0) + 1
             
             # Map category to requirement group
             group_name = category_to_group.get(category, 'other')
             requirement_groups[group_name].append(product)
             
             logger.debug(f"Grouped product '{product.get('name', 'Unknown')}' (category: {category}) into {group_name}")
+        
+        # Log category diversity for debugging
+        print(f"📊 Product categories found: {categories_found}")
+        print(f"📊 Requirement groups populated:")
+        for group_name, group_products in requirement_groups.items():
+            if group_products:
+                print(f"   {group_name}: {len(group_products)} products")
         
         # Remove empty groups
         requirement_groups = {k: v for k, v in requirement_groups.items() if v}
