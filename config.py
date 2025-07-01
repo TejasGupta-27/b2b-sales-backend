@@ -71,8 +71,9 @@ class Settings(BaseSettings):
     elevenlabs_use_speaker_boost: bool = os.getenv("ELEVENLABS_USE_SPEAKER_BOOST", "True").lower() == "true"
     
     # Speech Service Configuration
-    speech_primary_provider: str = os.getenv("SPEECH_PRIMARY_PROVIDER", "elevenlabs")  # elevenlabs or whisper
+    speech_primary_provider: str = os.getenv("SPEECH_PRIMARY_PROVIDER", "elevenlabs")
     speech_fallback_enabled: bool = os.getenv("SPEECH_FALLBACK_ENABLED", "True").lower() == "true"
+    speech_tts_primary_retries: int = int(os.getenv("SPEECH_TTS_PRIMARY_RETRIES", "1"))
     
     # Data loading configuration
     force_reload_data: bool = os.getenv("FORCE_RELOAD_DATA", "False").lower() == "true"
