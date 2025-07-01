@@ -994,8 +994,8 @@ class ElasticsearchVectorService:
                 else:
                     query = str(query_body)
                 
-                # Try to extract categories if available
-                categories = self._extract_categories_from_requirements(query_body)
+                # Try to extract categories if available (FIX: Add await)
+                categories = await self._extract_categories_from_requirements(query_body)
             else:
                 query = str(query_body)
                 categories = None
