@@ -623,10 +623,6 @@ Think broadly about their needs and suggest relevant alternatives."""
         # Use the context analysis to enhance requirement extraction
         enhanced_requirements = await self._extract_requirements_from_conversation(messages, customer_context)
         
-        # DEBUG: Log categories before enhancement
-        logger.info(f"🔍 DEBUG: Context analysis categories: {context_analysis.recommended_categories}")
-        logger.info(f"🔍 DEBUG: Context analysis category confidence: {context_analysis.category_confidence}")
-        
         # Enhance with context analysis insights
         enhanced_requirements.update({
             'llm_context': {
@@ -645,10 +641,6 @@ Think broadly about their needs and suggest relevant alternatives."""
             'recommended_categories': context_analysis.recommended_categories,
             'category_confidence': context_analysis.category_confidence
         })
-        
-        # DEBUG: Log final requirements structure
-        logger.info(f"🔍 DEBUG: Enhanced requirements 'recommended_categories': {enhanced_requirements.get('recommended_categories')}")
-        logger.info(f"🔍 DEBUG: Enhanced requirements 'llm_context.recommended_categories': {enhanced_requirements.get('llm_context', {}).get('recommended_categories')}")
         
         logger.info(f"🔍 Enhanced Requirements with LLM Context:")
         logger.info(f"   Primary Need: {context_analysis.primary_need}")
@@ -677,13 +669,9 @@ Think broadly about their needs and suggest relevant alternatives."""
             search_keywords.extend(similar_products_analysis.search_criteria)
             semantic_queries.extend(similar_products_analysis.alternative_approaches)
         
-        # FIXED: Preserve ALL existing requirements (including categories) and just add new insights
+        # Preserve ALL existing requirements (including categories) and just add new insights
         requirements['search_keywords'] = search_keywords
         requirements['semantic_queries'] = semantic_queries
-        
-        # DEBUG: Verify categories are preserved
-        logger.info(f"🔍 DEBUG: Categories before hybrid search: {requirements.get('recommended_categories')}")
-        logger.info(f"🔍 DEBUG: LLM context categories: {requirements.get('llm_context', {}).get('recommended_categories')}")
         
         # Perform the hybrid search with preserved requirements
         return await self._perform_hybrid_search(requirements)
@@ -877,10 +865,6 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         }
         
         print("🔍 Performing hybrid search with RRF fusion...")
-        
-        # DEBUG: Verify categories are reaching hybrid search
-        logger.info(f"🔍 DEBUG: Hybrid search - recommended_categories: {requirements.get('recommended_categories')}")
-        logger.info(f"🔍 DEBUG: Hybrid search - llm_context categories: {requirements.get('llm_context', {}).get('recommended_categories')}")
         
         # Step 1: Elasticsearch keyword search
         print("📋 Step 1: Elasticsearch keyword search...")
@@ -1249,16 +1233,9 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             if not semantic_query:
                 semantic_query = requirements.get('use_case', 'business solution')
             
-            # DEBUG: Log all requirement keys to understand the structure
-            logger.info(f"🔍 DEBUG: Requirements keys: {list(requirements.keys())}")
-            logger.info(f"🔍 DEBUG: Has 'recommended_categories': {'recommended_categories' in requirements}")
-            logger.info(f"🔍 DEBUG: recommended_categories value: {requirements.get('recommended_categories')}")
-            
             # Get category recommendations from multiple possible sources
             categories = None
             llm_context = requirements.get('llm_context', {})
-            logger.info(f"🔍 DEBUG: llm_context keys: {list(llm_context.keys()) if llm_context else 'None'}")
-            logger.info(f"🔍 DEBUG: llm_context recommended_categories: {llm_context.get('recommended_categories') if llm_context else 'N/A'}")
             
             # Try multiple sources for categories (more robust)
             if requirements.get('recommended_categories'):
@@ -1270,8 +1247,6 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             elif requirements.get('product_categories'):
                 categories = requirements['product_categories']
                 logger.info(f"🎯 Using product_categories as fallback: {categories}")
-            else:
-                logger.warning(f"🔍 DEBUG: No categories found in any location")
             
             # Normalize and validate categories
             categories = self._normalize_categories(categories)
@@ -1279,8 +1254,6 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             logger.info(f"🧠 Vector search query: {semantic_query}")
             if categories:
                 logger.info(f"🎯 Final category filtering: {categories} (count: {len(categories)})")
-            else:
-                logger.warning(f"🚨 No categories being passed to vector search!")
             
             # Perform vector search with category filtering using the correct method name and parameter
             results = await self.vector_service.vector_search_products(
@@ -1310,17 +1283,14 @@ Provide detailed analysis considering both keyword relevance and semantic simila
     def _normalize_categories(self, categories) -> Optional[List[str]]:
         """Normalize and validate categories for vector search"""
         if not categories:
-            logger.warning(f"🔍 DEBUG: Categories is falsy: {categories}")
             return None
             
         # Convert to list if string
         if isinstance(categories, str):
             categories = [categories]
-            logger.info(f"🔍 DEBUG: Converted string to list: {categories}")
         
         # Ensure it's a list
         if not isinstance(categories, list):
-            logger.warning(f"🔍 DEBUG: Categories is not a list: {type(categories)} = {categories}")
             return None
         
         # Filter out empty/None values and normalize
@@ -1330,13 +1300,10 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 # Normalize category name
                 normalized_cat = str(cat).strip().lower()
                 normalized.append(normalized_cat)
-                logger.info(f"🔍 DEBUG: Normalized category: '{cat}' -> '{normalized_cat}'")
         
         if not normalized:
-            logger.warning(f"🚨 Categories list was empty after normalization")
             return None
             
-        logger.info(f"🔍 DEBUG: Final normalized categories: {normalized}")
         return normalized
     
     async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:

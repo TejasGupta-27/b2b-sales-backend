@@ -542,7 +542,6 @@ class ElasticsearchVectorService:
         """Perform vector search on products with optional category filtering and balanced results"""
         try:
             logger.info(f"🔍 Vector search called with categories: {categories}")
-            logger.info(f"🔍 DEBUG: Categories type: {type(categories)}, length: {len(categories) if categories else 0}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
