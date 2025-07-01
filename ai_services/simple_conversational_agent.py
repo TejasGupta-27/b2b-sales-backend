@@ -58,6 +58,10 @@ class SimpleConversationalAgent(AIProvider):
         try:
             if self.hybrid_retriever:
                 await self.hybrid_retriever.initialize()
+                # Ensure the vector service has the LLM provider for category detection
+                if hasattr(self.hybrid_retriever, 'vector_service') and self.hybrid_retriever.vector_service:
+                    self.hybrid_retriever.vector_service.set_llm_provider(self.base_provider)
+                    print("✅ LLM provider configured for intelligent category detection")
             print("✅ SimpleConversationalAgent initialized successfully")
         except Exception as e:
             print(f"⚠️ SimpleConversationalAgent initialization warning: {e}")

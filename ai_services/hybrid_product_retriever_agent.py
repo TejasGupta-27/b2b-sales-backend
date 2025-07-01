@@ -21,6 +21,8 @@ class ContextAnalysis(BaseModel):
     similar_products: List[str] = Field(description="Similar products or solutions they might be interested in")
     search_keywords: List[str] = Field(description="Keywords to use for product search")
     semantic_queries: List[str] = Field(description="Semantic search queries for better matching")
+    recommended_categories: List[str] = Field(description="Recommended product categories based on analysis", default_factory=list)
+    category_confidence: float = Field(description="Confidence in category recommendations (0.0 to 1.0)", default=0.0)
     confidence: float = Field(description="Confidence in the analysis (0.0 to 1.0)")
 
 class SimilarProductSearch(BaseModel):
@@ -393,7 +395,9 @@ class HybridProductRetrieverAgent(AIProvider):
         try:
             if self.vector_service:
                 await self.vector_service.initialize()
-                logger.info("Hybrid Product Retriever (Elasticsearch Vector + RRF) initialized successfully")
+                # Set the LLM provider for intelligent category detection
+                self.vector_service.set_llm_provider(self.base_provider)
+                logger.info("✅ Hybrid Product Retriever (Elasticsearch Vector + RRF + LLM) initialized successfully")
             else:
                 logger.warning("Vector service not available - using keyword search only")
         except Exception as e:
@@ -480,14 +484,47 @@ ANALYSIS TASK:
 Focus on understanding their real needs, not just what they're asking for. Think about what would be most helpful for them."""
 
         try:
+            # Step 1: Get basic context analysis
             context_analysis = await self.base_provider.generate_structured_response(
                 [AIMessage(role="user", content=context_prompt)],
                 ContextAnalysis
             )
+            
+            # Step 2: Get category recommendations using the vector service's LLM analysis
+            # Build requirements dict for category analysis
+            requirements_for_categories = {
+                'semantic_query': " ".join(context_analysis.semantic_queries),
+                'technical_requirements': context_analysis.technical_requirements,
+                'business_requirements': [context_analysis.business_context],
+                'use_case': context_analysis.primary_need,
+                'industry': customer_context.get('industry', '') if customer_context else '',
+                'llm_context': {
+                    'primary_need': context_analysis.primary_need,
+                    'business_context': context_analysis.business_context,
+                    'technical_requirements': context_analysis.technical_requirements,
+                    'budget_indicator': context_analysis.budget_indicator,
+                    'timeline': context_analysis.timeline
+                }
+            }
+            
+            categories, category_confidence = await self._get_category_recommendations(requirements_for_categories)
+            
+            # Update context analysis with category recommendations
+            context_analysis.recommended_categories = categories
+            context_analysis.category_confidence = category_confidence
+            
+            logger.info(f"✅ Enhanced Context Analysis:")
+            logger.info(f"   Primary Need: {context_analysis.primary_need}")
+            logger.info(f"   Technical Focus: {context_analysis.business_context}")
+            logger.info(f"   Recommended Categories: {categories}")
+            logger.info(f"   Category Confidence: {category_confidence:.1%}")
+            logger.info(f"   Search Keywords: {context_analysis.search_keywords}")
+            
             return context_analysis
+            
         except Exception as e:
             logger.error(f"Context analysis failed: {e}")
-            # Fallback analysis
+            # Fallback analysis with empty categories
             return ContextAnalysis(
                 primary_need="general business solution",
                 business_context="standard business needs",
@@ -497,6 +534,8 @@ Focus on understanding their real needs, not just what they're asking for. Think
                 similar_products=[],
                 search_keywords=["business", "solution"],
                 semantic_queries=["business technology solution"],
+                recommended_categories=[],
+                category_confidence=0.0,
                 confidence=0.3
             )
     
@@ -554,12 +593,22 @@ Think broadly about their needs and suggest relevant alternatives."""
                 'technical_requirements': context_analysis.technical_requirements,
                 'budget_indicator': context_analysis.budget_indicator,
                 'timeline': context_analysis.timeline,
-                'confidence': context_analysis.confidence
+                'confidence': context_analysis.confidence,
+                'recommended_categories': context_analysis.recommended_categories,
+                'category_confidence': context_analysis.category_confidence
             },
             'search_keywords': context_analysis.search_keywords,
             'semantic_queries': context_analysis.semantic_queries,
-            'similar_products': context_analysis.similar_products
+            'similar_products': context_analysis.similar_products,
+            'recommended_categories': context_analysis.recommended_categories,
+            'category_confidence': context_analysis.category_confidence
         })
+        
+        logger.info(f"🔍 Enhanced Requirements with LLM Context:")
+        logger.info(f"   Primary Need: {context_analysis.primary_need}")
+        logger.info(f"   Recommended Categories: {context_analysis.recommended_categories}")
+        logger.info(f"   Category Confidence: {context_analysis.category_confidence:.1%}")
+        logger.info(f"   Search Keywords: {context_analysis.search_keywords}")
         
         return enhanced_requirements
     
@@ -1138,7 +1187,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             return []
     
     async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Perform vector search for products using semantic similarity"""
+        """Perform vector search for products using semantic similarity with intelligent category filtering"""
         try:
             if not self.vector_service:
                 return []
@@ -1148,15 +1197,38 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             if not semantic_query:
                 semantic_query = requirements.get('use_case', 'business solution')
             
-            print(f"🧠 Vector search query: {semantic_query}")
+            # Get category recommendations from LLM context if available
+            categories = None
+            llm_context = requirements.get('llm_context', {})
+            if 'recommended_categories' in requirements:
+                categories = requirements['recommended_categories']
+                logger.info(f"🎯 Using LLM-recommended categories for vector search: {categories}")
+            elif llm_context.get('recommended_categories'):
+                categories = llm_context['recommended_categories']
+                logger.info(f"🎯 Using context-recommended categories for vector search: {categories}")
             
-            # Perform vector search using the correct method name and parameter
-            results = await self.vector_service.vector_search_products(semantic_query, size=settings.final_result_limit)
+            logger.info(f"🧠 Vector search query: {semantic_query}")
+            if categories:
+                logger.info(f"🎯 Category filtering: {categories}")
+            
+            # Perform vector search with category filtering using the correct method name and parameter
+            results = await self.vector_service.vector_search_products(
+                semantic_query, 
+                size=settings.final_result_limit,
+                categories=categories  # Pass categories for intelligent filtering
+            )
             
             # Add search metadata
             for product in results:
                 product['search_source'] = 'vector'
                 product['semantic_score'] = product.get('_similarity_score', 0)
+                if categories:
+                    product['category_filtered'] = True
+                    product['filter_categories'] = categories
+            
+            logger.info(f"🧠 Vector search results: {len(results)} products")
+            if categories:
+                logger.info(f"   Category-filtered search for: {categories}")
             
             return results
             
@@ -1225,6 +1297,31 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         merged_products.sort(key=lambda x: x.get('keyword_score', 0) + x.get('semantic_score', 0), reverse=True)
         
         return merged_products[:settings.final_result_limit]
+
+    async def _get_category_recommendations(
+        self, 
+        requirements: Dict[str, Any]
+    ) -> tuple[List[str], float]:
+        """Get category recommendations using Elasticsearch vector service's LLM analysis"""
+        
+        try:
+            if self.vector_service and hasattr(self.vector_service, '_extract_categories_with_llm'):
+                logger.info("🎯 Getting category recommendations from vector service...")
+                categories = await self.vector_service._extract_categories_with_llm(requirements)
+                
+                # Calculate confidence based on number of categories and context richness
+                confidence = 0.8 if len(categories) >= 2 else 0.6
+                if len(categories) >= 4:
+                    confidence = 0.9
+                
+                return categories, confidence
+            else:
+                logger.warning("Vector service category analysis not available")
+                return [], 0.0
+                
+        except Exception as e:
+            logger.error(f"Category recommendation failed: {e}")
+            return [], 0.0
 
 # Async helper to avoid import issues
 async def run_async(coro):

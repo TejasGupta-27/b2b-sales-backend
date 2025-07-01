@@ -9,6 +9,9 @@ from elasticsearch.exceptions import ConnectionError, RequestError
 import aiohttp
 import numpy as np
 import re
+import os
+from ai_services.base import AIMessage
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +77,31 @@ CATEGORY_INDEX_MAP = {
 # Default index for uncategorized products
 DEFAULT_PRODUCTS_INDEX = "other_products_vector"
 
+class CategoryAnalysis(BaseModel):
+    """Pydantic model for intelligent category analysis"""
+    relevant_categories: List[str] = Field(
+        description="List of most relevant product categories (max 5)",
+        max_items=5
+    )
+    primary_use_case: str = Field(
+        description="Primary use case or application scenario"
+    )
+    technical_focus: str = Field(
+        description="Main technical focus area (gaming, workstation, storage, office, etc.)"
+    )
+    confidence: float = Field(
+        description="Confidence in category selection (0.0 to 1.0)",
+        ge=0.0,
+        le=1.0
+    )
+    reasoning: str = Field(
+        description="Brief explanation for category selection"
+    )
+    alternative_categories: List[str] = Field(
+        description="Alternative categories to consider if primary search fails",
+        default_factory=list
+    )
+
 class ElasticsearchVectorService:
     """Enhanced Elasticsearch service with vector search capabilities"""
     
@@ -91,6 +119,9 @@ class ElasticsearchVectorService:
         self.azure_embedding_endpoint = azure_embedding_endpoint
         self.azure_embedding_key = azure_embedding_key
         self.embedding_dimension = 3072  # text-embedding-3-large dimension
+        
+        # Add LLM provider for intelligent category detection
+        self.llm_provider = None
         
     async def initialize(self):
         """Initialize Elasticsearch with vector search capabilities"""
@@ -894,39 +925,44 @@ class ElasticsearchVectorService:
         """Close Elasticsearch connection"""
         await self.client.close()
 
-    def _extract_categories_from_requirements(self, requirements: Dict[str, Any]) -> List[str]:
-        """Extract relevant categories from user requirements"""
-        categories = []
+    async def _extract_categories_from_requirements(self, requirements: Dict[str, Any]) -> List[str]:
+        """Extract relevant product categories from requirements using LLM intelligence"""
         
-        # Check if categories are explicitly mentioned in requirements
-        if isinstance(requirements, dict):
-            # Check for explicit category mentions
-            for key, value in requirements.items():
-                if key == "product_categories" and isinstance(value, list):
-                    categories.extend(value)
-                elif key in ["technical_requirements", "business_requirements", "search_terms"]:
+        # Use LLM-powered category extraction
+        categories = await self._extract_categories_with_llm(requirements)
+        
+        # If no categories found, try the fallback method
+        if not categories:
+            categories = await self._extract_categories_fallback(requirements)
+        
+        # If still no categories, default to core categories based on common use cases
+        if not categories:
+            # Check if this looks like a workstation/professional use case
+            text_content = []
+            for key in ['semantic_query', 'technical_requirements', 'business_requirements']:
+                value = requirements.get(key)
+                if value:
                     if isinstance(value, list):
-                        text = " ".join(str(item).lower() for item in value)
+                        text_content.extend([str(item) for item in value])
                     else:
-                        text = str(value).lower()
-                    
-                    # Look for category keywords in the text
-                    category_keywords = {
-                        "cpu": ["cpu", "processor", "ryzen", "intel", "core"],
-                        "video-card": ["gpu", "graphics", "video card", "nvidia", "rtx", "radeon"],
-                        "memory": ["ram", "memory", "ddr", "gb ram"],
-                        "monitor": ["monitor", "display", "screen", "inch"],
-                        "storage": ["storage", "ssd", "hdd", "nvme", "tb"],
-                        "motherboard": ["motherboard", "mobo", "socket"],
-                        "power-supply": ["power supply", "psu", "wattage"],
-                    }
-                    
-                    for category, keywords in category_keywords.items():
-                        if any(keyword in text for keyword in keywords):
-                            categories.append(category)
+                        text_content.append(str(value))
+            
+            combined_text = " ".join(text_content).lower()
+            
+            if any(term in combined_text for term in ['workstation', 'professional', 'video', 'ai', 'ml', 'rendering']):
+                categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
+            elif any(term in combined_text for term in ['gaming', 'game', 'fps']):
+                categories = ['video-card', 'cpu', 'memory', 'monitor']
+            elif any(term in combined_text for term in ['storage', 'nas', 'file']):
+                categories = ['internal-hard-drive', 'external-hard-drive']
+            elif any(term in combined_text for term in ['office', 'business', 'productivity']):
+                categories = ['cpu', 'memory', 'monitor']
+            else:
+                # Default to most common categories
+                categories = ['cpu', 'memory', 'internal-hard-drive']
         
-        # Remove duplicates and return
-        return list(set(categories))
+        logger.info(f"🎯 Final categories selected: {categories}")
+        return categories
 
     # ===== COMPATIBILITY METHODS FOR OLD SERVICE INTERFACE =====
     
@@ -1206,6 +1242,204 @@ class ElasticsearchVectorService:
         
         logger.warning("Cluster readiness timeout - proceeding anyway")
         return False
+
+    def set_llm_provider(self, llm_provider):
+        """Set the LLM provider for intelligent category detection"""
+        self.llm_provider = llm_provider
+        logger.info("✅ LLM provider set for intelligent category detection")
+
+    async def _extract_categories_with_llm(self, requirements: Dict[str, Any]) -> List[str]:
+        """Use LLM with Pydantic function calling to intelligently extract relevant product categories"""
+        
+        if not self.llm_provider:
+            logger.warning("No LLM provider available for category extraction, using fallback")
+            return await self._extract_categories_fallback(requirements)
+        
+        try:
+            # Get available categories dynamically
+            available_categories = await self._get_active_categories()
+            
+            if not available_categories:
+                logger.warning("No active categories found")
+                return []
+            
+            # Build context for LLM analysis
+            context_parts = []
+            
+            # Add semantic query if available
+            if requirements.get('semantic_query'):
+                context_parts.append(f"Query: {requirements['semantic_query']}")
+            
+            # Add technical requirements
+            if requirements.get('technical_requirements'):
+                tech_reqs = requirements['technical_requirements']
+                if isinstance(tech_reqs, list):
+                    context_parts.append(f"Technical Requirements: {', '.join(str(req) for req in tech_reqs)}")
+                else:
+                    context_parts.append(f"Technical Requirements: {tech_reqs}")
+            
+            # Add business requirements
+            if requirements.get('business_requirements'):
+                business_reqs = requirements['business_requirements']
+                if isinstance(business_reqs, list):
+                    context_parts.append(f"Business Requirements: {', '.join(str(req) for req in business_reqs)}")
+                else:
+                    context_parts.append(f"Business Requirements: {business_reqs}")
+            
+            # Add use case
+            if requirements.get('use_case'):
+                context_parts.append(f"Use Case: {requirements['use_case']}")
+            
+            # Add industry
+            if requirements.get('industry'):
+                context_parts.append(f"Industry: {requirements['industry']}")
+            
+            # Add LLM context if available
+            llm_context = requirements.get('llm_context', {})
+            if llm_context.get('primary_need'):
+                context_parts.append(f"Primary Need: {llm_context['primary_need']}")
+            if llm_context.get('business_context'):
+                context_parts.append(f"Business Context: {llm_context['business_context']}")
+            
+            requirements_text = "\n".join(context_parts)
+            
+            # Create intelligent prompt for Pydantic function calling
+            category_prompt = f"""You are an expert B2B technology consultant analyzing customer requirements to determine which product categories are most relevant for their needs.
+
+CUSTOMER REQUIREMENTS:
+{requirements_text}
+
+AVAILABLE PRODUCT CATEGORIES:
+{', '.join(available_categories)}
+
+CATEGORY DESCRIPTIONS:
+• cpu: Processors, CPUs for workstations, servers, gaming systems
+• video-card: Graphics cards, GPUs for gaming, AI/ML, rendering, professional workstations  
+• memory: RAM, system memory, DDR4/DDR5 modules for performance
+• monitor: Displays, screens, monitors for professional work, gaming, content creation
+• internal-hard-drive: Internal storage drives, SSDs, HDDs, NVMe drives for data storage
+• external-hard-drive: External storage, portable drives, backup storage solutions
+• motherboard: System boards, platforms, chipsets - foundation of any system
+• power-supply: Power supplies, PSUs for stable system operation
+• case: Computer cases, enclosures, chassis for housing components
+• cpu-cooler: CPU cooling solutions, thermal management for performance
+• keyboard: Input devices, mechanical keyboards, wireless keyboards
+• mouse: Pointing devices, gaming mice, professional mice for productivity
+• headphones: Audio devices, headsets, professional audio equipment
+• speakers: Audio output, sound systems for multimedia
+• webcam: Video devices, conferencing cameras for communication
+• optical-drive: CD/DVD/Blu-ray drives for legacy media
+• ups: Uninterruptible power supplies, backup power for critical systems
+• wireless-network-card: WiFi adapters, wireless networking solutions
+• wired-network-card: Ethernet adapters, wired networking for reliability
+
+ANALYSIS GUIDELINES:
+1. Focus on categories that directly solve the customer's stated needs
+2. Consider the primary use case and industry context
+3. Prioritize essential components over accessories
+4. Limit to 3-5 most relevant categories for focused search
+5. Consider complementary products that work together
+
+COMMON USE CASE PATTERNS:
+• Gaming: video-card, cpu, memory, monitor
+• Workstation/Professional: cpu, video-card, memory, internal-hard-drive
+• AI/ML Training: video-card, cpu, memory, internal-hard-drive  
+• Office/Productivity: cpu, memory, monitor, keyboard, mouse
+• Storage/NAS: internal-hard-drive, external-hard-drive
+• Content Creation: video-card, cpu, memory, monitor
+
+Analyze the requirements and provide structured category recommendations."""
+
+            try:
+                # Use Pydantic function calling for structured response
+                logger.info("🧠 Using Pydantic function calling for category analysis...")
+                category_analysis = await self.llm_provider.generate_structured_response(
+                    [AIMessage(role="user", content=category_prompt)],
+                    CategoryAnalysis
+                )
+                
+                # Validate that returned categories are in available categories
+                valid_categories = [
+                    cat for cat in category_analysis.relevant_categories 
+                    if cat in available_categories
+                ]
+                
+                logger.info(f"🧠 LLM Category Analysis:")
+                logger.info(f"   Primary Use Case: {category_analysis.primary_use_case}")
+                logger.info(f"   Technical Focus: {category_analysis.technical_focus}")
+                logger.info(f"   Selected Categories: {valid_categories}")
+                logger.info(f"   Confidence: {category_analysis.confidence:.1%}")
+                logger.info(f"   Reasoning: {category_analysis.reasoning}")
+                
+                if category_analysis.alternative_categories:
+                    valid_alternatives = [
+                        cat for cat in category_analysis.alternative_categories 
+                        if cat in available_categories
+                    ]
+                    logger.info(f"   Alternative Categories: {valid_alternatives}")
+                
+                return valid_categories[:5]  # Limit to 5 categories max
+                    
+            except Exception as e:
+                logger.warning(f"Pydantic function calling failed: {e}")
+                return await self._extract_categories_fallback(requirements)
+                
+        except Exception as e:
+            logger.error(f"LLM category extraction failed: {e}")
+            return await self._extract_categories_fallback(requirements)
+
+    async def _extract_categories_fallback(self, requirements: Dict[str, Any]) -> List[str]:
+        """Fallback category extraction using pattern matching"""
+        
+        categories = set()
+        
+        # Get text to analyze
+        text_parts = []
+        
+        for key in ['semantic_query', 'technical_requirements', 'business_requirements', 'use_case']:
+            value = requirements.get(key)
+            if value:
+                if isinstance(value, list):
+                    text_parts.extend([str(item) for item in value])
+                else:
+                    text_parts.append(str(value))
+        
+        text = " ".join(text_parts).lower()
+        
+        # Simple pattern matching as fallback
+        if any(word in text for word in ['storage', 'nas', 'file sharing', 'raid', 'backup']):
+            categories.update(['internal-hard-drive', 'external-hard-drive'])
+        
+        if any(word in text for word in ['gaming', '1440p', 'fps', 'ray tracing', 'gpu', 'graphics']):
+            categories.update(['video-card', 'cpu', 'memory'])
+        
+        if any(word in text for word in ['workstation', 'professional', 'video editing', '3d rendering']):
+            categories.update(['video-card', 'cpu', 'memory', 'internal-hard-drive'])
+        
+        if any(word in text for word in ['ai', 'ml', 'machine learning', 'training', 'dataset']):
+            categories.update(['video-card', 'cpu', 'memory', 'internal-hard-drive'])
+        
+        if any(word in text for word in ['monitor', 'display', 'screen', '27-inch', '4k']):
+            categories.add('monitor')
+        
+        if any(word in text for word in ['office', 'productivity', 'business']):
+            categories.update(['cpu', 'memory', 'monitor'])
+        
+        return list(categories)
+
+    async def _get_active_categories(self) -> List[str]:
+        """Get categories that actually have data"""
+        active_categories = []
+        
+        for category, index_name in CATEGORY_INDEX_MAP.items():
+            try:
+                count_response = await self.client.count(index=index_name)
+                if count_response.get('count', 0) > 0:
+                    active_categories.append(category)
+            except:
+                continue
+                
+        return active_categories
 
 # Global instance
 _elasticsearch_vector_service = None
