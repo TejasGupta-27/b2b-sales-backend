@@ -296,8 +296,7 @@ class ElasticsearchVectorService:
             },
             "settings": {
                 "number_of_shards": 1,
-                "number_of_replicas": 0,
-                "index.knn": True
+                "number_of_replicas": 0
             }
         }
         
@@ -352,8 +351,7 @@ class ElasticsearchVectorService:
             },
             "settings": {
                 "number_of_shards": 1,
-                "number_of_replicas": 0,
-                "index.knn": True
+                "number_of_replicas": 0
             }
         }
         
@@ -543,6 +541,8 @@ class ElasticsearchVectorService:
     ) -> List[Dict[str, Any]]:
         """Perform vector search on products with optional category filtering"""
         try:
+            logger.info(f"🔍 Vector search called with categories: {categories}")
+            
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
@@ -556,9 +556,11 @@ class ElasticsearchVectorService:
                     index_names.append(index_name)
                 # Remove duplicates
                 index_names = list(set(index_names))
+                logger.info(f"🎯 Searching in category-specific indices: {index_names}")
             else:
                 # Search in all category indices
                 index_names = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
+                logger.info(f"🌐 Searching in all indices: {len(index_names)} indices")
             
             # Build the search query
             search_query = {
@@ -632,7 +634,13 @@ class ElasticsearchVectorService:
                 product["_index"] = hit["_index"]  # Track which index this came from
                 products.append(product)
             
-            logger.info(f"Vector search returned {len(products)} products for query: '{query}' in indices: {index_names}")
+            logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
+            logger.info(f"   Searched indices: {index_names}")
+            if products:
+                # Log product categories for debugging
+                product_categories = [p.get('category', 'unknown') for p in products[:5]]
+                logger.info(f"   Top 5 product categories: {product_categories}")
+            
             return products
             
         except Exception as e:
