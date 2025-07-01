@@ -677,13 +677,16 @@ Think broadly about their needs and suggest relevant alternatives."""
             search_keywords.extend(similar_products_analysis.search_criteria)
             semantic_queries.extend(similar_products_analysis.alternative_approaches)
         
-        # Update requirements with LLM insights
-        enhanced_requirements = requirements.copy()
-        enhanced_requirements['search_keywords'] = search_keywords
-        enhanced_requirements['semantic_queries'] = semantic_queries
+        # FIXED: Preserve ALL existing requirements (including categories) and just add new insights
+        requirements['search_keywords'] = search_keywords
+        requirements['semantic_queries'] = semantic_queries
         
-        # Perform the hybrid search
-        return await self._perform_hybrid_search(enhanced_requirements)
+        # DEBUG: Verify categories are preserved
+        logger.info(f"🔍 DEBUG: Categories before hybrid search: {requirements.get('recommended_categories')}")
+        logger.info(f"🔍 DEBUG: LLM context categories: {requirements.get('llm_context', {}).get('recommended_categories')}")
+        
+        # Perform the hybrid search with preserved requirements
+        return await self._perform_hybrid_search(requirements)
     
     async def _fallback_analysis(
         self,
@@ -864,17 +867,20 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         return comprehensive_query
     
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform hybrid search using Elasticsearch keyword and vector search with RRF fusion"""
-        
-        print("🔍 Performing hybrid search with RRF fusion...")
+        """Perform hybrid search combining elasticsearch and vector search with RRF fusion"""
         
         search_methods = {
             "methods": [],
-            "elasticsearch_count": 0,
-            "vector_products_count": 0,
-            "vector_solutions_count": 0,
-            "fusion_method": "unknown"
+            "fusion_enabled": settings.use_rrf_merging,
+            "elasticsearch_weight": settings.rrf_elasticsearch_weight,
+            "semantic_weight": settings.rrf_semantic_weight
         }
+        
+        print("🔍 Performing hybrid search with RRF fusion...")
+        
+        # DEBUG: Verify categories are reaching hybrid search
+        logger.info(f"🔍 DEBUG: Hybrid search - recommended_categories: {requirements.get('recommended_categories')}")
+        logger.info(f"🔍 DEBUG: Hybrid search - llm_context categories: {requirements.get('llm_context', {}).get('recommended_categories')}")
         
         # Step 1: Elasticsearch keyword search
         print("📋 Step 1: Elasticsearch keyword search...")

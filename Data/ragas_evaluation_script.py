@@ -12,6 +12,7 @@ import time
 import re
 import sys
 import os
+import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import pandas as pd
@@ -21,6 +22,24 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Add the app directory to Python path for imports
 sys.path.append('/app')
+
+# Configure comprehensive logging for evaluation
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Console output
+        logging.FileHandler('/app/logs/ragas_evaluation.log')  # File output
+    ]
+)
+
+# Set specific loggers to DEBUG level to see category debug messages
+logging.getLogger('ai_services.hybrid_product_retriever_agent').setLevel(logging.DEBUG)
+logging.getLogger('services.elasticsearch_vector_service').setLevel(logging.DEBUG)
+logging.getLogger('__main__').setLevel(logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+logger.info("🔍 RAGAS Evaluation: DEBUG logging enabled for category debugging")
 
 @dataclass
 class EvaluationResult:
