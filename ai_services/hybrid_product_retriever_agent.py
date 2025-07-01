@@ -386,6 +386,35 @@ class RRFHybridFusion:
         
         return allocation
 
+    def fuse_rankings_per_category(
+        self,
+        elasticsearch_products: List[Dict],
+        vector_products: List[Dict],
+        categories: List[str],
+        max_results: int = None
+    ) -> List[Dict]:
+        """
+        Apply RRF fusion within each category and return equal number of products per category.
+        """
+        max_results = max_results or settings.final_result_limit
+        num_categories = len(categories)
+        if num_categories == 0:
+            return []
+        per_category = max_results // num_categories
+        remainder = max_results % num_categories
+        final_products = []
+        used_ids = set()
+        for i, category in enumerate(categories):
+            n = per_category + (1 if i < remainder else 0)
+            es_cat = [p for p in elasticsearch_products if p.get('category') == category]
+            vec_cat = [p for p in vector_products if p.get('category') == category]
+            fused = self.fuse_rankings(es_cat, vec_cat, max_results=n)
+            for prod in fused:
+                if prod.get('id') not in used_ids:
+                    final_products.append(prod)
+                    used_ids.add(prod.get('id'))
+        return final_products
+
 class HybridProductRetrieverAgent(AIProvider):
     """Hybrid product retriever using Elasticsearch for both keyword and semantic search with RRF fusion"""
     
@@ -690,6 +719,16 @@ Think broadly about their needs and suggest relevant alternatives."""
         # Perform hybrid search
         hybrid_results = await self._perform_hybrid_search(requirements)
         
+        # Use per-category fusion for fallback if categories are present
+        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
+        if categories:
+            hybrid_results['products'] = self.rrf_fusion.fuse_rankings_per_category(
+                [p for p in hybrid_results['products'] if p.get('search_source') in ('elasticsearch', 'both')],
+                [p for p in hybrid_results['products'] if p.get('search_source') in ('vector', 'both')],
+                categories,
+                max_results=settings.final_result_limit
+            )
+        
         # Analyze results
         analysis = await self._analyze_hybrid_recommendations(
             hybrid_results["products"], 
@@ -881,7 +920,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             search_methods["methods"].append("vector_semantic")
             search_methods["vector_products_count"] = len(vector_products)
             print(f"   Found {len(vector_products)} products via vector search")
-            
+        
         # Step 3: Vector search for solutions
         vector_solutions = []
         if self.vector_service:
@@ -893,7 +932,17 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         
         # Step 4: RRF fusion for products
         print("🎯 Step 4: RRF fusion for products...")
-        if settings.use_rrf_merging:
+        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
+        if settings.use_rrf_merging and categories:
+            fused_products = self.rrf_fusion.fuse_rankings_per_category(
+                elasticsearch_products, 
+                vector_products,
+                categories,
+                max_results=settings.final_result_limit
+            )
+            search_methods["fusion_method"] = "rrf_per_category"
+            print(f"   RRF per-category fusion complete: {len(fused_products)} products")
+        elif settings.use_rrf_merging:
             fused_products = self.rrf_fusion.fuse_rankings(
                 elasticsearch_products, 
                 vector_products,
@@ -926,6 +975,17 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         requirements: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Analyze hybrid recommendations using Pydantic function calling"""
+        
+        # Use per-category fusion for analysis if categories are present
+        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
+        if categories:
+            # Re-fuse products per category for analysis
+            products = self.rrf_fusion.fuse_rankings_per_category(
+                [p for p in products if p.get('search_source') in ('elasticsearch', 'both')],
+                [p for p in products if p.get('search_source') in ('vector', 'both')],
+                categories,
+                max_results=settings.final_result_limit
+            )
         
         analysis_prompt = f"""You are a technical solution architect analyzing hybrid search results from both keyword and semantic search.
 
