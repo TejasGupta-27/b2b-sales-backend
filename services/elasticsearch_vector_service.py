@@ -1020,8 +1020,8 @@ class ElasticsearchVectorService:
             if not query:
                 query = "business technology professional enterprise"
             
-            # Extract relevant categories from requirements
-            relevant_categories = self._extract_categories_from_requirements(requirements)
+            # Extract relevant categories from requirements (FIX: Add await)
+            relevant_categories = await self._extract_categories_from_requirements(requirements)
             
             # Use vector search with hybrid approach and category filtering
             return await self.vector_search_products(

@@ -224,65 +224,59 @@ class RRFHybridFusion:
         return selected_products
     
     def _identify_requirement_groups(self, products: List[Dict]) -> Dict[str, List[Dict]]:
-        """Identify requirement groups based on product characteristics and descriptions"""
+        """Identify requirement groups based on actual product categories and characteristics"""
         
         requirement_groups = {
-            'core_components': [],      # CPU, GPU, motherboard
-            'memory_storage': [],       # RAM, SSD, HDD
-            'power_cooling': [],        # PSU, cooling solutions
-            'peripherals': [],          # Monitor, keyboard, mouse
-            'networking': [],           # Network cards, routers
-            'accessories': [],          # Cables, adapters, etc.
-            'solutions': [],            # Complete solutions/bundles
-            'other': []                 # Everything else
+            'core_compute': [],         # Most important for any build (CPU, GPU, motherboard)
+            'memory_storage': [],       # Essential for performance (RAM, storage)
+            'display': [],              # Important for usability (monitors)
+            'power_cooling': [],        # Essential for stability (PSU, cooling)
+            'input_devices': [],        # Important for usability (keyboard, mouse)
+            'networking': [],           # Important for connectivity
+            'cases_accessories': [],    # Nice to have (cases, cables)
+            'audio_video': [],          # Nice to have (speakers, webcams)
+            'other': []                 # Catch-all
         }
         
-        # Keywords for each group
-        group_keywords = {
-            'core_components': [
-                'cpu', 'processor', 'gpu', 'graphics', 'video card', 'motherboard', 'mainboard',
-                'intel', 'amd', 'ryzen', 'core i', 'nvidia', 'rtx', 'gtx', 'radeon'
-            ],
-            'memory_storage': [
-                'ram', 'memory', 'ddr', 'ssd', 'hard drive', 'storage', 'nvme', 'sata',
-                'kingston', 'corsair', 'samsung', 'western digital', 'seagate'
-            ],
-            'power_cooling': [
-                'power supply', 'psu', 'cooler', 'cooling', 'fan', 'liquid', 'aio',
-                'corsair', 'evga', 'seasonic', 'noctua', 'be quiet'
-            ],
-            'peripherals': [
-                'monitor', 'display', 'keyboard', 'mouse', 'headset', 'speaker', 'webcam',
-                'lg', 'samsung', 'logitech', 'razer', 'steelseries'
-            ],
-            'networking': [
-                'network', 'wifi', 'ethernet', 'router', 'switch', 'adapter',
-                'tp-link', 'netgear', 'asus', 'intel'
-            ],
-            'accessories': [
-                'cable', 'adapter', 'mount', 'stand', 'case', 'chassis',
-                'nzxt', 'fractal', 'phanteks', 'lian li'
-            ],
-            'solutions': [
-                'solution', 'bundle', 'kit', 'complete', 'system', 'workstation',
-                'dell', 'hp', 'lenovo', 'acer', 'asus'
-            ]
+        # Category to group mapping based on actual product categories
+        category_to_group = {
+            'cpu': 'core_compute',
+            'video-card': 'core_compute', 
+            'memory': 'memory_storage',
+            'internal-hard-drive': 'memory_storage',
+            'external-hard-drive': 'memory_storage',
+            'monitor': 'display',
+            'keyboard': 'input_devices',
+            'mouse': 'input_devices',
+            'wireless-network-card': 'networking',
+            'wired-network-card': 'networking',
+            'power-supply': 'power_cooling',
+            'cpu-cooler': 'power_cooling',
+            'ups': 'power_cooling',
+            'case': 'cases_accessories',
+            'case-accessory': 'cases_accessories',
+            'case-fan': 'power_cooling',
+            'headphones': 'audio_video',
+            'speakers': 'audio_video',
+            'webcam': 'audio_video',
+            'motherboard': 'core_compute',
+            'optical-drive': 'other',
+            'os': 'other',
+            'sound-card': 'audio_video',
+            'thermal-paste': 'cases_accessories',
+            'fan-controller': 'power_cooling'
         }
         
+        # Group products by their actual category
         for product in products:
-            product_text = self._get_product_text(product).lower()
-            assigned = False
+            # Get the actual product category from the product data
+            category = product.get('category', '').lower()
             
-            # Try to assign to specific groups
-            for group_name, keywords in group_keywords.items():
-                if any(keyword in product_text for keyword in keywords):
-                    requirement_groups[group_name].append(product)
-                    assigned = True
-                    break
+            # Map category to requirement group
+            group_name = category_to_group.get(category, 'other')
+            requirement_groups[group_name].append(product)
             
-            # If not assigned to specific group, put in 'other'
-            if not assigned:
-                requirement_groups['other'].append(product)
+            logger.debug(f"Grouped product '{product.get('name', 'Unknown')}' (category: {category}) into {group_name}")
         
         # Remove empty groups
         requirement_groups = {k: v for k, v in requirement_groups.items() if v}
@@ -318,13 +312,14 @@ class RRFHybridFusion:
         
         # Define group priorities (higher = more important)
         group_priorities = {
-            'core_components': 3,      # Most important for any build
-            'memory_storage': 2,       # Essential for performance
-            'power_cooling': 2,        # Essential for stability
-            'peripherals': 1,          # Important for usability
+            'core_compute': 3,         # Most important for any build (CPU, GPU, motherboard)
+            'memory_storage': 3,       # Essential for performance (RAM, storage)
+            'display': 2,              # Important for usability (monitors)
+            'power_cooling': 2,        # Essential for stability (PSU, cooling)
+            'input_devices': 1,        # Important for usability (keyboard, mouse)
             'networking': 1,           # Important for connectivity
-            'solutions': 2,            # Complete solutions are valuable
-            'accessories': 1,          # Nice to have
+            'cases_accessories': 1,    # Nice to have (cases, cables)
+            'audio_video': 1,          # Nice to have (speakers, webcams)
             'other': 1                 # Catch-all
         }
         
@@ -334,19 +329,46 @@ class RRFHybridFusion:
         allocation = {}
         for group_name in requirement_groups.keys():
             priority = group_priorities.get(group_name, 1)
-            # Allocate based on priority and available products
-            group_allocation = max(1, int((priority / total_priority) * max_results * 0.8))
-            # Don't allocate more than available products
-            group_allocation = min(group_allocation, len(requirement_groups[group_name]))
+            group_size = len(requirement_groups[group_name])
+            
+            # Base allocation based on priority
+            base_allocation = max(1, int((priority / total_priority) * max_results * 0.7))
+            
+            # Adjust allocation based on group size (don't allocate more than available)
+            group_allocation = min(base_allocation, group_size)
+            
+            # Ensure high-priority groups get at least 2 products if available
+            if priority >= 3 and group_size >= 2:
+                group_allocation = max(group_allocation, 2)
+            
             allocation[group_name] = group_allocation
         
         # Ensure we don't exceed max_results
         total_allocated = sum(allocation.values())
         if total_allocated > max_results:
-            # Reduce allocation proportionally
+            # Reduce allocation proportionally, but preserve high-priority groups
             reduction_factor = max_results / total_allocated
             for group_name in allocation:
-                allocation[group_name] = max(1, int(allocation[group_name] * reduction_factor))
+                priority = group_priorities.get(group_name, 1)
+                if priority >= 3:
+                    # Keep high-priority allocations, reduce others more
+                    allocation[group_name] = max(1, int(allocation[group_name] * (reduction_factor + 0.2)))
+                else:
+                    allocation[group_name] = max(1, int(allocation[group_name] * reduction_factor))
+        
+        # Final check to ensure we don't exceed max_results
+        total_allocated = sum(allocation.values())
+        if total_allocated > max_results:
+            # Remove allocation from lowest priority groups
+            sorted_groups = sorted(allocation.items(), key=lambda x: group_priorities.get(x[0], 1))
+            while total_allocated > max_results and sorted_groups:
+                group_name, current_allocation = sorted_groups.pop(0)
+                if current_allocation > 1:
+                    allocation[group_name] -= 1
+                    total_allocated -= 1
+                elif current_allocation == 1:
+                    allocation[group_name] = 0
+                    total_allocated -= 1
         
         return allocation
 
@@ -433,6 +455,8 @@ class HybridProductRetrieverAgent(AIProvider):
             print(f"✅ Context Analysis: {context_analysis.primary_need}")
             print(f"   Keywords: {context_analysis.search_keywords}")
             print(f"   Semantic Queries: {context_analysis.semantic_queries}")
+            print(f"🎯 Category Recommendations: {context_analysis.recommended_categories}")
+            print(f"   Category Confidence: {context_analysis.category_confidence:.1%}")
             
             # Step 2: Enhanced requirement extraction with context
             requirements = await self._extract_requirements_with_context(conversation_messages, customer_context, context_analysis)
