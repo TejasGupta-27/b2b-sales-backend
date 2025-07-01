@@ -542,6 +542,7 @@ class ElasticsearchVectorService:
         """Perform vector search on products with optional category filtering and balanced results"""
         try:
             logger.info(f"🔍 Vector search called with categories: {categories}")
+            logger.info(f"🔍 DEBUG: Categories type: {type(categories)}, length: {len(categories) if categories else 0}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
@@ -551,6 +552,10 @@ class ElasticsearchVectorService:
             if categories and len(categories) > 1:
                 logger.info(f"🎯 Performing balanced search across {len(categories)} categories")
                 return await self._balanced_category_search(query_vector, query, categories, size, filters, hybrid_weight)
+            elif categories and len(categories) == 1:
+                logger.info(f"🎯 Single category search for: {categories[0]}")
+            else:
+                logger.info(f"🔍 No categories or insufficient categories for balanced search - using standard search")
             
             # Determine which indices to search
             if categories:
