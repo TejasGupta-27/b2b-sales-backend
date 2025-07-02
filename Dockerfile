@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     python3-dev \
     build-essential \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for better dependency resolution
@@ -40,6 +41,9 @@ RUN mkdir -p \
     Data/json \
     static
 
+# Make scripts executable
+RUN chmod +x scripts/init-db.sh start.sh
+
 # Create a non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
@@ -55,6 +59,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Default command
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload"]
+# Default command - use the startup script
+CMD ["./start.sh"]
 

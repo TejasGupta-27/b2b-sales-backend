@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  # Database initialization service
+  db-init:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/b2b_sales
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["bash", "/app/scripts/init-db.sh"]
+    restart: "no"
+    profiles:
+      - init
+
   # Main B2B Sales Backend Application
   b2b-sales-backend:
     build: 
@@ -53,8 +70,10 @@ services:
       - ./Data/json:/app/Data/json
       # Note: ChromaDB volume removed - using Elasticsearch for all search functionality
     depends_on:
-      - postgres
-      - elasticsearch
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
