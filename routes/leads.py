@@ -11,7 +11,7 @@ from models.lead import Lead, LeadCreate, LeadUpdate, LeadStatus
 from db.database import get_db
 from db.models import Lead as DBLead
 from ai_services.factory import AIServiceFactory
-from ai_services.sales_agent import SalesAgentProvider
+
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
