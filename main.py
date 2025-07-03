@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text, func, and_
 import asyncio
+import time
 
 # Import database components
 from db.database import get_db, engine, create_tables, test_connection
@@ -40,6 +41,7 @@ from models.lead import Lead
 from services.cache_service import get_cache_service, start_cache_cleanup_task
 from services.elasticsearch_vector_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
+from services.metrics_service import metrics_middleware, metrics_endpoint, get_metrics_service
 
 # Import configuration
 from config import settings
@@ -74,6 +76,9 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Add metrics middleware
+app.middleware("http")(metrics_middleware)
+
 # Add compression middleware for better response times
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -95,6 +100,9 @@ app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
 app.include_router(admin_router)
+
+# Add metrics endpoint
+app.get("/metrics")(metrics_endpoint)
 
 # Keep your working models
 class SalesChatMessage(BaseModel):
@@ -254,6 +262,9 @@ async def root():
 @app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     """Optimized sales chat endpoint with reduced latency"""
+    metrics_service = get_metrics_service()
+    start_time = time.time()
+    
     try:
         # Get speech service
         global speech_service
@@ -284,6 +295,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             )
             db.add(user_message)
             db.commit()
+            
+            # Record chat message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
             # Get conversation history with limit for better performance
             messages = []
@@ -319,7 +333,11 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 logger.info("✅ Serving response from cache")
                 response_content = cached_response
                 response_metadata = {"cached": True, "provider": "cache"}
+                metrics_service.record_cache_hit()
             else:
+                # Record cache miss
+                metrics_service.record_cache_miss()
+                
                 # Create simple conversational agent for natural responses
                 base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
                 conversational_agent = SimpleConversationalAgent(base_provider)
@@ -329,8 +347,17 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 
                 # Let the conversational agent handle all types of requests naturally
                 # No hardcoded phrase detection - let the AI determine the best response
+                ai_start_time = time.time()
                 response = await conversational_agent.generate_response(
                     messages, customer_context
+                )
+                ai_duration = time.time() - ai_start_time
+                
+                # Record AI response time
+                metrics_service.record_ai_response_time(
+                    duration=ai_duration,
+                    provider=response.provider,
+                    model=response.model
                 )
                 
                 response_content = response.content
@@ -369,6 +396,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             db.add(assistant_message)
             db.commit()
             logger.info(f"💾 Assistant message saved with speech data: {assistant_message.id}")
+            
+            # Record assistant message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="assistant")
             
             # Prepare enhanced response
             chat_response = ChatResponse(
@@ -416,6 +446,9 @@ async def get_products():
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation and pitch deck using QuoteGenerationAgent"""
+    metrics_service = get_metrics_service()
+    start_time = time.time()
+    
     try:
         # Create and initialize the quote generation agent
         base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
@@ -447,10 +480,15 @@ async def generate_quote(quote_request: Dict[str, Any]):
         
         # Check if quote generation was successful
         if not quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
         
         if 'error' in quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail=quote['error'])
+        
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
         
         # Generate unique IDs
         quote_id = quote.get('quote_id', str(uuid.uuid4()))
@@ -487,6 +525,7 @@ async def generate_quote(quote_request: Dict[str, Any]):
         }
     except Exception as e:
         logger.error(f"Quote generation failed: {e}")
+        metrics_service.record_quote_generation(status="error")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/send")
