@@ -11,10 +11,8 @@ from models.recommendation import RecommendationSet, ProductRecommendation
 from ai_services.factory import AIServiceFactory
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from db.models import Lead, RecommendationSet as DBRecommendationSet, ProductRecommendation as DBProductRecommendation
-from ai_services.conversation_flow_manager import ConversationFlowAgent
 from ai_services.base import AIResponse  # Needed to build dummy response for quote agent
 from services.metrics_service import get_metrics_service
-from services.elasticsearch_service import get_elasticsearch_service
 from config import settings
 
 router = APIRouter()

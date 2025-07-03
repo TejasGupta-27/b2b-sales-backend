@@ -10,8 +10,6 @@ from ai_services.factory import AIServiceFactory
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from ai_services.quote_generation_agent import QuoteGenerationAgent
 from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
-from ai_services.sales_agent import SalesAgentProvider
-from ai_services.conversation_flow_manager import ConversationFlowAgent
 from ai_services.dynamic_extraction_agent import DynamicExtractionAgent
 from ai_services.base import AIMessage
 from ai_services.token_tracker import TokenTracker
