@@ -1070,8 +1070,8 @@
       ]
     },
     {
-      "title": "AI & Token Usage",
-      "type": "barchart",
+      "title": "Token Usage & AI Performance",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -1082,15 +1082,7 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            }
+            "displayMode": "list"
           },
           "mappings": [],
           "thresholds": {
@@ -1109,14 +1101,41 @@
                 "value": 50000
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "AI Response Time (avg)"
+              "options": "Total Tokens Used"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "gradient-gauge"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Today's Tokens"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg Response Time"
             },
             "properties": [
               {
@@ -1124,12 +1143,23 @@
                 "value": "s"
               },
               {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 2
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -1143,18 +1173,18 @@
       },
       "id": 10,
       "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
         "orientation": "auto",
-        "xField": "date",
-        "colorByField": "Daily Token Usage"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
       },
       "targets": [
         {
@@ -1162,8 +1192,8 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "b2b_token_usage_daily{provider=\"azure_openai\",model=\"gpt-4.1-mini\"}",
-          "legendFormat": "Daily Token Usage",
+          "expr": "b2b_token_usage_total{provider=\"azure_openai\",model=\"gpt-4.1-mini\"}",
+          "legendFormat": "Total Tokens Used",
           "refId": "A"
         },
         {
@@ -1171,9 +1201,18 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
-          "legendFormat": "AI Response Time (avg)",
+          "expr": "b2b_token_usage_daily{provider=\"azure_openai\",model=\"gpt-4.1-mini\",date=~\".*\"}",
+          "legendFormat": "Today's Tokens",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
+          "legendFormat": "Avg Response Time",
+          "refId": "C"
         }
       ]
     }

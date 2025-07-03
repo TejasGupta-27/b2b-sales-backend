@@ -8,6 +8,7 @@ from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 
 # HTTP Metrics
 http_requests_total = Counter(
@@ -138,12 +139,48 @@ class MetricsService:
     def __init__(self):
         self.start_time = time.time()
         self.token_usage_file = Path("Data/token_usage.json")
+        self.quotation_values_file = Path("Data/quotation_values.json")
         
-        # Track quotation values internally by currency
-        self._quotation_totals = {"USD": 0.0}
+        # Track quotation values internally by currency (load from file)
+        self._quotation_totals = self._load_quotation_totals()
         
-        # Initialize quotation value metric with default values
-        b2b_quotation_value_total.labels(currency="USD").set(0)
+        # Initialize quotation value metrics with persisted values
+        for currency, total in self._quotation_totals.items():
+            b2b_quotation_value_total.labels(currency=currency).set(total)
+    
+    def _load_quotation_totals(self) -> Dict[str, float]:
+        """Load quotation totals from persistent storage"""
+        try:
+            if self.quotation_values_file.exists():
+                with open(self.quotation_values_file, 'r') as f:
+                    data = json.load(f)
+                    totals = data.get('totals_by_currency', {"USD": 0.0})
+                    print(f"💰 Loaded quotation totals from file: {totals}")
+                    return totals
+            else:
+                print(f"💰 No quotation values file found, starting with defaults: {{'USD': 0.0}}")
+                return {"USD": 0.0}
+        except Exception as e:
+            print(f"❌ Error loading quotation totals: {e}")
+            return {"USD": 0.0}
+    
+    def _save_quotation_totals(self):
+        """Save quotation totals to persistent storage"""
+        try:
+            # Ensure directory exists
+            self.quotation_values_file.parent.mkdir(exist_ok=True)
+            
+            data = {
+                "totals_by_currency": self._quotation_totals,
+                "last_updated": time.time(),
+                "last_updated_iso": datetime.now().isoformat()
+            }
+            
+            with open(self.quotation_values_file, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving quotation totals: {e}")
+            self.record_error("quotation_totals_save", "metrics_service")
     
     def record_http_request(self, method: str, endpoint: str, status: int, duration: float):
         """Record HTTP request metrics"""
@@ -190,6 +227,11 @@ class MetricsService:
                 
                 # Update Prometheus metric
                 b2b_quotation_value_total.labels(currency=currency).set(self._quotation_totals[currency])
+                
+                # Save to persistent storage
+                self._save_quotation_totals()
+                
+                print(f"💰 Quotation value updated: {quote_value} {currency} (Total: {self._quotation_totals[currency]} {currency})")
     
     def record_ai_response_time(self, duration: float, provider: str = "unknown", model: str = "unknown"):
         """Record AI service response time"""
@@ -331,6 +373,22 @@ class MetricsService:
         """Get Prometheus metrics as string"""
         metrics_bytes = generate_latest()
         return metrics_bytes.decode('utf-8')
+    
+    def update_quotation_metrics(self):
+        """Update quotation value metrics from persistent storage (useful for admin operations)"""
+        try:
+            # Reload from file
+            self._quotation_totals = self._load_quotation_totals()
+            
+            # Update Prometheus metrics
+            for currency, total in self._quotation_totals.items():
+                b2b_quotation_value_total.labels(currency=currency).set(total)
+                
+            print(f"💰 Quotation metrics updated from file: {self._quotation_totals}")
+            
+        except Exception as e:
+            print(f"❌ Error updating quotation metrics: {e}")
+            self.record_error("quotation_metrics_update", "metrics_service")
 
 # Global metrics service instance
 metrics_service = MetricsService()
