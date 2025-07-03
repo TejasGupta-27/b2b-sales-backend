@@ -265,6 +265,181 @@
       "type": "stat"
     },
     {
+      "id": 5,
+      "title": "Active Leads (NEW)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "b2b_leads_total{status=\"NEW\"}",
+          "legendFormat": "NEW Leads"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "id": 6,
+      "title": "Cache Hit Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(b2b_cache_hits_total[5m]) / (rate(b2b_cache_hits_total[5m]) + rate(b2b_cache_misses_total[5m])) * 100",
+          "legendFormat": "Cache Hit Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 8
+      }
+    },
+    {
+      "id": 7,
+      "title": "Quote Generation Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(b2b_quotes_generated_total{status=\"success\"}[5m]) / (rate(b2b_quotes_generated_total[5m]) + 0.001) * 100",
+          "legendFormat": "Success Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      }
+    },
+    {
+      "id": 8,
+      "title": "Error Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m]) * 100",
+          "legendFormat": "5xx Error Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      }
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -324,9 +499,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 16
       },
-      "id": 5,
+      "id": 9,
       "options": {
         "legend": {
           "calcs": [],
@@ -412,9 +587,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 16
       },
-      "id": 6,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [],
@@ -441,144 +616,52 @@
       "type": "timeseries"
     },
     {
-      "id": 7,
-      "title": "Database Connections",
-      "type": "graph",
+      "id": 11,
+      "title": "Cache Performance",
+      "type": "stat",
       "targets": [
         {
-          "expr": "pg_stat_database_numbackends",
-          "legendFormat": "{{datname}}"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
-    },
-    {
-      "id": 8,
-      "title": "Database Query Performance",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_tup_fetched[5m])",
-          "legendFormat": "Tuples Fetched - {{datname}}"
+          "expr": "rate(b2b_cache_hits_total[5m])",
+          "legendFormat": "Cache Hits/sec"
         },
         {
-          "expr": "rate(pg_stat_database_tup_inserted[5m])",
-          "legendFormat": "Tuples Inserted - {{datname}}"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_updated[5m])",
-          "legendFormat": "Tuples Updated - {{datname}}"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
-    },
-    {
-      "id": 9,
-      "title": "Elasticsearch Index Performance",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(elasticsearch_indices_search_query_total[5m])",
-          "legendFormat": "Search Queries"
-        },
-        {
-          "expr": "rate(elasticsearch_indices_indexing_index_total[5m])",
-          "legendFormat": "Index Operations"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
-    },
-    {
-      "id": 10,
-      "title": "Error Rate",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
-          "legendFormat": "5xx Errors"
-        },
-        {
-          "expr": "rate(http_requests_total{status=~\"4..\"}[5m])",
-          "legendFormat": "4xx Errors"
+          "expr": "rate(b2b_cache_misses_total[5m])",
+          "legendFormat": "Cache Misses/sec"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           }
         }
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
-    },
-    {
-      "id": 11,
-      "title": "Active Leads by Status",
-      "type": "piechart",
-      "targets": [
-        {
-          "expr": "b2b_leads_total{status=\"new\"}",
-          "legendFormat": "New"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"contacted\"}",
-          "legendFormat": "Contacted"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"qualified\"}",
-          "legendFormat": "Qualified"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"proposal\"}",
-          "legendFormat": "Proposal"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"negotiation\"}",
-          "legendFormat": "Negotiation"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"closed_won\"}",
-          "legendFormat": "Closed Won"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"closed_lost\"}",
-          "legendFormat": "Closed Lost"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      }
     },
     {
       "id": 12,
-      "title": "Chat Messages per Hour",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(b2b_chat_messages_total[1h])",
-          "legendFormat": "Messages/Hour"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40}
-    },
-    {
-      "id": 13,
-      "title": "AI Service Response Time",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
-          "legendFormat": "AI Response Time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40}
-    },
-    {
-      "id": 14,
-      "title": "Quote Generation Success Rate",
+      "title": "Quote Generation",
       "type": "stat",
       "targets": [
         {
@@ -588,57 +671,945 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
         }
       },
-      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 48}
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 24
+      }
+    },
+    {
+      "id": 13,
+      "title": "Chat Messages",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(b2b_chat_messages_total[5m])",
+          "legendFormat": "Messages/sec"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 24
+      }
+    },
+    {
+      "id": 14,
+      "title": "AI Response Time",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
+          "legendFormat": "Avg Response Time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      }
     },
     {
       "id": 15,
-      "title": "Cache Hit Rate",
+      "title": "Elasticsearch Index Performance",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(elasticsearch_indices_search_query_total[5m])",
+          "legendFormat": "Search Queries/sec"
+        },
+        {
+          "expr": "rate(elasticsearch_indices_indexing_index_total[5m])",
+          "legendFormat": "Index Operations/sec"
+        },
+        {
+          "expr": "rate(elasticsearch_indices_search_query_time_seconds_sum[5m]) / rate(elasticsearch_indices_search_query_time_seconds_count[5m])",
+          "legendFormat": "Avg Search Time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      }
+    },
+    {
+      "id": 16,
+      "title": "Database Performance",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_tup_fetched[5m])",
+          "legendFormat": "Tuples Fetched/sec - {{datname}}"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_inserted[5m])",
+          "legendFormat": "Tuples Inserted/sec - {{datname}}"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_updated[5m])",
+          "legendFormat": "Tuples Updated/sec - {{datname}}"
+        },
+        {
+          "expr": "pg_stat_database_numbackends",
+          "legendFormat": "Active Connections - {{datname}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      }
+    },
+    {
+      "id": 17,
+      "title": "System Resources",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "CPU Usage %"
+        },
+        {
+          "expr": "100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)",
+          "legendFormat": "Memory Usage %"
+        },
+        {
+          "expr": "rate(node_disk_io_time_seconds_total[5m]) * 100",
+          "legendFormat": "Disk I/O %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      }
+    },
+    {
+      "id": 18,
+      "title": "Error Rate Breakdown",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+          "legendFormat": "5xx Errors/sec"
+        },
+        {
+          "expr": "rate(http_requests_total{status=~\"4..\"}[5m])",
+          "legendFormat": "4xx Errors/sec"
+        },
+        {
+          "expr": "rate(http_requests_total{status=~\"3..\"}[5m])",
+          "legendFormat": "3xx Redirects/sec"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      }
+    },
+    {
+      "id": 19,
+      "title": "Business Metrics Summary",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "b2b_leads_total{status=\"NEW\"}",
+          "legendFormat": "NEW Leads"
+        },
+        {
+          "expr": "b2b_leads_total{status=\"QUALIFIED\"}",
+          "legendFormat": "QUALIFIED Leads"
+        },
+        {
+          "expr": "b2b_leads_total{status=\"PROPOSAL\"}",
+          "legendFormat": "PROPOSAL Leads"
+        },
+        {
+          "expr": "b2b_leads_total{status=\"CLOSED_WON\"}",
+          "legendFormat": "CLOSED_WON Leads"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      }
+    },
+    {
+      "id": 20,
+      "title": "Performance Metrics Summary",
       "type": "stat",
       "targets": [
         {
           "expr": "rate(b2b_cache_hits_total[5m]) / (rate(b2b_cache_hits_total[5m]) + rate(b2b_cache_misses_total[5m])) * 100",
           "legendFormat": "Cache Hit Rate %"
+        },
+        {
+          "expr": "rate(b2b_quotes_generated_total{status=\"success\"}[5m]) / (rate(b2b_quotes_generated_total[5m]) + 0.001) * 100",
+          "legendFormat": "Quote Success Rate %"
+        },
+        {
+          "expr": "rate(http_requests_total{status=~\"2..\"}[5m]) / rate(http_requests_total[5m]) * 100",
+          "legendFormat": "HTTP Success Rate %"
+        },
+        {
+          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
+          "legendFormat": "Avg AI Response Time"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [],
           "thresholds": {
             "steps": [
-              {"color": "red", "value": 0},
-              {"color": "yellow", "value": 70},
-              {"color": "green", "value": 90}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
             ]
           }
         }
       },
-      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 48}
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      }
     },
     {
-      "id": 16,
-      "title": "System Load Average",
+      "id": 21,
+      "title": "Error Tracking",
       "type": "graph",
       "targets": [
         {
-          "expr": "node_load1",
-          "legendFormat": "1m Load"
+          "expr": "rate(b2b_errors_total{error_type=\"5xx\"}[5m])",
+          "legendFormat": "5xx Errors/sec"
         },
         {
-          "expr": "node_load5",
-          "legendFormat": "5m Load"
+          "expr": "rate(b2b_errors_total{error_type=\"4xx\"}[5m])",
+          "legendFormat": "4xx Errors/sec"
         },
         {
-          "expr": "node_load15",
-          "legendFormat": "15m Load"
+          "expr": "rate(b2b_errors_total{error_type=\"lead_metrics_update\"}[5m])",
+          "legendFormat": "Lead Metrics Errors/sec"
+        },
+        {
+          "expr": "rate(b2b_errors_total{error_type=\"db_connection_metrics\"}[5m])",
+          "legendFormat": "DB Connection Errors/sec"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 48}
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      }
+    },
+    {
+      "id": 22,
+      "title": "Lead Conversion Rates",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "b2b_conversion_rate{stage=\"new_to_qualified\"}",
+          "legendFormat": "NEW → QUALIFIED %"
+        },
+        {
+          "expr": "b2b_conversion_rate{stage=\"qualified_to_proposal\"}",
+          "legendFormat": "QUALIFIED → PROPOSAL %"
+        },
+        {
+          "expr": "b2b_conversion_rate{stage=\"proposal_to_closed_won\"}",
+          "legendFormat": "PROPOSAL → CLOSED_WON %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      }
+    },
+    {
+      "id": 23,
+      "title": "System Health Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "b2b_system_health{component=\"database\"}",
+          "legendFormat": "Database"
+        },
+        {
+          "expr": "up{job=\"elasticsearch-exporter\"}",
+          "legendFormat": "Elasticsearch"
+        },
+        {
+          "expr": "up{job=\"b2b-sales-backend\"}",
+          "legendFormat": "Backend API"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "❌ Unhealthy"
+                },
+                "1": {
+                  "text": "✅ Healthy"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      }
+    },
+    {
+      "id": 24,
+      "title": "Revenue Metrics",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(b2b_revenue_metrics{type=\"quote_generated\",status=\"success\"}[5m])",
+          "legendFormat": "Successful Quotes/sec"
+        },
+        {
+          "expr": "b2b_revenue_metrics{type=\"quote_generated\",status=\"success\"}",
+          "legendFormat": "Total Successful Quotes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      }
+    },
+    {
+      "id": 25,
+      "title": "Response Time Percentiles",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(b2b_response_time_percentile_bucket{percentile=\"p50\"}[5m]))",
+          "legendFormat": "P50 Response Time"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(b2b_response_time_percentile_bucket{percentile=\"p90\"}[5m]))",
+          "legendFormat": "P90 Response Time"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(b2b_response_time_percentile_bucket{percentile=\"p95\"}[5m]))",
+          "legendFormat": "P95 Response Time"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(b2b_response_time_percentile_bucket{percentile=\"p99\"}[5m]))",
+          "legendFormat": "P99 Response Time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      }
+    },
+    {
+      "id": 26,
+      "title": "Admin Configuration Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"b2b-sales-backend\"}",
+          "legendFormat": "Admin API Available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "text"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "❌ Admin API Unavailable"
+                },
+                "1": {
+                  "text": "✅ Admin API Available"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 72
+      }
+    },
+    {
+      "id": 27,
+      "title": "Data Sources Health",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"elasticsearch-exporter\"}",
+          "legendFormat": "Elasticsearch"
+        },
+        {
+          "expr": "up{job=\"postgres-exporter\"}",
+          "legendFormat": "PostgreSQL"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "❌ Down"
+                },
+                "1": {
+                  "text": "✅ Up"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 72
+      }
     }
   ],
   "refresh": "30s",
@@ -650,7 +1621,197 @@
     "monitoring"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(http_requests_total, endpoint)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Endpoint",
+        "multi": true,
+        "name": "endpoint",
+        "options": [],
+        "query": {
+          "query": "label_values(http_requests_total, endpoint)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(b2b_leads_total, status)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Lead Status",
+        "multi": true,
+        "name": "lead_status",
+        "options": [],
+        "query": {
+          "query": "label_values(b2b_leads_total, status)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(b2b_ai_response_time_seconds, provider)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "AI Provider",
+        "multi": true,
+        "name": "ai_provider",
+        "options": [],
+        "query": {
+          "query": "label_values(b2b_ai_response_time_seconds, provider)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(b2b_ai_response_time_seconds, model)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "AI Model",
+        "multi": true,
+        "name": "ai_model",
+        "options": [],
+        "query": {
+          "query": "label_values(b2b_ai_response_time_seconds, model)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(b2b_errors_total, error_type)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Error Type",
+        "multi": true,
+        "name": "error_type",
+        "options": [],
+        "query": {
+          "query": "label_values(b2b_errors_total, error_type)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(b2b_conversion_rate, stage)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Conversion Stage",
+        "multi": true,
+        "name": "conversion_stage",
+        "options": [],
+        "query": {
+          "query": "label_values(b2b_conversion_rate, stage)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(b2b_system_health, component)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "System Component",
+        "multi": true,
+        "name": "system_component",
+        "options": [],
+        "query": {
+          "query": "label_values(b2b_system_health, component)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",

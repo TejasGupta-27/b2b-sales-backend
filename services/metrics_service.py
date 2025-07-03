@@ -74,6 +74,38 @@ b2b_elasticsearch_response_time_seconds = Histogram(
     ['index', 'query_type']
 )
 
+# Error and Performance Metrics
+b2b_errors_total = Counter(
+    'b2b_errors_total',
+    'Total errors by type',
+    ['error_type', 'endpoint']
+)
+
+b2b_system_health = Gauge(
+    'b2b_system_health',
+    'System health status',
+    ['component']
+)
+
+b2b_response_time_percentile = Histogram(
+    'b2b_response_time_percentile',
+    'Response time percentiles',
+    ['endpoint', 'percentile']
+)
+
+# Business Performance Metrics
+b2b_conversion_rate = Gauge(
+    'b2b_conversion_rate',
+    'Lead conversion rate',
+    ['stage']
+)
+
+b2b_revenue_metrics = Counter(
+    'b2b_revenue_metrics',
+    'Revenue related metrics',
+    ['type', 'status']
+)
+
 class MetricsService:
     def __init__(self):
         self.start_time = time.time()
@@ -82,6 +114,20 @@ class MetricsService:
         """Record HTTP request metrics"""
         http_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
         http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+        
+        # Record response time percentiles
+        if duration < 0.1:
+            b2b_response_time_percentile.labels(endpoint=endpoint, percentile="p50").observe(duration)
+        if duration < 0.5:
+            b2b_response_time_percentile.labels(endpoint=endpoint, percentile="p90").observe(duration)
+        if duration < 1.0:
+            b2b_response_time_percentile.labels(endpoint=endpoint, percentile="p95").observe(duration)
+        b2b_response_time_percentile.labels(endpoint=endpoint, percentile="p99").observe(duration)
+        
+        # Record errors
+        if status >= 400:
+            error_type = "4xx" if status < 500 else "5xx"
+            b2b_errors_total.labels(error_type=error_type, endpoint=endpoint).inc()
     
     def record_chat_message(self, lead_id: str = None, message_type: str = "user"):
         """Record chat message metrics"""
@@ -93,6 +139,10 @@ class MetricsService:
     def record_quote_generation(self, status: str = "success"):
         """Record quote generation metrics"""
         b2b_quotes_generated_total.labels(status=status).inc()
+        
+        # Record revenue metrics for successful quotes
+        if status == "success":
+            b2b_revenue_metrics.labels(type="quote_generated", status="success").inc()
     
     def record_ai_response_time(self, duration: float, provider: str = "unknown", model: str = "unknown"):
         """Record AI service response time"""
@@ -111,6 +161,18 @@ class MetricsService:
         b2b_elasticsearch_queries_total.labels(index=index, query_type=query_type).inc()
         b2b_elasticsearch_response_time_seconds.labels(index=index, query_type=query_type).observe(duration)
     
+    def record_error(self, error_type: str, endpoint: str = "unknown"):
+        """Record application errors"""
+        b2b_errors_total.labels(error_type=error_type, endpoint=endpoint).inc()
+    
+    def update_system_health(self, component: str, status: int):
+        """Update system health status (1=healthy, 0=unhealthy)"""
+        b2b_system_health.labels(component=component).set(status)
+    
+    def update_conversion_rate(self, stage: str, rate: float):
+        """Update lead conversion rate"""
+        b2b_conversion_rate.labels(stage=stage).set(rate)
+    
     def update_lead_metrics(self, db: Session):
         """Update lead count metrics from database"""
         try:
@@ -127,10 +189,33 @@ class MetricsService:
             # Set current values
             for status, count in lead_counts:
                 b2b_leads_total.labels(status=status.value).set(count)
+            
+            # Calculate conversion rates
+            total_leads = sum(count for _, count in lead_counts)
+            if total_leads > 0:
+                # Calculate conversion from NEW to QUALIFIED
+                new_count = next((count for status, count in lead_counts if status == LeadStatus.NEW), 0)
+                qualified_count = next((count for status, count in lead_counts if status == LeadStatus.QUALIFIED), 0)
+                if new_count > 0:
+                    conversion_rate = (qualified_count / new_count) * 100
+                    self.update_conversion_rate("new_to_qualified", conversion_rate)
+                
+                # Calculate conversion from QUALIFIED to PROPOSAL
+                proposal_count = next((count for status, count in lead_counts if status == LeadStatus.PROPOSAL), 0)
+                if qualified_count > 0:
+                    conversion_rate = (proposal_count / qualified_count) * 100
+                    self.update_conversion_rate("qualified_to_proposal", conversion_rate)
+                
+                # Calculate conversion from PROPOSAL to CLOSED_WON
+                closed_won_count = next((count for status, count in lead_counts if status == LeadStatus.CLOSED_WON), 0)
+                if proposal_count > 0:
+                    conversion_rate = (closed_won_count / proposal_count) * 100
+                    self.update_conversion_rate("proposal_to_closed_won", conversion_rate)
                 
         except Exception as e:
             # Log error but don't fail the application
             print(f"Error updating lead metrics: {e}")
+            self.record_error("lead_metrics_update", "metrics_service")
     
     def update_db_connection_metrics(self, db: Session):
         """Update database connection metrics"""
@@ -140,8 +225,13 @@ class MetricsService:
             result = db.execute("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
             active_connections = result.scalar()
             b2b_db_connections_active.set(active_connections)
+            
+            # Update system health for database
+            self.update_system_health("database", 1)
         except Exception as e:
             print(f"Error updating DB connection metrics: {e}")
+            self.update_system_health("database", 0)
+            self.record_error("db_connection_metrics", "metrics_service")
     
     def get_metrics(self) -> str:
         """Get Prometheus metrics as string"""
