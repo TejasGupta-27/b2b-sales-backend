@@ -244,6 +244,9 @@ async def periodic_metrics_update():
                 # Update database connection metrics
                 metrics_service.update_db_connection_metrics(db)
                 
+                # Update token usage metrics
+                metrics_service.update_token_usage_metrics()
+                
             finally:
                 db.close()
                 

@@ -201,6 +201,10 @@ async def initialize_hybrid_retriever():
             api_version=settings.azure_openai_api_version
         )
         
+        # Initialize token tracker for the base provider
+        from ai_services.token_tracker import TokenTracker
+        base_provider.usage_tracker = TokenTracker()
+        
         # Initialize hybrid retriever
         hybrid_retriever = HybridProductRetrieverAgent(
             base_provider=base_provider,

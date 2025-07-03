@@ -5,6 +5,9 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
+import json
+import os
+from pathlib import Path
 
 # HTTP Metrics
 http_requests_total = Counter(
@@ -61,6 +64,11 @@ b2b_db_connections_active = Gauge(
     'Active database connections'
 )
 
+b2b_db_health = Gauge(
+    'b2b_db_health',
+    'Database health status (1=healthy, 0=unhealthy)'
+)
+
 # Elasticsearch Metrics
 b2b_elasticsearch_queries_total = Counter(
     'b2b_elasticsearch_queries_total',
@@ -106,9 +114,23 @@ b2b_revenue_metrics = Counter(
     ['type', 'status']
 )
 
+# Token Usage Metrics
+b2b_token_usage_total = Gauge(
+    'b2b_token_usage_total',
+    'Total token usage',
+    ['provider', 'model']
+)
+
+b2b_token_usage_daily = Gauge(
+    'b2b_token_usage_daily',
+    'Daily token usage',
+    ['provider', 'model', 'date']
+)
+
 class MetricsService:
     def __init__(self):
         self.start_time = time.time()
+        self.token_usage_file = Path("Data/token_usage.json")
     
     def record_http_request(self, method: str, endpoint: str, status: int, duration: float):
         """Record HTTP request metrics"""
@@ -173,6 +195,43 @@ class MetricsService:
         """Update lead conversion rate"""
         b2b_conversion_rate.labels(stage=stage).set(rate)
     
+    def update_token_usage_metrics(self):
+        """Update token usage metrics from token_usage.json"""
+        try:
+            if self.token_usage_file.exists():
+                with open(self.token_usage_file, 'r') as f:
+                    token_data = json.load(f)
+                
+                # Update total token usage
+                total_tokens = token_data.get('total_tokens', 0)
+                b2b_token_usage_total.labels(provider="azure_openai", model="gpt-4.1-mini").set(total_tokens)
+                
+                # Update daily usage
+                daily_usage = token_data.get('daily_usage', {})
+                for date, usage_data in daily_usage.items():
+                    tokens = usage_data.get('tokens', 0)
+                    b2b_token_usage_daily.labels(
+                        provider="azure_openai", 
+                        model="gpt-4.1-mini", 
+                        date=date
+                    ).set(tokens)
+                
+                # Update provider usage
+                provider_usage = token_data.get('provider_usage', {})
+                for provider, provider_data in provider_usage.items():
+                    provider_tokens = provider_data.get('total_tokens', 0)
+                    b2b_token_usage_total.labels(provider=provider, model="total").set(provider_tokens)
+                    
+                    # Update model-specific usage
+                    models = provider_data.get('models', {})
+                    for model, model_data in models.items():
+                        model_tokens = model_data.get('total_tokens', 0)
+                        b2b_token_usage_total.labels(provider=provider, model=model).set(model_tokens)
+                        
+        except Exception as e:
+            print(f"Error updating token usage metrics: {e}")
+            self.record_error("token_usage_metrics", "metrics_service")
+    
     def update_lead_metrics(self, db: Session):
         """Update lead count metrics from database"""
         try:
@@ -218,18 +277,28 @@ class MetricsService:
             self.record_error("lead_metrics_update", "metrics_service")
     
     def update_db_connection_metrics(self, db: Session):
-        """Update database connection metrics"""
+        """Update database connection metrics with proper health check"""
         try:
-            # This is a simplified version - you might want to get actual connection count
-            # from your database connection pool
-            result = db.execute("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
-            active_connections = result.scalar()
-            b2b_db_connections_active.set(active_connections)
+            # Test database connection with a simple query
+            result = db.execute("SELECT 1")
+            result.fetchone()
             
-            # Update system health for database
+            # If we get here, database is healthy
+            b2b_db_health.set(1)
             self.update_system_health("database", 1)
+            
+            # Get active connections count
+            try:
+                result = db.execute("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
+                active_connections = result.scalar()
+                b2b_db_connections_active.set(active_connections)
+            except Exception as e:
+                print(f"Warning: Could not get active connections count: {e}")
+                b2b_db_connections_active.set(0)
+                
         except Exception as e:
-            print(f"Error updating DB connection metrics: {e}")
+            print(f"Database health check failed: {e}")
+            b2b_db_health.set(0)
             self.update_system_health("database", 0)
             self.record_error("db_connection_metrics", "metrics_service")
     

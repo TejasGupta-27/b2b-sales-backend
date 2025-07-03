@@ -1087,24 +1087,12 @@
     },
     {
       "id": 19,
-      "title": "Business Metrics Summary",
+      "title": "Leads",
       "type": "stat",
       "targets": [
         {
           "expr": "b2b_leads_total{status=\"NEW\"}",
-          "legendFormat": "NEW Leads"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"QUALIFIED\"}",
-          "legendFormat": "QUALIFIED Leads"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"PROPOSAL\"}",
-          "legendFormat": "PROPOSAL Leads"
-        },
-        {
-          "expr": "b2b_leads_total{status=\"CLOSED_WON\"}",
-          "legendFormat": "CLOSED_WON Leads"
+          "legendFormat": "Leads"
         }
       ],
       "fieldConfig": {
@@ -1326,7 +1314,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "b2b_system_health{component=\"database\"}",
+          "expr": "b2b_db_health",
           "legendFormat": "Database"
         },
         {
@@ -1609,6 +1597,170 @@
         "w": 6,
         "x": 18,
         "y": 72
+      }
+    },
+    {
+      "id": 28,
+      "title": "Token Usage - Total",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "b2b_token_usage_total{provider=\"azure_openai\",model=\"gpt-4.1-mini\"}",
+          "legendFormat": "Total Tokens"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100000
+              },
+              {
+                "color": "red",
+                "value": 200000
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 80
+      }
+    },
+    {
+      "id": 29,
+      "title": "Token Usage - Daily",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "b2b_token_usage_daily{provider=\"azure_openai\",model=\"gpt-4.1-mini\"}",
+          "legendFormat": "{{date}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 80
+      }
+    },
+    {
+      "id": 30,
+      "title": "Database Health Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "b2b_db_health",
+          "legendFormat": "Database Health"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "text"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "❌ Unhealthy"
+                },
+                "1": {
+                  "text": "✅ Healthy"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 80
       }
     }
   ],

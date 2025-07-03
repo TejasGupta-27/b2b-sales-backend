@@ -1,17 +1,21 @@
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid
 import logging
+import json
 
 from db.database import get_db
 from models.recommendation import RecommendationSet, ProductRecommendation
 from ai_services.factory import AIServiceFactory
-from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
+from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from db.models import Lead, RecommendationSet as DBRecommendationSet, ProductRecommendation as DBProductRecommendation
 from ai_services.conversation_flow_manager import ConversationFlowAgent
 from ai_services.base import AIResponse  # Needed to build dummy response for quote agent
+from services.metrics_service import get_metrics_service
+from services.elasticsearch_service import get_elasticsearch_service
+from config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -35,7 +39,7 @@ async def generate_recommendations(
 
         # Initialize AI services
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        sales_agent = SimpleConversationalAgent(base_provider)
         flow_agent = ConversationFlowAgent(base_provider)
         
         # Get conversation messages from request
@@ -384,7 +388,7 @@ async def generate_quote(
         
         # Initialize AI services for quote generation
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        sales_agent = SimpleConversationalAgent(base_provider)
         
         # Generate quote using sales agent
         try:
