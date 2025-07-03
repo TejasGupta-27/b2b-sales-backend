@@ -10,6 +10,8 @@
   "liveNow": false,
   "panels": [
     {
+      "title": "System Health Overview",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -19,7 +21,19 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "❌ Down"
+                },
+                "1": {
+                  "text": "✅ Healthy"
+                }
+              },
+              "type": "value"
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -37,16 +51,16 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 6,
+        "h": 6,
+        "w": 24,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -65,13 +79,32 @@
             "uid": "PBFA97CFB590B2093"
           },
           "expr": "up{job=\"b2b-sales-backend\"}",
+          "legendFormat": "Backend API",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "up{job=\"postgres-exporter\"}",
+          "legendFormat": "PostgreSQL",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "up{job=\"elasticsearch-exporter\"}",
+          "legendFormat": "Elasticsearch",
+          "refId": "C"
         }
-      ],
-      "title": "Application Health",
-      "type": "stat"
+      ]
     },
     {
+      "title": "Key Performance Metrics",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -79,30 +112,142 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
           },
           "mappings": [],
           "thresholds": {
-            "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
-                "value": 1
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cache Hit Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "green",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU Usage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AI Response Time"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 2
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 0
+        "w": 24,
+        "x": 0,
+        "y": 6
       },
       "id": 2,
       "options": {
@@ -126,14 +271,42 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "up{job=\"postgres-exporter\"}",
+          "expr": "rate(b2b_cache_hits_total[5m]) / (rate(b2b_cache_hits_total[5m]) + rate(b2b_cache_misses_total[5m])) * 100",
+          "legendFormat": "Cache Hit Rate",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "CPU Usage",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m]) * 100",
+          "legendFormat": "Error Rate",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
+          "legendFormat": "AI Response Time",
+          "refId": "D"
         }
-      ],
-      "title": "Database Health",
-      "type": "stat"
+      ]
     },
     {
+      "title": "Business Metrics",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -141,30 +314,45 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "list"
           },
           "mappings": [],
           "thresholds": {
-            "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
-                "value": 1
+                "color": "red",
+                "value": 80
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Rate.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 0
+        "w": 12,
+        "x": 0,
+        "y": 14
       },
       "id": 3,
       "options": {
@@ -188,14 +376,33 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "up{job=\"elasticsearch-exporter\"}",
+          "expr": "b2b_leads_total{status=\"NEW\"}",
+          "legendFormat": "Active Leads (NEW)",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(b2b_quotes_generated_total{status=\"success\"}[5m]) / (rate(b2b_quotes_generated_total[5m]) + 0.001) * 100",
+          "legendFormat": "Quote Success Rate",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(b2b_chat_messages_total[5m])",
+          "legendFormat": "Messages/sec",
+          "refId": "C"
         }
-      ],
-      "title": "Elasticsearch Health",
-      "type": "stat"
+      ]
     },
     {
+      "title": "Conversion Funnel",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -203,37 +410,36 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
           },
           "mappings": [],
-          "max": 100,
-          "min": 0,
           "thresholds": {
-            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 70
+                "value": 20
               },
               {
-                "color": "red",
-                "value": 90
+                "color": "green",
+                "value": 50
               }
             ]
           },
           "unit": "percent"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 0
+        "w": 12,
+        "x": 12,
+        "y": 14
       },
       "id": 4,
       "options": {
@@ -257,187 +463,29 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "expr": "b2b_conversion_rate{stage=\"new_to_qualified\"}",
+          "legendFormat": "NEW → QUALIFIED",
           "refId": "A"
-        }
-      ],
-      "title": "CPU Usage",
-      "type": "stat"
-    },
-    {
-      "id": 5,
-      "title": "Active Leads (NEW)",
-      "type": "stat",
-      "targets": [
+        },
         {
-          "expr": "b2b_leads_total{status=\"NEW\"}",
-          "legendFormat": "NEW Leads"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
           },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 8
-      }
-    },
-    {
-      "id": 6,
-      "title": "Cache Hit Rate",
-      "type": "stat",
-      "targets": [
+          "expr": "b2b_conversion_rate{stage=\"qualified_to_proposal\"}",
+          "legendFormat": "QUALIFIED → PROPOSAL",
+          "refId": "B"
+        },
         {
-          "expr": "rate(b2b_cache_hits_total[5m]) / (rate(b2b_cache_hits_total[5m]) + rate(b2b_cache_misses_total[5m])) * 100",
-          "legendFormat": "Cache Hit Rate %"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "b2b_conversion_rate{stage=\"proposal_to_closed_won\"}",
+          "legendFormat": "PROPOSAL → CLOSED_WON",
+          "refId": "C"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "green",
-                "value": 90
-              }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 8
-      }
-    },
-    {
-      "id": 7,
-      "title": "Quote Generation Success Rate",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_quotes_generated_total{status=\"success\"}[5m]) / (rate(b2b_quotes_generated_total[5m]) + 0.001) * 100",
-          "legendFormat": "Success Rate %"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "green",
-                "value": 95
-              }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 8
-      }
-    },
-    {
-      "id": 8,
-      "title": "Error Rate",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m]) * 100",
-          "legendFormat": "5xx Error Rate %"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 8
-      }
+      ]
     },
     {
       "datasource": {
@@ -454,15 +502,15 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "vis": false
             },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -496,21 +544,21 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 22
       },
-      "id": 9,
+      "id": 5,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
@@ -528,6 +576,334 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.50, rate(b2b_response_time_percentile_bucket{percentile=\"p50\"}[5m]))",
+          "legendFormat": "P50 Response Time",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.95, rate(b2b_response_time_percentile_bucket{percentile=\"p95\"}[5m]))",
+          "legendFormat": "P95 Response Time",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.99, rate(b2b_response_time_percentile_bucket{percentile=\"p99\"}[5m]))",
+          "legendFormat": "P99 Response Time",
+          "refId": "C"
+        }
+      ],
+      "title": "Response Time Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "CPU Usage",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)",
+          "legendFormat": "Memory Usage",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(node_disk_io_time_seconds_total[5m]) * 100",
+          "legendFormat": "Disk I/O",
+          "refId": "C"
+        }
+      ],
+      "title": "System Resources",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+          "legendFormat": "5xx Server Errors",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(http_requests_total{status=~\"4..\"}[5m])",
+          "legendFormat": "4xx Client Errors",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(b2b_errors_total{error_type=\"lead_metrics_update\"}[5m])",
+          "legendFormat": "Lead Processing Errors",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(b2b_errors_total{error_type=\"db_connection_metrics\"}[5m])",
+          "legendFormat": "Database Errors",
+          "refId": "D"
+        }
+      ],
+      "title": "Error Tracking",
+      "type": "timeseries"
+    },
+    {
+      "title": "Database Performance",
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -578,16 +954,118 @@
                 "value": 80
               }
             ]
-          },
-          "unit": "s"
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
         },
-        "overrides": []
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(pg_stat_database_tup_fetched[5m])",
+          "legendFormat": "Fetched/sec - {{datname}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(pg_stat_database_tup_inserted[5m])",
+          "legendFormat": "Inserted/sec - {{datname}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "pg_stat_database_numbackends",
+          "legendFormat": "Active Connections - {{datname}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "AI & Token Usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 39
       },
       "id": 10,
       "options": {
@@ -607,1161 +1085,20 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])",
-          "legendFormat": "{{method}} {{endpoint}}",
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Response Time",
-      "type": "timeseries"
-    },
-    {
-      "id": 11,
-      "title": "Cache Performance",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_cache_hits_total[5m])",
-          "legendFormat": "Cache Hits/sec"
-        },
-        {
-          "expr": "rate(b2b_cache_misses_total[5m])",
-          "legendFormat": "Cache Misses/sec"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 24
-      }
-    },
-    {
-      "id": 12,
-      "title": "Quote Generation",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_quotes_generated_total[5m])",
-          "legendFormat": "Quotes Generated/sec"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 24
-      }
-    },
-    {
-      "id": 13,
-      "title": "Chat Messages",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_chat_messages_total[5m])",
-          "legendFormat": "Messages/sec"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 24
-      }
-    },
-    {
-      "id": 14,
-      "title": "AI Response Time",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
-          "legendFormat": "Avg Response Time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 2
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "s"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 24
-      }
-    },
-    {
-      "id": 15,
-      "title": "Elasticsearch Index Performance",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(elasticsearch_indices_search_query_total[5m])",
-          "legendFormat": "Search Queries/sec"
-        },
-        {
-          "expr": "rate(elasticsearch_indices_indexing_index_total[5m])",
-          "legendFormat": "Index Operations/sec"
-        },
-        {
-          "expr": "rate(elasticsearch_indices_search_query_time_seconds_sum[5m]) / rate(elasticsearch_indices_search_query_time_seconds_count[5m])",
-          "legendFormat": "Avg Search Time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      }
-    },
-    {
-      "id": 16,
-      "title": "Database Performance",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_tup_fetched[5m])",
-          "legendFormat": "Tuples Fetched/sec - {{datname}}"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_inserted[5m])",
-          "legendFormat": "Tuples Inserted/sec - {{datname}}"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_updated[5m])",
-          "legendFormat": "Tuples Updated/sec - {{datname}}"
-        },
-        {
-          "expr": "pg_stat_database_numbackends",
-          "legendFormat": "Active Connections - {{datname}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      }
-    },
-    {
-      "id": 17,
-      "title": "System Resources",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "CPU Usage %"
-        },
-        {
-          "expr": "100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)",
-          "legendFormat": "Memory Usage %"
-        },
-        {
-          "expr": "rate(node_disk_io_time_seconds_total[5m]) * 100",
-          "legendFormat": "Disk I/O %"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 40
-      }
-    },
-    {
-      "id": 18,
-      "title": "Error Rate Breakdown",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
-          "legendFormat": "5xx Errors/sec"
-        },
-        {
-          "expr": "rate(http_requests_total{status=~\"4..\"}[5m])",
-          "legendFormat": "4xx Errors/sec"
-        },
-        {
-          "expr": "rate(http_requests_total{status=~\"3..\"}[5m])",
-          "legendFormat": "3xx Redirects/sec"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 40
-      }
-    },
-    {
-      "id": 19,
-      "title": "Leads",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "b2b_leads_total{status=\"NEW\"}",
-          "legendFormat": "Leads"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 48
-      }
-    },
-    {
-      "id": 20,
-      "title": "Performance Metrics Summary",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_cache_hits_total[5m]) / (rate(b2b_cache_hits_total[5m]) + rate(b2b_cache_misses_total[5m])) * 100",
-          "legendFormat": "Cache Hit Rate %"
-        },
-        {
-          "expr": "rate(b2b_quotes_generated_total{status=\"success\"}[5m]) / (rate(b2b_quotes_generated_total[5m]) + 0.001) * 100",
-          "legendFormat": "Quote Success Rate %"
-        },
-        {
-          "expr": "rate(http_requests_total{status=~\"2..\"}[5m]) / rate(http_requests_total[5m]) * 100",
-          "legendFormat": "HTTP Success Rate %"
-        },
-        {
-          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
-          "legendFormat": "Avg AI Response Time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 48
-      }
-    },
-    {
-      "id": 21,
-      "title": "Error Tracking",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "rate(b2b_errors_total{error_type=\"5xx\"}[5m])",
-          "legendFormat": "5xx Errors/sec"
-        },
-        {
-          "expr": "rate(b2b_errors_total{error_type=\"4xx\"}[5m])",
-          "legendFormat": "4xx Errors/sec"
-        },
-        {
-          "expr": "rate(b2b_errors_total{error_type=\"lead_metrics_update\"}[5m])",
-          "legendFormat": "Lead Metrics Errors/sec"
-        },
-        {
-          "expr": "rate(b2b_errors_total{error_type=\"db_connection_metrics\"}[5m])",
-          "legendFormat": "DB Connection Errors/sec"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 56
-      }
-    },
-    {
-      "id": 22,
-      "title": "Lead Conversion Rates",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "b2b_conversion_rate{stage=\"new_to_qualified\"}",
-          "legendFormat": "NEW → QUALIFIED %"
-        },
-        {
-          "expr": "b2b_conversion_rate{stage=\"qualified_to_proposal\"}",
-          "legendFormat": "QUALIFIED → PROPOSAL %"
-        },
-        {
-          "expr": "b2b_conversion_rate{stage=\"proposal_to_closed_won\"}",
-          "legendFormat": "PROPOSAL → CLOSED_WON %"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 20
-              },
-              {
-                "color": "green",
-                "value": 50
-              }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 56
-      }
-    },
-    {
-      "id": 23,
-      "title": "System Health Status",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "b2b_db_health",
-          "legendFormat": "Database"
-        },
-        {
-          "expr": "up{job=\"elasticsearch-exporter\"}",
-          "legendFormat": "Elasticsearch"
-        },
-        {
-          "expr": "up{job=\"b2b-sales-backend\"}",
-          "legendFormat": "Backend API"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "❌ Unhealthy"
-                },
-                "1": {
-                  "text": "✅ Healthy"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 64
-      }
-    },
-    {
-      "id": 24,
-      "title": "Revenue Metrics",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "rate(b2b_revenue_metrics{type=\"quote_generated\",status=\"success\"}[5m])",
-          "legendFormat": "Successful Quotes/sec"
-        },
-        {
-          "expr": "b2b_revenue_metrics{type=\"quote_generated\",status=\"success\"}",
-          "legendFormat": "Total Successful Quotes"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 64
-      }
-    },
-    {
-      "id": 25,
-      "title": "Response Time Percentiles",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, rate(b2b_response_time_percentile_bucket{percentile=\"p50\"}[5m]))",
-          "legendFormat": "P50 Response Time"
-        },
-        {
-          "expr": "histogram_quantile(0.90, rate(b2b_response_time_percentile_bucket{percentile=\"p90\"}[5m]))",
-          "legendFormat": "P90 Response Time"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(b2b_response_time_percentile_bucket{percentile=\"p95\"}[5m]))",
-          "legendFormat": "P95 Response Time"
-        },
-        {
-          "expr": "histogram_quantile(0.99, rate(b2b_response_time_percentile_bucket{percentile=\"p99\"}[5m]))",
-          "legendFormat": "P99 Response Time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 72
-      }
-    },
-    {
-      "id": 26,
-      "title": "Admin Configuration Status",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "up{job=\"b2b-sales-backend\"}",
-          "legendFormat": "Admin API Available"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "text"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "❌ Admin API Unavailable"
-                },
-                "1": {
-                  "text": "✅ Admin API Available"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 72
-      }
-    },
-    {
-      "id": 27,
-      "title": "Data Sources Health",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "up{job=\"elasticsearch-exporter\"}",
-          "legendFormat": "Elasticsearch"
-        },
-        {
-          "expr": "up{job=\"postgres-exporter\"}",
-          "legendFormat": "PostgreSQL"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "list"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "❌ Down"
-                },
-                "1": {
-                  "text": "✅ Up"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 72
-      }
-    },
-    {
-      "id": 28,
-      "title": "Token Usage - Total",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "b2b_token_usage_total{provider=\"azure_openai\",model=\"gpt-4.1-mini\"}",
-          "legendFormat": "Total Tokens"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "displayMode": "gradient-gauge"
-          },
-          "mappings": [],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100000
-              },
-              {
-                "color": "red",
-                "value": 200000
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 80
-      }
-    },
-    {
-      "id": 29,
-      "title": "Token Usage - Daily",
-      "type": "graph",
-      "targets": [
-        {
           "expr": "b2b_token_usage_daily{provider=\"azure_openai\",model=\"gpt-4.1-mini\"}",
-          "legendFormat": "{{date}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 6,
-        "y": 80
-      }
-    },
-    {
-      "id": 30,
-      "title": "Database Health Status",
-      "type": "stat",
-      "targets": [
+          "legendFormat": "Daily Token Usage",
+          "refId": "A"
+        },
         {
-          "expr": "b2b_db_health",
-          "legendFormat": "Database Health"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
           },
-          "custom": {
-            "displayMode": "text"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "❌ Unhealthy"
-                },
-                "1": {
-                  "text": "✅ Healthy"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
+          "expr": "rate(b2b_ai_response_time_seconds_sum[5m]) / rate(b2b_ai_response_time_seconds_count[5m])",
+          "legendFormat": "AI Response Time (avg)",
+          "refId": "B"
         }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 80
-      }
+      ]
     }
   ],
   "refresh": "30s",
@@ -1827,141 +1164,6 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "definition": "label_values(b2b_ai_response_time_seconds, provider)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "AI Provider",
-        "multi": true,
-        "name": "ai_provider",
-        "options": [],
-        "query": {
-          "query": "label_values(b2b_ai_response_time_seconds, provider)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "definition": "label_values(b2b_ai_response_time_seconds, model)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "AI Model",
-        "multi": true,
-        "name": "ai_model",
-        "options": [],
-        "query": {
-          "query": "label_values(b2b_ai_response_time_seconds, model)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "definition": "label_values(b2b_errors_total, error_type)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Error Type",
-        "multi": true,
-        "name": "error_type",
-        "options": [],
-        "query": {
-          "query": "label_values(b2b_errors_total, error_type)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "definition": "label_values(b2b_conversion_rate, stage)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Conversion Stage",
-        "multi": true,
-        "name": "conversion_stage",
-        "options": [],
-        "query": {
-          "query": "label_values(b2b_conversion_rate, stage)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "definition": "label_values(b2b_system_health, component)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "System Component",
-        "multi": true,
-        "name": "system_component",
-        "options": [],
-        "query": {
-          "query": "label_values(b2b_system_health, component)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
       }
     ]
   },
@@ -1973,6 +1175,6 @@
   "timezone": "",
   "title": "B2B Sales Backend Dashboard",
   "uid": "b2b-sales-dashboard",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 } 
