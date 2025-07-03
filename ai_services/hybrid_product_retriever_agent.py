@@ -624,15 +624,9 @@ Think broadly about their needs and suggest relevant alternatives."""
     
     def _extract_search_query(self, requirements: dict) -> str:
         print("✅ Using updated _extract_search_query method")
-        """
-        Extract a concise search query string from the structured requirements dictionary.
-        Prioritizes 'SEARCH KEYWORDS' and 'PRODUCT CATEGORIES'.
-        Falls back to a generic term if none found.
-        """
         if not isinstance(requirements, dict):
             return "electronics"
 
-        # Helper to normalize values to string
         def to_str(value):
             if isinstance(value, list):
                 return " ".join(str(v) for v in value if v)
@@ -640,25 +634,21 @@ Think broadly about their needs and suggest relevant alternatives."""
                 return value
             return ""
 
-        search_keywords = to_str(requirements.get('SEARCH KEYWORDS', ""))
-        product_categories = to_str(requirements.get('PRODUCT CATEGORIES', ""))
+        # Use lowercase keys to match your requirements dict
+        search_keywords = to_str(requirements.get('search_keywords', ""))
+        product_categories = to_str(requirements.get('product_categories', ""))
 
-        # Compose query giving priority to keywords then categories
         query = search_keywords or product_categories
 
-        # If both empty, fallback to technical or business requirements
         if not query:
-            technical_reqs = to_str(requirements.get('TECHNICAL REQUIREMENTS', ""))
-            business_reqs = to_str(requirements.get('BUSINESS REQUIREMENTS', ""))
+            technical_reqs = to_str(requirements.get('technical_requirements', ""))
+            business_reqs = to_str(requirements.get('business_requirements', ""))
             query = technical_reqs or business_reqs
 
-        # Final fallback
         if not query:
             query = "electronics"
 
-        # Clean whitespace
         query = " ".join(query.split())
-
         return query
 
     async def _extract_requirements_from_conversation(
@@ -899,7 +889,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
                     product['hybrid_score'] = product['semantic_score']
 
                 # Merge fallback products with current quality ones
-                fused_products = self._merge_product_results(quality_products, realtime_fallback_products)
+                fused_products = self._merge_product_results_simple(quality_products, realtime_fallback_products)
                 search_methods["realtime_fallback"] = len(realtime_fallback_products)
                 print(f"✅ Retrieved {len(realtime_fallback_products)} web products.")
 
@@ -1317,4 +1307,4 @@ Provide detailed analysis considering both keyword relevance and semantic simila
 # Async helper to avoid import issues
 async def run_async(coro):
     """Helper to run async code"""
-    return await coro 
+    return await coro

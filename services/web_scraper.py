@@ -17,12 +17,16 @@ def get_all_category_names():
     return category_names
 
 
-def extract_query_category(query, category_names, threshold=0.8):
+def extract_query_category(query, category_names, threshold=0.6):  # Lowered threshold
     query_tokens = query.lower().split()
     for token in query_tokens:
         matches = get_close_matches(token, category_names, n=1, cutoff=threshold)
         if matches:
             return matches[0]
+    # Try to match any category name as a substring in the query
+    for cat in category_names:
+        if cat.replace("-", " ") in query.lower():
+            return cat
     return None
 
 

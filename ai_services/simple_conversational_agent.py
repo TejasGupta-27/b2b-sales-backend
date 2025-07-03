@@ -22,30 +22,33 @@ class ConversationIntent(BaseModel):
 
 class SimpleConversationalAgent(AIProvider):
     """Simple, conversational B2B sales agent with intelligent product retrieval and quote generation"""
-    
-    def __init__(self, base_provider: AIProvider, **kwargs):
+
+    def __init__(self, base_provider: AIProvider, language: str = "en", **kwargs):
         super().__init__(**kwargs)
         self.base_provider = base_provider
+        self.language = language
         self.conversation_memory = {}
         self.prompt_manager = get_prompt_manager()
-        
-        # Initialize hybrid product retriever if configured
+        print(f"🌐 SimpleConversationalAgent initialized with language: {self.language}")
+
+        # Always use English for product search
         self.hybrid_retriever = None
         if settings.use_hybrid_retriever and settings.azure_embedding_endpoint and settings.azure_embedding_api_key:
             try:
                 self.hybrid_retriever = HybridProductRetrieverAgent(
                     base_provider=base_provider,
                     azure_embedding_endpoint=settings.azure_embedding_endpoint,
-                    azure_embedding_key=settings.azure_embedding_api_key
+                    azure_embedding_key=settings.azure_embedding_api_key,
+                    language="en"  # Always English for search
                 )
                 print("✅ Hybrid Product Retriever initialized for SimpleConversationalAgent")
             except Exception as e:
                 print(f"⚠️ Failed to initialize hybrid retriever: {e}")
-        
-        # Initialize quote generation agent
-        self.quote_agent = QuoteGenerationAgent(base_provider)
+
+        # Quote generation agent uses user language
+        self.quote_agent = QuoteGenerationAgent(base_provider, language)
         print("✅ Quote Generation Agent initialized for SimpleConversationalAgent")
-        
+
     @property
     def provider_name(self) -> str:
         return f"simple_conversational_agent_{self.base_provider.provider_name}"
@@ -557,10 +560,10 @@ Analysis Confidence: {llm_context.get('confidence', 0):.1%}
         customer_context: Optional[Dict[str, Any]]
     ) -> List[AIMessage]:
         """Build context for natural conversation using dynamic configuration from prompt manager"""
-        
-        # Get main system prompt from prompt manager
-        system_prompt = self.prompt_manager.get_system_prompt("conversational_agent")
-        
+
+        # Use language for system prompt
+        system_prompt = self.prompt_manager.get_system_prompt("conversational_agent", language=self.language)
+
         # Add discovery-focused system guidance
         discovery_system_guidance = """
 
@@ -822,4 +825,4 @@ Remember: You're having a conversation with a real person, not following a rigid
             import traceback
             print(f"❌ Debug - Full traceback: {traceback.format_exc()}")
             quote['pitch_deck_error'] = f"Pitch deck generation error: {str(e)}"
-            quote['pitch_deck_generated'] = False 
+            quote['pitch_deck_generated'] = False

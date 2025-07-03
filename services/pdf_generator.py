@@ -21,42 +21,8 @@ class PDFGenerator:
     
     def _register_japanese_fonts(self):
         """Register Japanese fonts for use in PDF"""
-        try:
-            # Option 1: Use system fonts (Windows/Mac/Linux)
-            font_paths = [
-                # Windows paths
-                r"C:\Windows\Fonts\msgothic.ttc",
-                r"C:\Windows\Fonts\msmincho.ttc", 
-                r"C:\Windows\Fonts\meiryo.ttc",
-                r"C:\Windows\Fonts\NotoSansJP-Regular.ttc",
-                # Mac paths
-                "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-                "/System/Library/Fonts/Hiragino Sans GB.ttc",
-                "/Library/Fonts/Arial Unicode MS.ttf",
-                # Linux paths
-                "/usr/share/fonts/truetype/noto/NotoSansJP-Regular.ttc",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-                # Common locations
-                "./fonts/NotoSansJP-Regular.ttf",
-                "./fonts/GenShinGothic-Regular.ttf",
-            ]
-            
-            for font_path in font_paths:
-                if os.path.exists(font_path):
-                    try:
-                        # Register the font
-                        pdfmetrics.registerFont(TTFont('JapaneseFont', font_path))
-                        self.japanese_font_registered = True
-                        print(f"✅ Japanese font registered: {font_path}")
-                        break
-                    except Exception as e:
-                        print(f"❌ Failed to register font {font_path}: {e}")
-                        continue
-            
-            if not self.japanese_font_registered:
-                print("⚠️  No Japanese fonts found. Attempting to download Noto Sans CJK...")
-                self._download_noto_font()
-                
+        try:    
+            self._download_noto_font()
         except Exception as e:
             print(f"❌ Font registration error: {e}")
     
@@ -71,7 +37,7 @@ class PDFGenerator:
             
             # Download Noto Sans CJK
             font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Regular.otf"
-            font_path = fonts_dir / "NotoSansJP-Regular.otf"
+            font_path = fonts_dir / "NotoSansJP-Regular.ttf"
             
             if not font_path.exists():
                 print("📥 Downloading Noto Sans CJK font...")
@@ -220,9 +186,9 @@ class PDFGenerator:
                 story.append(Paragraph('Customer Information', self.styles['Heading2']))
                 
                 customer_data = []
-                if customer_info.get('company'):
+                if customer_info.get('company_name'):
                     customer_data.append(['Company:', customer_info['company']])
-                if customer_info.get('contact'):
+                if customer_info.get('contact_name'):
                     customer_data.append(['Contact:', customer_info['contact']])
                 if customer_info.get('email'):
                     customer_data.append(['Email:', customer_info['email']])
@@ -302,11 +268,15 @@ class PDFGenerator:
                 story.append(Spacer(1, 20))
             
             # Pricing summary
-            currency = quote_data.get('currency', 'USD')
+            financials = quote_data.get('financials', {})
+            currency = quote_data.get('currency') or financials.get('currency', 'USD')
+            subtotal = quote_data.get('subtotal')
+            tax_amount = financials.get('tax_amount', 0)
+            total = financials.get('total', 0)
             pricing_data = [
-                ['Subtotal:', f"${quote_data.get('subtotal', 0):,.2f} {currency}"],
-                ['Tax:', f"${quote_data.get('tax_amount', 0):,.2f} {currency}"],
-                ['Total:', f"${quote_data.get('total', 0):,.2f} {currency}"]
+                ['Subtotal:', f"${subtotal:,.2f} {currency}"],
+                ['Tax:', f"${tax_amount:,.2f} {currency}"],
+                ['Total:', f"${total:,.2f} {currency}"]
             ]
             
             pricing_table = Table(pricing_data, colWidths=[4*inch, 2*inch])
@@ -381,34 +351,70 @@ class PDFGenerator:
 def test_japanese_fonts():
     """Test Japanese font rendering"""
     test_data = {
-        'quote_title': 'テクノロジーソリューション見積書',
-        'company_tagline': 'プロフェッショナル技術ソリューション',
-        'quote_number': 'Q-2024-001',
-        'created_at': '2024-01-15',
-        'valid_until': '2024-02-15',
-        'customer_info': {
-            'company': '株式会社テスト',
-            'contact': '田中太郎',
-            'email': 'tanaka@test.co.jp',
-            'phone': '03-1234-5678'
+    "quote_number": "Q-20240627-001",
+    "title": "Quote for DDR4 16GB (8GBx2) Laptop Memory Modules",
+    "company_tagline": "Reliable and Cost-Effective Memory Solutions for Your Laptop",
+    "customer_info": {
+        "company_name": "Unknown",
+        "contact_name": "Unknown",
+        "email": "unknown@example.com",
+        "phone": None,
+        "address": None
+    },
+    "business_context": "The customer requires reliable and cost-effective DDR4 laptop memory modules with 16GB total capacity (8GBx2) for programming and light video editing tasks. Stability and performance are prioritized, with a budget range of 7,000 to 10,000 JPY. The customer prefers trusted brands with good cost performance and requests a quick quote within 1-2 days.",
+    "line_items": [
+        {
+        "name": "Crucial 16GB Kit (8GBx2) DDR4 3200MHz Laptop Memory",
+        "description": "Reliable DDR4 3200MHz memory kit suitable for programming and video editing, offering stable performance and excellent cost efficiency.",
+        "quantity": 1,
+        "unit_price": 4800.0,
+        "total_price": 4800.0,
+        "category": "Hardware"
         },
-        'line_items': [
-            {
-                'name': 'ソフトウェア開発',
-                'description': 'カスタムソフトウェアの開発とテスト',
-                'quantity': 1,
-                'unit_price': 500000,
-                'total_price': 500000
-            }
-        ],
-        'subtotal': 500000,
-        'tax_amount': 50000,
-        'total': 550000,
-        'currency': 'JPY',
-        'terms_and_conditions': [
-            '支払いは30日以内にお願いします',
-            '仕様変更は別途料金が発生します'
-        ]
+        {
+        "name": "Kingston 16GB Kit (8GBx2) DDR4 2666MHz Laptop Memory",
+        "description": "Trusted Kingston DDR4 memory kit with 2666MHz speed, optimized for stability and cost performance, ideal for everyday programming and multimedia tasks.",
+        "quantity": 1,
+        "unit_price": 5200.0,
+        "total_price": 5200.0,
+        "category": "Hardware"
+        }
+    ],
+    "financials": {
+        "subtotal": 10000.0,
+        "tax_rate": 0.08,
+        "tax_amount": 800.0,
+        "total": 10800.0,
+        "currency": "JPY"
+    },
+    "terms_and_conditions": [
+        "Prices are valid for 30 days from the quote date.",
+        "Payment terms: 30 days net from invoice date.",
+        "Warranty: Standard manufacturer warranty applies to all products.",
+        "Delivery: Estimated delivery within 5 business days after order confirmation.",
+        "Returns: Returns accepted within 14 days of delivery if products are unopened and in original packaging."
+    ],
+    "implementation_notes": [
+        "Confirm compatibility of memory modules with the customer's laptop model before purchase.",
+        "Installation can be performed by the customer or a professional technician.",
+        "Ensure BIOS is updated to support the new memory modules for optimal performance."
+    ],
+    "next_steps": [
+        "Review the proposed memory options and select preferred product.",
+        "Confirm order details and provide shipping information.",
+        "Process payment to initiate order fulfillment.",
+        "Schedule delivery and installation as needed."
+    ],
+    "valid_until": "2024-07-27",
+    "created_at": "2024-06-27",
+    "language": "en",
+    "quote_id": "001",
+    "generation_method": "pydantic_structured_internationalized",
+    "data_source": "conversation_only",
+    "pdf_generated": True,
+    "pdf_path": "Data/quotes/quote_001_en.pdf",
+    "pdf_url": "/api/quotes/download-pdf/001",
+    "file_size": 13458,
     }
     
     generator = PDFGenerator()

@@ -29,8 +29,9 @@ class EnhancedB2BSalesAgent(AIProvider):
     ):
         super().__init__(**kwargs)
         self.base_provider = base_provider
+        print(f"🌐 [DEBUG] EnhancedB2BSalesAgent initialized with language: {language}")
         self.conversation_analyzer = ConversationFlowAgent(base_provider)
-        self.quote_agent = QuoteGenerationAgent(base_provider)
+        self.quote_agent = QuoteGenerationAgent(base_provider,language)
         self.quick_response_generator = QuickResponseGenerator(base_provider)
         self.lang = language
         
@@ -862,7 +863,7 @@ Remember: Your goal is to thoroughly understand their needs so you can recommend
                 response.metadata['quote_id'] = quote.get('id')
                 
                 # Enhance sales response to incorporate the quote
-                response = self._enhance_response_with_dynamic_quote(response, quote,language=lang)
+                response = self._enhance_response_with_dynamic_quote(response, quote,language=self.lang)
             else:
                 print("❌ Quote agent couldn't generate quote from enhanced conversation")
                 response.metadata['quote_generation_failed'] = True

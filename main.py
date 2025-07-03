@@ -356,7 +356,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             else:
                 # Create simple conversational agent for natural responses
                 base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-                conversational_agent = SimpleConversationalAgent(base_provider)
+                conversational_agent = SimpleConversationalAgent(base_provider,language=lang)
                 
                 # Initialize the agent (this will initialize hybrid retriever if configured)
                 await conversational_agent.initialize()
@@ -452,8 +452,10 @@ async def generate_quote(quote_request: Dict[str, Any]):
     try:
         # Create and initialize the quote generation agent
         base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-        quote_agent = QuoteGenerationAgent(base_provider)
-        
+        language = quote_request.get('language', 'en')
+        print(f"[DEBUG] API /api/generate-quote called with language: {language}")
+        quote_agent = QuoteGenerationAgent(base_provider, language)
+    
         # Extract conversation messages from the request
         conversation_messages = quote_request.get('conversation_messages', [])
         customer_context = quote_request.get('customer_context', {})

@@ -64,14 +64,15 @@ class StructuredQuote(BaseModel):
 
 class QuoteGenerationAgent(AIProvider):
     """Dynamic quote generation with Pydantic function calling and internationalization"""
-    
-    def __init__(self, base_provider: AIProvider, language: str = "en", **kwargs):
+
+    def __init__(self, base_provider: AIProvider, language: str = 'en', **kwargs):
         super().__init__(**kwargs)
         self.base_provider = base_provider
         self.pdf_generator = PDFGenerator()
         self.elasticsearch = get_elasticsearch_service()
         self.data_extractor = DynamicExtractionAgent(base_provider)
         self.language = language
+        print(f"🌐 [DEBUG] QuoteGenerationAgent initialized with language: {self.language}")
         
     @property
     def provider_name(self) -> str:
@@ -98,9 +99,9 @@ class QuoteGenerationAgent(AIProvider):
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """Generate quote using simplified workflow with conversation messages directly"""
-        
+
         logger.info(f"🔍 Quote Agent: Starting quote generation for language: {self.language}")
-        
+
         try:
             # Get translations for the specified language
             t = get_quote_translations(self.language)
@@ -167,6 +168,7 @@ class QuoteGenerationAgent(AIProvider):
             print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
             logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']} (Language: {self.language})")
+            logger.info(f"🔍 Quote dict after PDF generation: {json.dumps(quote_dict, indent=2, default=str)}")
             return quote_dict
             
         except Exception as e:
@@ -183,7 +185,6 @@ class QuoteGenerationAgent(AIProvider):
             
             # Get quote ID for file naming
             quote_id = quote_dict.get('quote_id', 'unknown')
-            quote_number = quote_dict.get('quote_number', 'QUOTE-UNKNOWN')
             
             # Create filename
             filename = f"quote_{quote_id}_{language}.pdf"
@@ -191,7 +192,7 @@ class QuoteGenerationAgent(AIProvider):
             # When calling the PDF generator, pass the lang or set font accordingly
             pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
             if language == "ja":
-                pdf_quote_data['font'] = "NotoSansCJKjp"  # or another Japanese font available in your PDF generator
+                pdf_quote_data['font'] = "NotoSansCJKjp"
             pdf_path = pdf_generator.save_pdf_to_file(pdf_quote_data, filename)
             
             # Check if file was actually created
@@ -204,7 +205,6 @@ class QuoteGenerationAgent(AIProvider):
                     'pdf_path': pdf_path,
                     'pdf_url': f'/api/quotes/download-pdf/{quote_id}',
                     'file_size': file_size,
-                    'pdf_language': self.language
                 })
             else:
                 logger.error(f"❌ PDF file was not created: {pdf_path}")
