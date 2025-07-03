@@ -13,6 +13,7 @@ from .dynamic_extraction_agent import DynamicExtractionAgent
 from pydantic import BaseModel, Field
 from pathlib import Path
 from services.prompt_manager import get_prompt_manager
+from services.metrics_service import get_metrics_service
 import os
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,8 @@ class QuoteGenerationAgent(AIProvider):
         self.elasticsearch = get_elasticsearch_service()
         # Use the dynamic extraction agent
         self.data_extractor = DynamicExtractionAgent(base_provider)
+        # Initialize metrics service
+        self.metrics_service = get_metrics_service()
         
     @property
     def provider_name(self) -> str:
@@ -126,6 +129,7 @@ class QuoteGenerationAgent(AIProvider):
             if not conversation_messages:
                 logger.error("❌ No conversation messages provided")
                 print("❌ Debug - conversation_messages is empty!")
+                self.metrics_service.record_quote_generation(status="failed")
                 raise ValueError("No conversation messages available for quote generation")
             
             logger.info(f"✅ Found {len(conversation_messages)} conversation messages")
@@ -160,6 +164,7 @@ class QuoteGenerationAgent(AIProvider):
             if not conversation_text.strip():
                 logger.error("❌ No valid conversation content found")
                 print("❌ Debug - conversation_text is empty after processing!")
+                self.metrics_service.record_quote_generation(status="failed")
                 raise ValueError("No valid conversation content available")
 
             # Create prompt for structured quote generation - no product retrieval required
@@ -227,6 +232,25 @@ Make sure the quote accurately represents what was discussed in the conversation
             print(f"🔍 Debug - PDF generation completed")
             print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
+            # Extract quote value for metrics
+            quote_value = None
+            currency = "USD"
+            try:
+                financials = quote_dict.get('financials', {})
+                if financials and isinstance(financials, dict):
+                    quote_value = financials.get('total', 0)
+                    currency = financials.get('currency', 'USD')
+                    print(f"🔍 Debug - Extracted quote value: {quote_value} {currency}")
+            except Exception as e:
+                print(f"⚠️ Debug - Failed to extract quote value: {e}")
+            
+            # Record successful quote generation with value
+            self.metrics_service.record_quote_generation(
+                status="success", 
+                quote_value=quote_value, 
+                currency=currency
+            )
+            
             logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']}")
             return quote_dict
             
@@ -238,6 +262,9 @@ Make sure the quote accurately represents what was discussed in the conversation
             print(f"   Exception type: {type(e)}")
             print(f"   Exception message: {str(e)}")
             print(f"   Full traceback: {traceback.format_exc()}")
+            
+            # Record failed quote generation
+            self.metrics_service.record_quote_generation(status="failed")
             return None
     
     async def _generate_quote_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:

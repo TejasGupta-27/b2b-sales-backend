@@ -1,7 +1,10 @@
 import json
+import uuid
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-import asyncio
+from io import BytesIO
+import logging
 from pydantic import BaseModel, Field
 
 from .base import AIProvider, AIMessage, AIResponse
@@ -9,6 +12,9 @@ from services.prompt_manager import get_prompt_manager
 from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from .quote_generation_agent import QuoteGenerationAgent
 from config import settings
+from services.metrics_service import get_metrics_service
+
+logger = logging.getLogger(__name__)
 
 class ConversationIntent(BaseModel):
     """Pydantic model for analyzing conversation intent"""
@@ -29,6 +35,10 @@ class SimpleConversationalAgent(AIProvider):
         self.conversation_memory = {}
         self.prompt_manager = get_prompt_manager()
         
+        # Inherit token tracking from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+        
         # Initialize hybrid product retriever if configured
         self.hybrid_retriever = None
         if settings.use_hybrid_retriever and settings.azure_embedding_endpoint and settings.azure_embedding_api_key:
@@ -45,6 +55,9 @@ class SimpleConversationalAgent(AIProvider):
         # Initialize quote generation agent
         self.quote_agent = QuoteGenerationAgent(base_provider)
         print("✅ Quote Generation Agent initialized for SimpleConversationalAgent")
+        
+        # Initialize metrics service
+        self.metrics_service = get_metrics_service()
         
     @property
     def provider_name(self) -> str:
@@ -708,9 +721,17 @@ Remember: You're having a conversation with a real person, not following a rigid
                 print(f"✅ Quote generated successfully: {quote.get('quote_number', 'Unknown')}")
                 print(f"   PDF generated: {quote.get('pdf_generated', False)}")
                 print(f"   Pitch deck generated: {quote.get('pitch_deck_generated', False)}")
+                
+                # Record successful quote generation
+                self.metrics_service.record_quote_generation(status="success")
+                
                 return quote
             else:
                 print("❌ Quote generation failed - no quote returned")
+                
+                # Record failed quote generation
+                self.metrics_service.record_quote_generation(status="failed")
+                
                 return {
                     'error': 'Quote generation failed - no quote returned',
                     'quote_id': f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -720,6 +741,10 @@ Remember: You're having a conversation with a real person, not following a rigid
             
         except Exception as e:
             print(f"❌ Quote generation failed: {e}")
+            
+            # Record failed quote generation
+            self.metrics_service.record_quote_generation(status="failed")
+            
             return {
                 'error': str(e),
                 'quote_id': f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}",

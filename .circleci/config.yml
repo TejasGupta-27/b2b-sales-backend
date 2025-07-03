@@ -56,6 +56,13 @@ jobs:
       # Speech Service Configuration
       SPEECH_PRIMARY_PROVIDER: "elevenlabs"
       SPEECH_FALLBACK_ENABLED: "true"
+      
+      # Monitoring Configuration
+      PROMETHEUS_PORT: "9090"
+      GRAFANA_PORT: "3000"
+      NODE_EXPORTER_PORT: "9100"
+      POSTGRES_EXPORTER_PORT: "9187"
+      ELASTICSEARCH_EXPORTER_PORT: "9114"
     steps:
       - checkout
       - setup_remote_docker:
@@ -122,12 +129,21 @@ jobs:
               
               # Stop existing containers
               docker compose down
+              docker compose -f docker-compose.monitoring.yml down
               
-              # Build and start new containers
+              # Build and start main application containers
               docker compose up --build -d
               
-              # Wait for services to be ready before setting up nginx
-              echo "Waiting for services to be ready..."
+              # Wait for main services to be ready
+              echo "Waiting for main services to be ready..."
+              sleep 30
+              
+              # Start monitoring stack
+              echo "Starting monitoring stack..."
+              docker compose -f docker-compose.monitoring.yml up -d
+              
+              # Wait for monitoring services to be ready
+              echo "Waiting for monitoring services to be ready..."
               sleep 30
               
               # Setup nginx reverse proxy
@@ -139,6 +155,16 @@ jobs:
                 echo "Warning: setup-nginx-proxy.sh not found, skipping nginx setup"
               fi
               
+              # Verify all services are running
+              echo "Verifying service status..."
+              docker compose ps
+              docker compose -f docker-compose.monitoring.yml ps
+              
+              # Check monitoring endpoints
+              echo "Checking monitoring endpoints..."
+              curl -f http://localhost:9090/api/v1/status/targets || echo "Prometheus not ready yet"
+              curl -f http://localhost:3000/api/health || echo "Grafana not ready yet"
+              
               # Clean up old images and volumes
               docker image prune -f
               docker volume prune -f
@@ -146,6 +172,11 @@ jobs:
               # Show final status
               echo "Deployment completed. Checking service status..."
               ./setup-nginx-proxy.sh status || echo "Nginx status check failed"
+              
+              echo "Monitoring stack is available at:"
+              echo "- Grafana: http://$AZURE_VM_HOST/monitoring/"
+              echo "- Prometheus: http://$AZURE_VM_HOST:9090"
+              echo "- Direct Grafana: http://$AZURE_VM_HOST:3000"
             EOF
 
 

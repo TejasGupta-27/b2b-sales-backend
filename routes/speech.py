@@ -13,7 +13,7 @@ from ai_services.base import AIMessage
 import uuid
 from datetime import datetime
 from dependencies import get_speech_service
-from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
+from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -365,19 +365,19 @@ async def handle_voice_message(
                 "timeline": getattr(lead_record, 'decision_timeline', None)
             }
         
-        # Create Enhanced B2B Sales Agent
+        # Create Simple Conversational Agent
         try:
             base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-            enhanced_agent = EnhancedB2BSalesAgent(
+            simple_agent = SimpleConversationalAgent(
                 base_provider=base_provider,
                 use_hybrid_retriever=settings.use_hybrid_retriever
             )
             
             # Initialize if needed
-            await enhanced_agent.initialize()
+            await simple_agent.initialize()
             
             # Generate response with error handling
-            response = await enhanced_agent.generate_response(
+            response = await simple_agent.generate_response(
                 messages, 
                 customer_context=customer_context
             )
@@ -417,8 +417,8 @@ async def handle_voice_message(
         }
         
         # Add product intelligence if available
-        if hasattr(enhanced_agent, 'product_recommendations'):
-            response_metadata['product_recommendations'] = enhanced_agent.product_recommendations
+        if hasattr(simple_agent, 'product_recommendations'):
+            response_metadata['product_recommendations'] = simple_agent.product_recommendations
         
         # Add quote information if generated
         if response.metadata and 'quote' in response.metadata:
@@ -445,7 +445,7 @@ async def handle_voice_message(
                 "provider": response.provider,
                 "model": response.model,
                 "usage": response.usage,
-                "product_intelligence": getattr(enhanced_agent, 'product_recommendations', {}),
+                "product_intelligence": getattr(simple_agent, 'product_recommendations', {}),
                 "timestamp": datetime.now().isoformat(),
                 "is_voice_message": True,
                 "transcription_metadata": transcription_result,

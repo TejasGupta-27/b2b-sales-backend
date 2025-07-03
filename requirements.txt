@@ -52,3 +52,6 @@ elevenlabs
 
 # PowerPoint generation
 python-pptx
+
+# Monitoring and metrics
+prometheus-client
