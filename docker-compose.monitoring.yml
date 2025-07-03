@@ -68,8 +68,6 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/b2b_sales?sslmode=disable"
     restart: unless-stopped
-    depends_on:
-      - postgres
     networks:
       - b2b-sales-network
 
@@ -87,8 +85,6 @@ services:
       - '--es.shards'
       - '--es.snapshots'
     restart: unless-stopped
-    depends_on:
-      - elasticsearch
     networks:
       - b2b-sales-network
 
