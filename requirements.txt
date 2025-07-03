@@ -15,41 +15,40 @@ passlib[bcrypt]
 httpx
 openai
 anthropic
-huggingface-hub>=0.30.0
-tokenizers<=0.15.0
+huggingface-hub
 transformers
 torch
 datasets
 sentence-transformers
 elasticsearch==8.11.0
-chromadb>=0.4.15
-numpy>=1.21.0
-pandas>=1.3.0
-aiofiles>=0.8.0
-aiohttp>=3.9.0
+chromadb
+numpy
+pandas
+aiofiles
+aiohttp
 reportlab
 jinja2
-ragas>=0.1.0
+ragas
 
 # Speech recognition
-openai-whisper
 ffmpeg-python
 python-ffmpeg
 
 # ONNX Runtime dependencies
 onnxruntime
-faster-whisper==0.9.0
+faster-whisper
 soundfile
-librosa==0.10.1
-
+librosa>=0.10.0
+numba>=0.56.0
+llvmlite>=0.39.0
 # Testing dependencies
 requests
 
 # Added from the code block
-gTTS==2.5.1
+gTTS
 
 # ElevenLabs integration
-elevenlabs>=1.0.0
+elevenlabs
 
 # PowerPoint generation
-python-pptx>=0.6.21
+python-pptx

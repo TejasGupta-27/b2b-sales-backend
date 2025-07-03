@@ -58,6 +58,10 @@ class SimpleConversationalAgent(AIProvider):
         try:
             if self.hybrid_retriever:
                 await self.hybrid_retriever.initialize()
+                # Ensure the vector service has the LLM provider for category detection
+                if hasattr(self.hybrid_retriever, 'vector_service') and self.hybrid_retriever.vector_service:
+                    self.hybrid_retriever.vector_service.set_llm_provider(self.base_provider)
+                    print("✅ LLM provider configured for intelligent category detection")
             print("✅ SimpleConversationalAgent initialized successfully")
         except Exception as e:
             print(f"⚠️ SimpleConversationalAgent initialization warning: {e}")
@@ -417,16 +421,18 @@ APPROACH:
 - Ask if they'd like more details about any specific product
 - Suggest next steps naturally (demo, quote, etc.)
 
-Be helpful and knowledgeable, not pushy or salesy."""
+Be helpful and knowledgeable, not pushy or salesy.
+
+For the list of products provided, recommend a full build by selecting the best product(s) from each category (CPU, GPU, Memory, Storage, Power Supply, etc.). If a category is missing, mention that. Explain your choices for each category and how they fit the customer's needs."""
         
         # Build enhanced context
         enhanced_messages = self._build_conversational_context(messages, customer_context)
         
-        # Add product context
+        # Add product context (now grouped by category)
         product_context = self._build_product_context(product_data)
         enhanced_messages.append(AIMessage(role="system", content=product_context))
         
-        # Add product guidance
+        # Add product guidance (explicit build prompt)
         enhanced_messages.append(AIMessage(role="system", content=product_guidance))
         
         response = await self.base_provider.generate_response(enhanced_messages)
@@ -497,58 +503,36 @@ But don't feel obligated to ask them all - just let the conversation flow natura
         return response
     
     def _build_product_context(self, product_data: Dict[str, Any]) -> str:
-        """Build context from product data with LLM-powered insights"""
-        
+        """Build context from product data with LLM-powered insights, grouped by category for full build recommendations"""
         products = product_data.get('products', [])
         solutions = product_data.get('solutions', [])
         requirements = product_data.get('requirements', {})
         llm_context = requirements.get('llm_context', {})
-        
+
+        # Group products by category
+        from collections import defaultdict
+        cat_map = defaultdict(list)
+        for p in products:
+            cat_map[p.get('category', 'Other')].append(p)
+
         context = f"""
-Available Product Recommendations:
-Total Products: {len(products)}
-Total Solutions: {len(solutions)}
-Retrieval Method: {product_data.get('retrieval_method', 'unknown')}
-Fusion Method: {product_data.get('fusion_method', 'unknown')}
-Confidence: {product_data.get('retrieval_confidence', 0):.1%}
-
-LLM Context Analysis:
-Primary Need: {llm_context.get('primary_need', 'Not analyzed')}
-Business Context: {llm_context.get('business_context', 'Not analyzed')}
-Budget Level: {llm_context.get('budget_indicator', 'Not specified')}
-Timeline: {llm_context.get('timeline', 'Not specified')}
-Analysis Confidence: {llm_context.get('confidence', 0):.1%}
-
+Here are the top recommended products by category for your needs:
 """
-        
-        if products:
-            context += "Top Products:\n"
-            for i, product in enumerate(products[:5]):  # Top 5 products
-                context += f"{i+1}. {product.get('name', 'Unknown')} - ${product.get('price', 0):,.2f}\n"
-                context += f"   Category: {product.get('category', 'Unknown')}\n"
-                context += f"   Description: {product.get('description', 'No description')[:100]}...\n"
-                # Add LLM insights if available
-                if product.get('search_source') == 'both':
-                    context += f"   Match Quality: High (found in both keyword and semantic search)\n"
-                elif product.get('rrf_score', 0) > 0.02:
-                    context += f"   Match Quality: Strong (RRF score: {product.get('rrf_score', 0):.3f})\n"
-                context += "\n"
-        
-        if solutions:
-            context += "Available Solutions:\n"
-            for i, solution in enumerate(solutions[:3]):  # Top 3 solutions
-                context += f"{i+1}. {solution.get('name', 'Unknown')}\n"
-                context += f"   Use Case: {solution.get('use_case', 'No use case')}\n"
-                context += f"   Total Price: ${solution.get('total_price', 0):,.2f}\n\n"
-        
-        # Add similar products analysis if available
-        similar_products = requirements.get('similar_products', [])
-        if similar_products:
-            context += f"Similar Products Analysis:\n"
-            for product in similar_products[:3]:
-                context += f"- {product}\n"
-            context += "\n"
-        
+        for cat, plist in cat_map.items():
+            context += f"\n{cat.title()}:\n"
+            for i, p in enumerate(plist[:2]):  # Top 2 per category
+                context += f"  {i+1}. {p.get('name', 'Unknown')} (${p.get('price', 'N/A')})\n"
+                context += f"     Description: {p.get('description', 'No description')[:100]}...\n"
+        context += "\nPlease recommend a full build using the best available products from each category above. If a category is missing, note that as well."
+
+        # Add LLM context summary
+        context += f"\n\nLLM Context Analysis:\n"
+        context += f"Primary Need: {llm_context.get('primary_need', 'Not analyzed')}\n"
+        context += f"Business Context: {llm_context.get('business_context', 'Not analyzed')}\n"
+        context += f"Budget Level: {llm_context.get('budget_indicator', 'Not specified')}\n"
+        context += f"Timeline: {llm_context.get('timeline', 'Not specified')}\n"
+        context += f"Analysis Confidence: {llm_context.get('confidence', 0):.1%}\n"
+
         return context
     
     def _build_conversational_context(

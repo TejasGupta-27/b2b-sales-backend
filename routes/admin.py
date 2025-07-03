@@ -9,7 +9,7 @@ import glob
 from pathlib import Path
 import logging
 import asyncio
-from services.elasticsearch_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_service
 from services.chroma_service import ChromaDBService
 from services.prompt_manager import get_prompt_manager
 from db.database import get_db

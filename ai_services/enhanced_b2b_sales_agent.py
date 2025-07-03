@@ -7,7 +7,6 @@ import uuid
 
 from .base import AIProvider, AIMessage, AIResponse
 from .quote_generation_agent import QuoteGenerationAgent
-from .product_retriever_agent import ProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
 from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
 from .conversation_flow_manager import ConversationFlowAgent
