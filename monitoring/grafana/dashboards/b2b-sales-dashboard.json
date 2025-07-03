@@ -192,14 +192,14 @@
               {
                 "id": "thresholds",
                 "value": {
-                  "steps": [
-                    {
+            "steps": [
+              {
                       "color": "green",
-                      "value": null
-                    },
-                    {
+                "value": null
+              },
+              {
                       "color": "yellow",
-                      "value": 1
+                "value": 1
                     },
                     {
                       "color": "red",
@@ -401,7 +401,7 @@
       ]
     },
     {
-      "title": "Conversion Funnel",
+      "title": "Quotation & Revenue Metrics",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -410,7 +410,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-GrYlRd"
+            "mode": "palette-classic"
           },
           "custom": {
             "displayMode": "gradient-gauge"
@@ -419,21 +419,85 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 20
+                "value": 50
               },
               {
-                "color": "green",
-                "value": 50
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Quotations"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "list"
               }
             ]
           },
-          "unit": "percent"
-        }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Quotation Value"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "list"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Success Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "green",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -463,8 +527,8 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "b2b_conversion_rate{stage=\"new_to_qualified\"}",
-          "legendFormat": "NEW → QUALIFIED",
+          "expr": "b2b_quotes_generated_total",
+          "legendFormat": "Total Quotations",
           "refId": "A"
         },
         {
@@ -472,8 +536,8 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "b2b_conversion_rate{stage=\"qualified_to_proposal\"}",
-          "legendFormat": "QUALIFIED → PROPOSAL",
+          "expr": "b2b_quotation_value_total",
+          "legendFormat": "Quotation Value",
           "refId": "B"
         },
         {
@@ -481,8 +545,8 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "b2b_conversion_rate{stage=\"proposal_to_closed_won\"}",
-          "legendFormat": "PROPOSAL → CLOSED_WON",
+          "expr": "rate(b2b_quotes_generated_total{status=\"success\"}[5m]) / (rate(b2b_quotes_generated_total[5m]) + 0.001) * 100",
+          "legendFormat": "Success Rate",
           "refId": "C"
         }
       ]
@@ -838,7 +902,7 @@
                 "value": 80
               }
             ]
-          }
+        }
         },
         "overrides": []
       },
@@ -1068,7 +1132,7 @@
         "y": 39
       },
       "id": 10,
-      "options": {
+              "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",

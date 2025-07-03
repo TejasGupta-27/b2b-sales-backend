@@ -232,8 +232,24 @@ Make sure the quote accurately represents what was discussed in the conversation
             print(f"🔍 Debug - PDF generation completed")
             print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
             
-            # Record successful quote generation
-            self.metrics_service.record_quote_generation(status="success")
+            # Extract quote value for metrics
+            quote_value = None
+            currency = "USD"
+            try:
+                financials = quote_dict.get('financials', {})
+                if financials and isinstance(financials, dict):
+                    quote_value = financials.get('total', 0)
+                    currency = financials.get('currency', 'USD')
+                    print(f"🔍 Debug - Extracted quote value: {quote_value} {currency}")
+            except Exception as e:
+                print(f"⚠️ Debug - Failed to extract quote value: {e}")
+            
+            # Record successful quote generation with value
+            self.metrics_service.record_quote_generation(
+                status="success", 
+                quote_value=quote_value, 
+                currency=currency
+            )
             
             logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']}")
             return quote_dict

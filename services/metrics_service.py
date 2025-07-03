@@ -127,10 +127,23 @@ b2b_token_usage_daily = Gauge(
     ['provider', 'model', 'date']
 )
 
+# Quotation Value Metrics
+b2b_quotation_value_total = Gauge(
+    'b2b_quotation_value_total',
+    'Total monetary value of all quotations generated',
+    ['currency']
+)
+
 class MetricsService:
     def __init__(self):
         self.start_time = time.time()
         self.token_usage_file = Path("Data/token_usage.json")
+        
+        # Track quotation values internally by currency
+        self._quotation_totals = {"USD": 0.0}
+        
+        # Initialize quotation value metric with default values
+        b2b_quotation_value_total.labels(currency="USD").set(0)
     
     def record_http_request(self, method: str, endpoint: str, status: int, duration: float):
         """Record HTTP request metrics"""
@@ -158,13 +171,25 @@ class MetricsService:
             message_type=message_type
         ).inc()
     
-    def record_quote_generation(self, status: str = "success"):
-        """Record quote generation metrics"""
+    def record_quote_generation(self, status: str = "success", quote_value: float = None, currency: str = "USD"):
+        """Record quote generation metrics with optional value tracking"""
         b2b_quotes_generated_total.labels(status=status).inc()
         
         # Record revenue metrics for successful quotes
         if status == "success":
             b2b_revenue_metrics.labels(type="quote_generated", status="success").inc()
+            
+            # Track quotation value if provided
+            if quote_value is not None and quote_value > 0:
+                # Initialize currency tracking if needed
+                if currency not in self._quotation_totals:
+                    self._quotation_totals[currency] = 0.0
+                
+                # Add to internal total
+                self._quotation_totals[currency] += quote_value
+                
+                # Update Prometheus metric
+                b2b_quotation_value_total.labels(currency=currency).set(self._quotation_totals[currency])
     
     def record_ai_response_time(self, duration: float, provider: str = "unknown", model: str = "unknown"):
         """Record AI service response time"""
@@ -304,7 +329,8 @@ class MetricsService:
     
     def get_metrics(self) -> str:
         """Get Prometheus metrics as string"""
-        return generate_latest()
+        metrics_bytes = generate_latest()
+        return metrics_bytes.decode('utf-8')
 
 # Global metrics service instance
 metrics_service = MetricsService()
