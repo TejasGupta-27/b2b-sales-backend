@@ -198,49 +198,58 @@ async def startup_event():
             logger.info("✅ Elasticsearch initialized successfully")
             
             # If hybrid retriever is enabled, the vector service is already initialized
-            # since get_elasticsearch_service() returns the vector service
-            if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
+            if settings.use_hybrid_retriever:
                 vector_service = elasticsearch_service
-                logger.info("✅ Elasticsearch Vector Service ready (using same instance)")
-                
-                # Add a small delay to ensure Elasticsearch is fully ready
-                await asyncio.sleep(2)
-                
-                # Check if vector indices are empty and need population
-                stats = await vector_service.get_collection_stats()
-                if stats["products_count"] == 0 and stats["solutions_count"] == 0:
-                    logger.info("🔄 Vector indices are empty, loading data from JSON files...")
-                    result = await vector_service.load_data_from_json(max_per_file=50)
-                    logger.info(f"✅ Vector data loading completed: {result}")
-                elif settings.force_reload_data:
-                    logger.info("🔄 Force reload enabled, reloading vector data...")
-                    result = await vector_service.load_data_from_json(max_per_file=50)
-                    logger.info(f"✅ Vector force reload completed: {result}")
-                else:
-                    logger.info(f"✅ Vector indices already have data: {stats}")
+                logger.info("✅ Vector service initialized (hybrid retriever enabled)")
             else:
-                logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
-            
-        except Exception as e:
-            logger.error(f"❌ Elasticsearch initialization failed: {e}")
-            raise  # Re-raise the exception since Elasticsearch is critical
+                logger.info("ℹ️ Vector service not initialized (hybrid retriever disabled)")
+                
+        except Exception as es_error:
+            logger.error(f"❌ Elasticsearch initialization failed: {es_error}")
+            logger.warning("⚠️ Continuing without Elasticsearch - some features may be limited")
         
-        # Test database connection (remove await since it's not async)
-        test_connection()
+        # Initialize speech service
+        try:
+            speech_service = SpeechService()
+            await speech_service.initialize()
+            logger.info("✅ Speech service initialized")
+        except Exception as speech_error:
+            logger.error(f"❌ Speech service initialization failed: {speech_error}")
+            logger.warning("⚠️ Continuing without speech service - text-to-speech will be disabled")
         
-        # Create database tables
-        create_tables()
+        # Start periodic metrics update task
+        asyncio.create_task(periodic_metrics_update())
+        logger.info("✅ Metrics update task started")
         
-        # Initialize SpeechService ONCE
-        speech_service = SpeechService(model_name="medium")
-        await speech_service.initialize()
-        logger.info("✅ SpeechService initialized successfully")
-        
-        logger.info("✅ Application startup completed")
+        logger.info("🎉 B2B Sales AI Assistant startup completed successfully!")
         
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
         raise
+
+async def periodic_metrics_update():
+    """Periodically update lead and database metrics"""
+    while True:
+        try:
+            await asyncio.sleep(60)  # Update every minute
+            
+            # Get database session
+            db = next(get_db())
+            try:
+                metrics_service = get_metrics_service()
+                
+                # Update lead metrics
+                metrics_service.update_lead_metrics(db)
+                
+                # Update database connection metrics
+                metrics_service.update_db_connection_metrics(db)
+                
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error in periodic metrics update: {e}")
+            await asyncio.sleep(60)  # Wait before retrying
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -284,6 +293,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 db.add(lead)
                 db.commit()
                 logger.info(f"Created new lead: {lead_id}")
+                
+                # Update lead metrics immediately after creation
+                metrics_service.update_lead_metrics(db)
             
             # Save user message
             user_message = DBChatMessage(
@@ -530,6 +542,8 @@ async def generate_quote(quote_request: Dict[str, Any]):
 
 @app.post("/api/chat/send")
 async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
+    metrics_service = get_metrics_service()
+    
     try:
         # Get speech service
         global speech_service
@@ -549,6 +563,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                 db.add(lead)
                 db.commit()
                 logger.info(f"Created new lead: {lead_id}")
+                
+                # Update lead metrics immediately after creation
+                metrics_service.update_lead_metrics(db)
             
             # Save user message
             user_message = DBChatMessage(
@@ -560,6 +577,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             )
             db.add(user_message)
             db.commit()
+            
+            # Record user message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
             # Get conversation history with limit for better performance
             messages = []
@@ -573,7 +593,16 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             
             # Get AI response
             ai_provider = AIServiceFactory.create_provider()
+            ai_start_time = time.time()
             response = await ai_provider.generate_response(messages)
+            ai_duration = time.time() - ai_start_time
+            
+            # Record AI response time
+            metrics_service.record_ai_response_time(
+                duration=ai_duration,
+                provider=response.provider,
+                model=response.model
+            )
             
             # Generate speech for the response
             speech_result = await speech_service.text_to_speech(
@@ -598,6 +627,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             db.add(assistant_message)
             db.commit()
             logger.info(f"Saved assistant message to database: {assistant_message.id}")
+            
+            # Record assistant message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="assistant")
             
             return ChatResponse(
                 message=response.content,
@@ -1276,6 +1308,9 @@ async def get_performance_stats():
 @app.post("/api/generate-quote-from-conversation/{lead_id}")
 async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(get_db)):
     """Generate a quote from existing conversation history"""
+    metrics_service = get_metrics_service()
+    start_time = time.time()
+    
     try:
         # Get conversation history for the lead
         messages = db.query(DBChatMessage).filter(
@@ -1283,6 +1318,7 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         ).order_by(DBChatMessage.created_at).all()
         
         if not messages:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=404, detail="No conversation history found for this lead")
         
         # Convert to AIMessage format
@@ -1317,10 +1353,15 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         
         # Check if quote generation was successful
         if not quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
         
         if 'error' in quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail=quote['error'])
+        
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
         
         # Generate pitch deck if quote was successful
         deck_id = str(uuid.uuid4())
@@ -1355,6 +1396,7 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         }
     except Exception as e:
         logger.error(f"Quote generation from conversation failed: {e}")
+        metrics_service.record_quote_generation(status="error")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

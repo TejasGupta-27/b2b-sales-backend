@@ -27,15 +27,38 @@ class CacheService:
         """Get value from cache if not expired"""
         async with self._lock:
             if key not in self._cache:
+                # Record cache miss
+                try:
+                    from services.metrics_service import get_metrics_service
+                    metrics_service = get_metrics_service()
+                    metrics_service.record_cache_miss()
+                except ImportError:
+                    pass  # Metrics service not available
                 return None
             
             entry = self._cache[key]
             if entry["expires_at"] < time.time():
                 del self._cache[key]
+                # Record cache miss
+                try:
+                    from services.metrics_service import get_metrics_service
+                    metrics_service = get_metrics_service()
+                    metrics_service.record_cache_miss()
+                except ImportError:
+                    pass  # Metrics service not available
                 return None
             
             entry["last_accessed"] = time.time()
             logger.debug(f"Cache hit for key: {key}")
+            
+            # Record cache hit
+            try:
+                from services.metrics_service import get_metrics_service
+                metrics_service = get_metrics_service()
+                metrics_service.record_cache_hit()
+            except ImportError:
+                pass  # Metrics service not available
+            
             return entry["value"]
     
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
