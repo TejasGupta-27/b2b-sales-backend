@@ -18,7 +18,16 @@ import asyncio
 
 # Import database components
 from db.database import get_db, engine, create_tables, test_connection
-from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
+# Import ALL database models to ensure they're registered with Base metadata
+from db.models import (
+    ChatMessage as DBChatMessage, 
+    Lead as DBLead, 
+    LeadStatus,
+    MessageType,
+    Quote,
+    ProductRecommendation,
+    RecommendationSet
+)
 
 # Import routes
 from routes.leads import router as leads_router
@@ -194,10 +203,39 @@ async def startup_event():
             raise  # Re-raise the exception since Elasticsearch is critical
         
         # Test database connection (remove await since it's not async)
-        test_connection()
+        logger.info("🔍 Testing database connection...")
+        if test_connection():
+            logger.info("✅ Database connection successful")
+        else:
+            logger.error("❌ Database connection failed")
+            raise Exception("Database connection failed")
         
         # Create database tables
-        create_tables()
+        logger.info("🔨 Creating database tables...")
+        try:
+            create_tables()
+            logger.info("✅ Database tables created successfully")
+            
+            # Verify tables were created by checking they exist
+            with engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name
+                """))
+                tables = [row[0] for row in result.fetchall()]
+                logger.info(f"📊 Created tables: {tables}")
+                
+                # Check that essential tables exist
+                essential_tables = {'leads', 'chat_messages'}
+                missing_tables = essential_tables - set(tables)
+                if missing_tables:
+                    raise Exception(f"Essential tables missing: {missing_tables}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Database table creation failed: {e}")
+            raise Exception(f"Failed to create database tables: {e}")
         
         # Initialize Elasticsearch Vector Service if hybrid retriever is enabled
         if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:

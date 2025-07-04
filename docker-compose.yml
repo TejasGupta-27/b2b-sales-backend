@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Main B2B Sales Backend Application
   b2b-sales-backend:
@@ -74,7 +72,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Initialize with extensions
+      # Initialize with extensions only - tables will be created by SQLAlchemy
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
