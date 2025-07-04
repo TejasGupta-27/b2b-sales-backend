@@ -7,21 +7,25 @@ from pathlib import Path
 import uuid
 
 from db.database import get_db
-from ai_services.enhanced_b2b_sales_agent import EnhancedB2BSalesAgent
+from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from services.pdf_generator import PDFGenerator
 from services.pitch_deck_service import PitchDeckService
 from services.email_sender import send_quote_email  # You must have this implemented
 from ai_services.azure_openai import AzureOpenAIProvider as AIServiceFactory  # Fixed relative import
+from services.metrics_service import get_metrics_service
+from ai_services.factory import AIServiceFactory
 
 router = APIRouter()
 
 @router.post("/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation and pitch deck"""
+    metrics_service = get_metrics_service()
+    
     try:
         language = quote_request.get("language", "en")
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        sales_agent = SimpleConversationalAgent(base_provider)
         
         # Generate the quote
         quote = await sales_agent.generate_quote(quote_request)
@@ -51,6 +55,9 @@ async def generate_quote(quote_request: Dict[str, Any]):
         # Generate the PowerPoint file
         await pitch_deck_service.generate_ppt(deck_structure, deck_path)
         
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
+        
         return {
             "quote": quote,
             "quote_id": quote_id,
@@ -59,14 +66,18 @@ async def generate_quote(quote_request: Dict[str, Any]):
             "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}"
         }
     except Exception as e:
+        # Record failed quote generation
+        metrics_service.record_quote_generation(status="failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-quote-with-pdf")
 async def generate_quote_with_pdf(quote_request: Dict[str, Any]):
     """Generate a quotation with PDF file and pitch deck"""
+    metrics_service = get_metrics_service()
+    
     try:
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        sales_agent = SimpleConversationalAgent(base_provider)
         
         # Generate the quote
         quote = await sales_agent.generate_quote_with_pdf(quote_request)
@@ -96,6 +107,9 @@ async def generate_quote_with_pdf(quote_request: Dict[str, Any]):
         # Generate the PowerPoint file
         await pitch_deck_service.generate_ppt(deck_structure, deck_path)
         
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
+        
         def iter_file():
             with open(quote_path, 'rb') as file:
                 yield from file
@@ -112,6 +126,8 @@ async def generate_quote_with_pdf(quote_request: Dict[str, Any]):
             }
         )
     except Exception as e:
+        # Record failed quote generation
+        metrics_service.record_quote_generation(status="failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/download-pdf/{quote_id}")
@@ -224,10 +240,12 @@ async def preview_quote_pdf(quote_id: str):
 @router.post("/generate-pitch-deck")
 async def generate_pitch_deck(quote_request: Dict[str, Any]):
     """Generate a sales pitch deck from a quotation"""
+    metrics_service = get_metrics_service()
+    
     try:
         # Generate the quote first
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = EnhancedB2BSalesAgent(base_provider)
+        sales_agent = SimpleConversationalAgent(base_provider)
         
         quote = await sales_agent.generate_quote(quote_request)
         
@@ -258,6 +276,9 @@ async def generate_pitch_deck(quote_request: Dict[str, Any]):
         # Generate the PowerPoint file
         file_path = await pitch_deck_service.generate_ppt(deck_structure, deck_path)
         
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
+        
         def iter_file():
             with open(file_path, 'rb') as file:
                 yield from file
@@ -275,6 +296,8 @@ async def generate_pitch_deck(quote_request: Dict[str, Any]):
             }
         )
     except Exception as e:
+        # Record failed quote generation
+        metrics_service.record_quote_generation(status="failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/download-pitch-deck/{deck_id}")

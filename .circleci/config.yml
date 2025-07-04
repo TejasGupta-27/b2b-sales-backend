@@ -56,6 +56,13 @@ jobs:
       # Speech Service Configuration
       SPEECH_PRIMARY_PROVIDER: "elevenlabs"
       SPEECH_FALLBACK_ENABLED: "true"
+      
+      # Monitoring Configuration
+      PROMETHEUS_PORT: "9090"
+      GRAFANA_PORT: "3000"
+      NODE_EXPORTER_PORT: "9100"
+      POSTGRES_EXPORTER_PORT: "9187"
+      ELASTICSEARCH_EXPORTER_PORT: "9114"
     steps:
       - checkout
       - setup_remote_docker:
@@ -67,6 +74,120 @@ jobs:
       - run:
           name: List files in /app
           command: |
+<<<<<<< HEAD
+=======
+            docker exec app-b2b-sales-backend-1 ls -l /app
+      - run:
+          name: Show files in CI context
+          command: |
+            ls -l
+            find . -name main.py
+
+  deploy:
+    executor: python-executor
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints:
+            - "SHA256:EQxGGD9fpAsUzA3Bzl7eyDu2H/muW2OdrrTc3IvfHHE"  # Replace with your actual fingerprint from CircleCI
+      - run:
+          name: Debug environment variables
+          command: |
+            echo "AZURE_VM_HOST: $AZURE_VM_HOST"
+            echo "AZURE_VM_USER: $AZURE_VM_USER"
+            echo "Testing SSH connectivity..."
+            ssh-keyscan -T 10 $AZURE_VM_HOST || echo "ssh-keyscan failed, but continuing..."
+      - run:
+          name: Debug SSH key setup
+          command: |
+            echo "Checking SSH agent and keys..."
+            ssh-add -l || echo "No keys in SSH agent"
+            echo "Testing SSH connection with verbose output..."
+            ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no $AZURE_VM_USER@$AZURE_VM_HOST echo "SSH test successful" || echo "SSH connection failed"
+      - run:
+          name: Add Azure VM to known hosts
+          command: |
+            ssh-keyscan -H -T 30 $AZURE_VM_HOST >> ~/.ssh/known_hosts || {
+              echo "ssh-keyscan failed, trying with IP resolution..."
+              nslookup $AZURE_VM_HOST || echo "DNS lookup failed"
+              exit 1
+            }
+      - run:
+          name: Deploy to Azure VM
+          command: |
+            # Connect to Azure VM and deploy
+            ssh $AZURE_VM_USER@$AZURE_VM_HOST \<< 'EOF'
+              cd ~/b2b-sales-backend
+              
+              # Pull latest changes from git
+              git fetch origin
+              git reset --hard origin/master
+              
+              # Copy environment file if it doesn't exist
+              if [ ! -f .env ]; then
+                cp docker.env.example .env
+                echo "Please update .env with production values!"
+              fi
+              
+              # Stop existing containers
+              docker compose down
+              docker compose -f docker-compose.monitoring.yml down
+              
+              # Build and start main application containers
+              docker compose up --build -d
+              
+              # Wait for main services to be ready
+              echo "Waiting for main services to be ready..."
+              sleep 30
+              
+              # Start monitoring stack
+              echo "Starting monitoring stack..."
+              docker compose -f docker-compose.monitoring.yml up -d
+              
+              # Wait for monitoring services to be ready
+              echo "Waiting for monitoring services to be ready..."
+              sleep 30
+              
+              # Setup nginx reverse proxy
+              if [ -f setup-nginx-proxy.sh ]; then
+                echo "Setting up nginx reverse proxy..."
+                chmod +x setup-nginx-proxy.sh
+                ./setup-nginx-proxy.sh install
+              else
+                echo "Warning: setup-nginx-proxy.sh not found, skipping nginx setup"
+              fi
+              
+              # Verify all services are running
+              echo "Verifying service status..."
+              docker compose ps
+              docker compose -f docker-compose.monitoring.yml ps
+              
+              # Check monitoring endpoints
+              echo "Checking monitoring endpoints..."
+              curl -f http://localhost:9090/api/v1/status/targets || echo "Prometheus not ready yet"
+              curl -f http://localhost:3000/api/health || echo "Grafana not ready yet"
+              
+              # Clean up old images and volumes
+              docker image prune -f
+              docker volume prune -f
+              
+              # Show final status
+              echo "Deployment completed. Checking service status..."
+              ./setup-nginx-proxy.sh status || echo "Nginx status check failed"
+              
+              echo "Monitoring stack is available at:"
+              echo "- Grafana: http://$AZURE_VM_HOST/monitoring/"
+              echo "- Prometheus: http://$AZURE_VM_HOST:9090"
+              echo "- Direct Grafana: http://$AZURE_VM_HOST:3000"
+            EOF
+
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - build
+>>>>>>> 1f7e5058447f1e0f2a7c00babf2371fb2debc13a
       - deploy:
           requires:
             - build

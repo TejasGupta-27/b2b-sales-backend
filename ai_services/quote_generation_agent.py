@@ -5,10 +5,13 @@ import logging
 from .base import AIProvider, AIMessage, AIResponse
 from .function_models import QuoteLineItem
 from services.pdf_generator import PDFGenerator
-from services.elasticsearch_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_service
 from .dynamic_extraction_agent import DynamicExtractionAgent
 from services.localisation import get_quote_translations
 from pydantic import BaseModel, Field
+from pathlib import Path
+from services.prompt_manager import get_prompt_manager
+from services.metrics_service import get_metrics_service
 import os
 
 logger = logging.getLogger(__name__)
@@ -73,6 +76,8 @@ class QuoteGenerationAgent(AIProvider):
         self.data_extractor = DynamicExtractionAgent(base_provider)
         self.language = language
         print(f"🌐 [DEBUG] QuoteGenerationAgent initialized with language: {self.language}")
+        # Initialize metrics service
+        self.metrics_service = get_metrics_service()
         
     @property
     def provider_name(self) -> str:
@@ -108,6 +113,8 @@ class QuoteGenerationAgent(AIProvider):
             
             if not conversation_messages:
                 logger.error("❌ No conversation messages provided")
+                print("❌ Debug - conversation_messages is empty!")
+                self.metrics_service.record_quote_generation(status="failed")
                 raise ValueError("No conversation messages available for quote generation")
             
             logger.info(f"✅ Found {len(conversation_messages)} conversation messages")
@@ -130,6 +137,8 @@ class QuoteGenerationAgent(AIProvider):
             
             if not conversation_text.strip():
                 logger.error("❌ No valid conversation content found")
+                print("❌ Debug - conversation_text is empty after processing!")
+                self.metrics_service.record_quote_generation(status="failed")
                 raise ValueError("No valid conversation content available")
 
             # Prepare safe context for AI
@@ -172,12 +181,39 @@ class QuoteGenerationAgent(AIProvider):
             
             logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']} (Language: {self.language})")
             logger.info(f"🔍 Quote dict after PDF generation: {json.dumps(quote_dict, indent=2, default=str)}")
+            # Extract quote value for metrics
+            quote_value = None
+            currency = "USD"
+            try:
+                financials = quote_dict.get('financials', {})
+                if financials and isinstance(financials, dict):
+                    quote_value = financials.get('total', 0)
+                    currency = financials.get('currency', 'USD')
+                    print(f"🔍 Debug - Extracted quote value: {quote_value} {currency}")
+            except Exception as e:
+                print(f"⚠️ Debug - Failed to extract quote value: {e}")
+            
+            # Record successful quote generation with value
+            self.metrics_service.record_quote_generation(
+                status="success", 
+                quote_value=quote_value, 
+                currency=currency
+            )
+            
+            logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']}")
             return quote_dict
             
         except Exception as e:
             logger.error(f"❌ Quote generation failed: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
+            print(f"❌ Debug - Full exception details:")
+            print(f"   Exception type: {type(e)}")
+            print(f"   Exception message: {str(e)}")
+            print(f"   Full traceback: {traceback.format_exc()}")
+            
+            # Record failed quote generation
+            self.metrics_service.record_quote_generation(status="failed")
             return None
     
     async def _generate_quote_pdf(self, quote_dict: Dict[str, Any], language: str = "en") -> Dict[str, Any]:

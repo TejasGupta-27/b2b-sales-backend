@@ -4,9 +4,13 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from .base import AIProvider, AIMessage, AIResponse
+<<<<<<< HEAD
 from services.elasticsearch_service import get_elasticsearch_service
 from services.chroma_service import ChromaDBService
 from services.realtime_ingestor import get_products # Adjust if path differs
+=======
+from services.elasticsearch_vector_service import get_elasticsearch_service
+>>>>>>> 1f7e5058447f1e0f2a7c00babf2371fb2debc13a
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from .function_models import RequirementExtraction, ProductAnalysis
 from config import settings
@@ -23,6 +27,8 @@ class ContextAnalysis(BaseModel):
     similar_products: List[str] = Field(description="Similar products or solutions they might be interested in")
     search_keywords: List[str] = Field(description="Keywords to use for product search")
     semantic_queries: List[str] = Field(description="Semantic search queries for better matching")
+    recommended_categories: List[str] = Field(description="Recommended product categories based on analysis", default_factory=list)
+    category_confidence: float = Field(description="Confidence in category recommendations (0.0 to 1.0)", default=0.0)
     confidence: float = Field(description="Confidence in the analysis (0.0 to 1.0)")
 
 class SimilarProductSearch(BaseModel):
@@ -224,65 +230,73 @@ class RRFHybridFusion:
         return selected_products
     
     def _identify_requirement_groups(self, products: List[Dict]) -> Dict[str, List[Dict]]:
-        """Identify requirement groups based on product characteristics and descriptions"""
+        """Identify requirement groups based on actual product categories and characteristics"""
         
         requirement_groups = {
-            'core_components': [],      # CPU, GPU, motherboard
-            'memory_storage': [],       # RAM, SSD, HDD
-            'power_cooling': [],        # PSU, cooling solutions
-            'peripherals': [],          # Monitor, keyboard, mouse
-            'networking': [],           # Network cards, routers
-            'accessories': [],          # Cables, adapters, etc.
-            'solutions': [],            # Complete solutions/bundles
-            'other': []                 # Everything else
+            'core_compute': [],         # Most important for any build (CPU, GPU, motherboard)
+            'memory_storage': [],       # Essential for performance (RAM, storage)
+            'display': [],              # Important for usability (monitors)
+            'power_cooling': [],        # Essential for stability (PSU, cooling)
+            'input_devices': [],        # Important for usability (keyboard, mouse)
+            'networking': [],           # Important for connectivity
+            'cases_accessories': [],    # Nice to have (cases, cables)
+            'audio_video': [],          # Nice to have (speakers, webcams)
+            'other': []                 # Catch-all
         }
         
-        # Keywords for each group
-        group_keywords = {
-            'core_components': [
-                'cpu', 'processor', 'gpu', 'graphics', 'video card', 'motherboard', 'mainboard',
-                'intel', 'amd', 'ryzen', 'core i', 'nvidia', 'rtx', 'gtx', 'radeon'
-            ],
-            'memory_storage': [
-                'ram', 'memory', 'ddr', 'ssd', 'hard drive', 'storage', 'nvme', 'sata',
-                'kingston', 'corsair', 'samsung', 'western digital', 'seagate'
-            ],
-            'power_cooling': [
-                'power supply', 'psu', 'cooler', 'cooling', 'fan', 'liquid', 'aio',
-                'corsair', 'evga', 'seasonic', 'noctua', 'be quiet'
-            ],
-            'peripherals': [
-                'monitor', 'display', 'keyboard', 'mouse', 'headset', 'speaker', 'webcam',
-                'lg', 'samsung', 'logitech', 'razer', 'steelseries'
-            ],
-            'networking': [
-                'network', 'wifi', 'ethernet', 'router', 'switch', 'adapter',
-                'tp-link', 'netgear', 'asus', 'intel'
-            ],
-            'accessories': [
-                'cable', 'adapter', 'mount', 'stand', 'case', 'chassis',
-                'nzxt', 'fractal', 'phanteks', 'lian li'
-            ],
-            'solutions': [
-                'solution', 'bundle', 'kit', 'complete', 'system', 'workstation',
-                'dell', 'hp', 'lenovo', 'acer', 'asus'
-            ]
+        # Category to group mapping based on actual product categories
+        category_to_group = {
+            'cpu': 'core_compute',
+            'video-card': 'core_compute', 
+            'memory': 'memory_storage',
+            'internal-hard-drive': 'memory_storage',
+            'external-hard-drive': 'memory_storage',
+            'monitor': 'display',
+            'keyboard': 'input_devices',
+            'mouse': 'input_devices',
+            'wireless-network-card': 'networking',
+            'wired-network-card': 'networking',
+            'power-supply': 'power_cooling',
+            'cpu-cooler': 'power_cooling',
+            'ups': 'power_cooling',
+            'case': 'cases_accessories',
+            'case-accessory': 'cases_accessories',
+            'case-fan': 'power_cooling',
+            'headphones': 'audio_video',
+            'speakers': 'audio_video',
+            'webcam': 'audio_video',
+            'motherboard': 'core_compute',
+            'optical-drive': 'other',
+            'os': 'other',
+            'sound-card': 'audio_video',
+            'thermal-paste': 'cases_accessories',
+            'fan-controller': 'power_cooling'
         }
         
+        # Track categories found for logging
+        categories_found = {}
+        
+        # Group products by their actual category
         for product in products:
-            product_text = self._get_product_text(product).lower()
-            assigned = False
+            # Get the actual product category from the product data
+            category = product.get('category', '').lower()
             
-            # Try to assign to specific groups
-            for group_name, keywords in group_keywords.items():
-                if any(keyword in product_text for keyword in keywords):
-                    requirement_groups[group_name].append(product)
-                    assigned = True
-                    break
+            # Track categories found
+            if category:
+                categories_found[category] = categories_found.get(category, 0) + 1
             
-            # If not assigned to specific group, put in 'other'
-            if not assigned:
-                requirement_groups['other'].append(product)
+            # Map category to requirement group
+            group_name = category_to_group.get(category, 'other')
+            requirement_groups[group_name].append(product)
+            
+            logger.debug(f"Grouped product '{product.get('name', 'Unknown')}' (category: {category}) into {group_name}")
+        
+        # Log category diversity for debugging
+        print(f"📊 Product categories found: {categories_found}")
+        print(f"📊 Requirement groups populated:")
+        for group_name, group_products in requirement_groups.items():
+            if group_products:
+                print(f"   {group_name}: {len(group_products)} products")
         
         # Remove empty groups
         requirement_groups = {k: v for k, v in requirement_groups.items() if v}
@@ -318,13 +332,14 @@ class RRFHybridFusion:
         
         # Define group priorities (higher = more important)
         group_priorities = {
-            'core_components': 3,      # Most important for any build
-            'memory_storage': 2,       # Essential for performance
-            'power_cooling': 2,        # Essential for stability
-            'peripherals': 1,          # Important for usability
+            'core_compute': 3,         # Most important for any build (CPU, GPU, motherboard)
+            'memory_storage': 3,       # Essential for performance (RAM, storage)
+            'display': 2,              # Important for usability (monitors)
+            'power_cooling': 2,        # Essential for stability (PSU, cooling)
+            'input_devices': 1,        # Important for usability (keyboard, mouse)
             'networking': 1,           # Important for connectivity
-            'solutions': 2,            # Complete solutions are valuable
-            'accessories': 1,          # Nice to have
+            'cases_accessories': 1,    # Nice to have (cases, cables)
+            'audio_video': 1,          # Nice to have (speakers, webcams)
             'other': 1                 # Catch-all
         }
         
@@ -334,21 +349,77 @@ class RRFHybridFusion:
         allocation = {}
         for group_name in requirement_groups.keys():
             priority = group_priorities.get(group_name, 1)
-            # Allocate based on priority and available products
-            group_allocation = max(1, int((priority / total_priority) * max_results * 0.8))
-            # Don't allocate more than available products
-            group_allocation = min(group_allocation, len(requirement_groups[group_name]))
+            group_size = len(requirement_groups[group_name])
+            
+            # Base allocation based on priority
+            base_allocation = max(1, int((priority / total_priority) * max_results * 0.7))
+            
+            # Adjust allocation based on group size (don't allocate more than available)
+            group_allocation = min(base_allocation, group_size)
+            
+            # Ensure high-priority groups get at least 2 products if available
+            if priority >= 3 and group_size >= 2:
+                group_allocation = max(group_allocation, 2)
+            
             allocation[group_name] = group_allocation
         
         # Ensure we don't exceed max_results
         total_allocated = sum(allocation.values())
         if total_allocated > max_results:
-            # Reduce allocation proportionally
+            # Reduce allocation proportionally, but preserve high-priority groups
             reduction_factor = max_results / total_allocated
             for group_name in allocation:
-                allocation[group_name] = max(1, int(allocation[group_name] * reduction_factor))
+                priority = group_priorities.get(group_name, 1)
+                if priority >= 3:
+                    # Keep high-priority allocations, reduce others more
+                    allocation[group_name] = max(1, int(allocation[group_name] * (reduction_factor + 0.2)))
+                else:
+                    allocation[group_name] = max(1, int(allocation[group_name] * reduction_factor))
+        
+        # Final check to ensure we don't exceed max_results
+        total_allocated = sum(allocation.values())
+        if total_allocated > max_results:
+            # Remove allocation from lowest priority groups
+            sorted_groups = sorted(allocation.items(), key=lambda x: group_priorities.get(x[0], 1))
+            while total_allocated > max_results and sorted_groups:
+                group_name, current_allocation = sorted_groups.pop(0)
+                if current_allocation > 1:
+                    allocation[group_name] -= 1
+                    total_allocated -= 1
+                elif current_allocation == 1:
+                    allocation[group_name] = 0
+                    total_allocated -= 1
         
         return allocation
+
+    def fuse_rankings_per_category(
+        self,
+        elasticsearch_products: List[Dict],
+        vector_products: List[Dict],
+        categories: List[str],
+        max_results: int = None
+    ) -> List[Dict]:
+        """
+        Apply RRF fusion within each category and return equal number of products per category.
+        """
+        max_results = max_results or settings.final_result_limit
+        num_categories = len(categories)
+        if num_categories == 0:
+            return []
+        per_category = max_results // num_categories
+        remainder = max_results % num_categories
+        final_products = []
+        used_ids = set()
+        for i, category in enumerate(categories):
+            n = per_category + (1 if i < remainder else 0)
+            es_cat = [p for p in elasticsearch_products if p.get('category') == category]
+            vec_cat = [p for p in vector_products if p.get('category') == category]
+            fused = self.fuse_rankings(es_cat, vec_cat, max_results=n)
+            for prod in fused:
+                if prod.get('id') not in used_ids:
+                    final_products.append(prod)
+                    used_ids.add(prod.get('id'))
+        return final_products
 
 class HybridProductRetrieverAgent(AIProvider):
     """Hybrid product retriever using Elasticsearch for both keyword and semantic search with RRF fusion"""
@@ -395,7 +466,9 @@ class HybridProductRetrieverAgent(AIProvider):
         try:
             if self.vector_service:
                 await self.vector_service.initialize()
-                logger.info("Hybrid Product Retriever (Elasticsearch Vector + RRF) initialized successfully")
+                # Set the LLM provider for intelligent category detection
+                self.vector_service.set_llm_provider(self.base_provider)
+                logger.info("✅ Hybrid Product Retriever (Elasticsearch Vector + RRF + LLM) initialized successfully")
             else:
                 logger.warning("Vector service not available - using keyword search only")
         except Exception as e:
@@ -431,6 +504,8 @@ class HybridProductRetrieverAgent(AIProvider):
             print(f"✅ Context Analysis: {context_analysis.primary_need}")
             print(f"   Keywords: {context_analysis.search_keywords}")
             print(f"   Semantic Queries: {context_analysis.semantic_queries}")
+            print(f"🎯 Category Recommendations: {context_analysis.recommended_categories}")
+            print(f"   Category Confidence: {context_analysis.category_confidence:.1%}")
             
             # Step 2: Enhanced requirement extraction with context
             requirements = await self._extract_requirements_with_context(conversation_messages, customer_context, context_analysis)
@@ -482,14 +557,47 @@ ANALYSIS TASK:
 Focus on understanding their real needs, not just what they're asking for. Think about what would be most helpful for them."""
 
         try:
+            # Step 1: Get basic context analysis
             context_analysis = await self.base_provider.generate_structured_response(
                 [AIMessage(role="user", content=context_prompt)],
                 ContextAnalysis
             )
+            
+            # Step 2: Get category recommendations using the vector service's LLM analysis
+            # Build requirements dict for category analysis
+            requirements_for_categories = {
+                'semantic_query': " ".join(context_analysis.semantic_queries),
+                'technical_requirements': context_analysis.technical_requirements,
+                'business_requirements': [context_analysis.business_context],
+                'use_case': context_analysis.primary_need,
+                'industry': customer_context.get('industry', '') if customer_context else '',
+                'llm_context': {
+                    'primary_need': context_analysis.primary_need,
+                    'business_context': context_analysis.business_context,
+                    'technical_requirements': context_analysis.technical_requirements,
+                    'budget_indicator': context_analysis.budget_indicator,
+                    'timeline': context_analysis.timeline
+                }
+            }
+            
+            categories, category_confidence = await self._get_category_recommendations(requirements_for_categories)
+            
+            # Update context analysis with category recommendations
+            context_analysis.recommended_categories = categories
+            context_analysis.category_confidence = category_confidence
+            
+            logger.info(f"✅ Enhanced Context Analysis:")
+            logger.info(f"   Primary Need: {context_analysis.primary_need}")
+            logger.info(f"   Technical Focus: {context_analysis.business_context}")
+            logger.info(f"   Recommended Categories: {categories}")
+            logger.info(f"   Category Confidence: {category_confidence:.1%}")
+            logger.info(f"   Search Keywords: {context_analysis.search_keywords}")
+            
             return context_analysis
+            
         except Exception as e:
             logger.error(f"Context analysis failed: {e}")
-            # Fallback analysis
+            # Fallback analysis with empty categories
             return ContextAnalysis(
                 primary_need="general business solution",
                 business_context="standard business needs",
@@ -499,6 +607,8 @@ Focus on understanding their real needs, not just what they're asking for. Think
                 similar_products=[],
                 search_keywords=["business", "solution"],
                 semantic_queries=["business technology solution"],
+                recommended_categories=[],
+                category_confidence=0.0,
                 confidence=0.3
             )
     
@@ -556,12 +666,22 @@ Think broadly about their needs and suggest relevant alternatives."""
                 'technical_requirements': context_analysis.technical_requirements,
                 'budget_indicator': context_analysis.budget_indicator,
                 'timeline': context_analysis.timeline,
-                'confidence': context_analysis.confidence
+                'confidence': context_analysis.confidence,
+                'recommended_categories': context_analysis.recommended_categories,
+                'category_confidence': context_analysis.category_confidence
             },
             'search_keywords': context_analysis.search_keywords,
             'semantic_queries': context_analysis.semantic_queries,
-            'similar_products': context_analysis.similar_products
+            'similar_products': context_analysis.similar_products,
+            'recommended_categories': context_analysis.recommended_categories,
+            'category_confidence': context_analysis.category_confidence
         })
+        
+        logger.info(f"🔍 Enhanced Requirements with LLM Context:")
+        logger.info(f"   Primary Need: {context_analysis.primary_need}")
+        logger.info(f"   Recommended Categories: {context_analysis.recommended_categories}")
+        logger.info(f"   Category Confidence: {context_analysis.category_confidence:.1%}")
+        logger.info(f"   Search Keywords: {context_analysis.search_keywords}")
         
         return enhanced_requirements
     
@@ -584,13 +704,12 @@ Think broadly about their needs and suggest relevant alternatives."""
             search_keywords.extend(similar_products_analysis.search_criteria)
             semantic_queries.extend(similar_products_analysis.alternative_approaches)
         
-        # Update requirements with LLM insights
-        enhanced_requirements = requirements.copy()
-        enhanced_requirements['search_keywords'] = search_keywords
-        enhanced_requirements['semantic_queries'] = semantic_queries
+        # Preserve ALL existing requirements (including categories) and just add new insights
+        requirements['search_keywords'] = search_keywords
+        requirements['semantic_queries'] = semantic_queries
         
-        # Perform the hybrid search
-        return await self._perform_hybrid_search(enhanced_requirements)
+        # Perform the hybrid search with preserved requirements
+        return await self._perform_hybrid_search(requirements)
     
     async def _fallback_analysis(
         self,
@@ -605,6 +724,16 @@ Think broadly about their needs and suggest relevant alternatives."""
         
         # Perform hybrid search
         hybrid_results = await self._perform_hybrid_search(requirements)
+        
+        # Use per-category fusion for fallback if categories are present
+        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
+        if categories:
+            hybrid_results['products'] = self.rrf_fusion.fuse_rankings_per_category(
+                [p for p in hybrid_results['products'] if p.get('search_source') in ('elasticsearch', 'both')],
+                [p for p in hybrid_results['products'] if p.get('search_source') in ('vector', 'both')],
+                categories,
+                max_results=settings.final_result_limit
+            )
         
         # Analyze results
         analysis = await self._analyze_hybrid_recommendations(
@@ -802,17 +931,16 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
     KEYWORD_FALLBACK_TRIGGERS = ["latest", "trending", "new release", "compare", "review", "availability"]
 
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform hybrid search using Elasticsearch keyword and vector search with RRF fusion"""
-        
-        print("🔍 Performing hybrid search with RRF fusion...")
+        """Perform hybrid search combining elasticsearch and vector search with RRF fusion"""
         
         search_methods = {
             "methods": [],
-            "elasticsearch_count": 0,
-            "vector_products_count": 0,
-            "vector_solutions_count": 0,
-            "fusion_method": "unknown"
+            "fusion_enabled": settings.use_rrf_merging,
+            "elasticsearch_weight": settings.rrf_elasticsearch_weight,
+            "semantic_weight": settings.rrf_semantic_weight
         }
+        
+        print("🔍 Performing hybrid search with RRF fusion...")
         
         # Step 1: Elasticsearch keyword search
         print("📋 Step 1: Elasticsearch keyword search...")
@@ -829,7 +957,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             search_methods["methods"].append("vector_semantic")
             search_methods["vector_products_count"] = len(vector_products)
             print(f"   Found {len(vector_products)} products via vector search")
-            
+        
         # Step 3: Vector search for solutions
         vector_solutions = []
         if self.vector_service:
@@ -841,7 +969,17 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         
         # Step 4: RRF fusion for products
         print("🎯 Step 4: RRF fusion for products...")
-        if settings.use_rrf_merging:
+        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
+        if settings.use_rrf_merging and categories:
+            fused_products = self.rrf_fusion.fuse_rankings_per_category(
+                elasticsearch_products, 
+                vector_products,
+                categories,
+                max_results=settings.final_result_limit
+            )
+            search_methods["fusion_method"] = "rrf_per_category"
+            print(f"   RRF per-category fusion complete: {len(fused_products)} products")
+        elif settings.use_rrf_merging:
             fused_products = self.rrf_fusion.fuse_rankings(
                 elasticsearch_products, 
                 vector_products,
@@ -919,6 +1057,17 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         requirements: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Analyze hybrid recommendations using Pydantic function calling"""
+        
+        # Use per-category fusion for analysis if categories are present
+        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
+        if categories:
+            # Re-fuse products per category for analysis
+            products = self.rrf_fusion.fuse_rankings_per_category(
+                [p for p in products if p.get('search_source') in ('elasticsearch', 'both')],
+                [p for p in products if p.get('search_source') in ('vector', 'both')],
+                categories,
+                max_results=settings.final_result_limit
+            )
         
         analysis_prompt = f"""You are a technical solution architect analyzing hybrid search results from both keyword and semantic search.
 
@@ -1216,7 +1365,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             return []
     
     async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Perform vector search for products using semantic similarity"""
+        """Perform vector search for products using semantic similarity with intelligent category filtering"""
         try:
             if not self.vector_service:
                 return []
@@ -1226,21 +1375,78 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             if not semantic_query:
                 semantic_query = requirements.get('use_case', 'business solution')
             
-            print(f"🧠 Vector search query: {semantic_query}")
+            # Get category recommendations from multiple possible sources
+            categories = None
+            llm_context = requirements.get('llm_context', {})
             
-            # Perform vector search using the correct method name and parameter
-            results = await self.vector_service.vector_search_products(semantic_query, size=settings.final_result_limit)
+            # Try multiple sources for categories (more robust)
+            if requirements.get('recommended_categories'):
+                categories = requirements['recommended_categories']
+                logger.info(f"🎯 Using requirements recommended_categories: {categories}")
+            elif llm_context.get('recommended_categories'):
+                categories = llm_context['recommended_categories']
+                logger.info(f"🎯 Using llm_context recommended_categories: {categories}")
+            elif requirements.get('product_categories'):
+                categories = requirements['product_categories']
+                logger.info(f"🎯 Using product_categories as fallback: {categories}")
+            
+            # Normalize and validate categories
+            categories = self._normalize_categories(categories)
+            
+            logger.info(f"🧠 Vector search query: {semantic_query}")
+            if categories:
+                logger.info(f"🎯 Final category filtering: {categories} (count: {len(categories)})")
+            
+            # Perform vector search with category filtering using the correct method name and parameter
+            results = await self.vector_service.vector_search_products(
+                semantic_query, 
+                size=settings.final_result_limit,
+                categories=categories  # Pass categories for intelligent filtering
+            )
             
             # Add search metadata
             for product in results:
                 product['search_source'] = 'vector'
                 product['semantic_score'] = product.get('_similarity_score', 0)
+                if categories:
+                    product['category_filtered'] = True
+                    product['filter_categories'] = categories
+            
+            logger.info(f"🧠 Vector search results: {len(results)} products")
+            if categories:
+                logger.info(f"   Category-filtered search for: {categories}")
             
             return results
             
         except Exception as e:
             logger.error(f"Vector search for products failed: {e}")
             return []
+    
+    def _normalize_categories(self, categories) -> Optional[List[str]]:
+        """Normalize and validate categories for vector search"""
+        if not categories:
+            return None
+            
+        # Convert to list if string
+        if isinstance(categories, str):
+            categories = [categories]
+        
+        # Ensure it's a list
+        if not isinstance(categories, list):
+            return None
+        
+        # Filter out empty/None values and normalize
+        normalized = []
+        for cat in categories:
+            if cat and str(cat).strip():
+                # Normalize category name
+                normalized_cat = str(cat).strip().lower()
+                normalized.append(normalized_cat)
+        
+        if not normalized:
+            return None
+            
+        return normalized
     
     async def _elasticsearch_vector_search_solutions(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Perform vector search for solutions using semantic similarity"""
@@ -1303,6 +1509,31 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         merged_products.sort(key=lambda x: x.get('keyword_score', 0) + x.get('semantic_score', 0), reverse=True)
         
         return merged_products[:settings.final_result_limit]
+
+    async def _get_category_recommendations(
+        self, 
+        requirements: Dict[str, Any]
+    ) -> tuple[List[str], float]:
+        """Get category recommendations using Elasticsearch vector service's LLM analysis"""
+        
+        try:
+            if self.vector_service and hasattr(self.vector_service, '_extract_categories_with_llm'):
+                logger.info("🎯 Getting category recommendations from vector service...")
+                categories = await self.vector_service._extract_categories_with_llm(requirements)
+                
+                # Calculate confidence based on number of categories and context richness
+                confidence = 0.8 if len(categories) >= 2 else 0.6
+                if len(categories) >= 4:
+                    confidence = 0.9
+                
+                return categories, confidence
+            else:
+                logger.warning("Vector service category analysis not available")
+                return [], 0.0
+                
+        except Exception as e:
+            logger.error(f"Category recommendation failed: {e}")
+            return [], 0.0
 
 # Async helper to avoid import issues
 async def run_async(coro):

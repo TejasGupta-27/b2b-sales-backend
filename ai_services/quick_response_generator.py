@@ -9,6 +9,10 @@ from enum import Enum
 import logging
 from collections import Counter
 import difflib
+from services.prompt_manager import get_prompt_manager
+from services.metrics_service import get_metrics_service
+from .conversation_flow_manager import ConversationFlowAgent
+from .quote_generation_agent import QuoteGenerationAgent
 
 logger = logging.getLogger(__name__)
 
@@ -134,8 +138,23 @@ class ResponseRule(BaseModel):
 class QuickResponseGenerator:
     """Service for generating quick responses"""
     
-    def __init__(self, base_provider: AIProvider):
+    def __init__(self, base_provider: AIProvider, **kwargs):
+        super().__init__(**kwargs)
         self.base_provider = base_provider
+        self.prompt_manager = get_prompt_manager()
+        
+        # Inherit token tracking from base provider
+        if hasattr(self.base_provider, 'usage_tracker'):
+            self.usage_tracker = self.base_provider.usage_tracker
+        
+        # Initialize specialized components
+        self.conversation_flow_manager = ConversationFlowAgent(base_provider)
+        self.hybrid_retriever = None
+        self.quote_agent = QuoteGenerationAgent(base_provider)
+        
+        # Initialize metrics service
+        self.metrics_service = get_metrics_service()
+        
         self.response_rules = self._initialize_response_rules()
         self.intent_keywords = self._initialize_intent_keywords()
         self.response_library = self._initialize_response_library()

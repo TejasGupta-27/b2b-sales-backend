@@ -8,8 +8,99 @@ import asyncio
 from elasticsearch.exceptions import ConnectionError, RequestError
 import aiohttp
 import numpy as np
+import re
+import os
+from ai_services.base import AIMessage
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# Add a field mapping for each product category
+FIELD_MAP = {
+    "cpu": ["name", "core_count", "core_clock", "boost_clock", "tdp", "graphics", "smt"],
+    "monitor": ["name", "screen_size", "resolution", "refresh_rate", "response_time", "panel_type", "aspect_ratio"],
+    "memory": ["name", "speed", "modules", "price_per_gb", "color", "first_word_latency", "cas_latency"],
+    "motherboard": ["name", "socket", "form_factor", "max_memory", "memory_slots", "color"],
+    "case": ["name", "type", "color", "side_panel", "external_volume", "internal_35_bays"],
+    "power-supply": ["name", "price", "type", "efficiency", "wattage", "modular", "color"],
+    "case-accessory": ["name", "type", "form_factor"],
+    "case-fan": ["name", "size", "color", "rpm", "airflow", "noise_level", "pwm"],
+    "cpu-cooler": ["name", "rpm", "noise_level", "color", "size"],
+    "external-hard-drive": ["name", "type", "interface", "capacity", "price_per_gb", "color"],
+    "fan-controller": ["name", "channels", "channel_wattage", "pwm", "form_factor", "color"],
+    "headphones": ["name", "type", "frequency_response", "microphone", "wireless", "enclosure_type", "color"],
+    "internal-hard-drive": ["name", "capacity", "price_per_gb", "type", "cache", "form_factor", "interface"],
+    "keyboard": ["name", "style", "switches", "backlit", "tenkeyless", "connection_type", "color"],
+    "mouse": ["name", "tracking_method", "connection_type", "max_dpi", "hand_orientation", "color"],
+    "optical-drive": ["name", "bd", "dvd", "cd", "bd_write", "dvd_write", "cd_write"],
+    "os": ["name", "mode", "max_memory"],
+    "sound-card": ["name", "channels", "digital_audio", "snr", "sample_rate", "chipset", "interface"],
+    "speakers": ["name", "configuration", "wattage", "frequency_response", "color"],
+    "thermal-paste": ["name", "amount"],
+    "ups": ["name", "capacity_w", "capacity_va"],
+    "video-card": ["name", "price", "chipset", "memory", "core_clock", "boost_clock", "color", "length"],
+    "webcam": ["name", "price", "resolutions", "connection", "focus_type", "os", "fov"],
+    "wired-network-card": ["name", "price", "interface", "color"],
+    "wireless-network-card": ["name", "price", "protocol", "interface", "color"],
+   
+}
+
+# Category to index mapping for per-category indices
+CATEGORY_INDEX_MAP = {
+    "cpu": "cpu_vector",
+    "video-card": "gpu_vector", 
+    "memory": "memory_vector",
+    "monitor": "monitor_vector",
+    "motherboard": "motherboard_vector",
+    "power-supply": "power_vector",
+    "case": "case_vector",
+    "case-accessory": "case_accessory_vector",
+    "case-fan": "case_fan_vector",
+    "cpu-cooler": "cpu_cooler_vector",
+    "external-hard-drive": "external_storage_vector",
+    "internal-hard-drive": "internal_storage_vector",
+    "fan-controller": "fan_controller_vector",
+    "headphones": "headphones_vector",
+    "keyboard": "keyboard_vector",
+    "mouse": "mouse_vector",
+    "optical-drive": "optical_drive_vector",
+    "os": "os_vector",
+    "sound-card": "sound_card_vector",
+    "speakers": "speakers_vector",
+    "thermal-paste": "thermal_paste_vector",
+    "ups": "ups_vector",
+    "webcam": "webcam_vector",
+    "wired-network-card": "network_wired_vector",
+    "wireless-network-card": "network_wireless_vector",
+}
+
+# Default index for uncategorized products
+DEFAULT_PRODUCTS_INDEX = "other_products_vector"
+
+class CategoryAnalysis(BaseModel):
+    """Pydantic model for intelligent category analysis"""
+    relevant_categories: List[str] = Field(
+        description="List of most relevant product categories (max 5)",
+        max_items=5
+    )
+    primary_use_case: str = Field(
+        description="Primary use case or application scenario"
+    )
+    technical_focus: str = Field(
+        description="Main technical focus area (gaming, workstation, storage, office, etc.)"
+    )
+    confidence: float = Field(
+        description="Confidence in category selection (0.0 to 1.0)",
+        ge=0.0,
+        le=1.0
+    )
+    reasoning: str = Field(
+        description="Brief explanation for category selection"
+    )
+    alternative_categories: List[str] = Field(
+        description="Alternative categories to consider if primary search fails",
+        default_factory=list
+    )
 
 class ElasticsearchVectorService:
     """Enhanced Elasticsearch service with vector search capabilities"""
@@ -23,21 +114,65 @@ class ElasticsearchVectorService:
             retry_on_timeout=True,
             max_retries=3
         )
-        self.products_index = f"{settings.elasticsearch_index_products}_vector"
+        # Remove single index approach - we'll use per-category indices
         self.solutions_index = f"{settings.elasticsearch_index_solutions}_vector"
         self.azure_embedding_endpoint = azure_embedding_endpoint
         self.azure_embedding_key = azure_embedding_key
         self.embedding_dimension = 3072  # text-embedding-3-large dimension
         
+        # Add LLM provider for intelligent category detection
+        self.llm_provider = None
+        
     async def initialize(self):
         """Initialize Elasticsearch with vector search capabilities"""
         try:
+            # Wait for Elasticsearch to be healthy before proceeding
+            await self._wait_for_elasticsearch_ready()
             await self.test_connection()
             await self.create_vector_indices()
             logger.info("Elasticsearch Vector Service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Elasticsearch Vector Service: {e}")
             raise
+    
+    async def _wait_for_elasticsearch_ready(self, max_attempts: int = 30, delay: float = 2.0):
+        """Wait for Elasticsearch to be healthy and ready"""
+        logger.info("Waiting for Elasticsearch to be ready...")
+        
+        for attempt in range(max_attempts):
+            try:
+                # Test basic connectivity
+                info = await self.client.info()
+                cluster_name = info.get('cluster_name', 'unknown')
+                
+                # Check cluster health
+                health = await self.client.cluster.health(
+                    wait_for_status='yellow',
+                    timeout='5s',
+                    request_timeout=10
+                )
+                
+                status = health['status']
+                if status in ['green', 'yellow']:
+                    logger.info(f"✅ Elasticsearch ready: {cluster_name} (status: {status})")
+                    return True
+                else:
+                    logger.info(f"⏳ Elasticsearch status: {status} (attempt {attempt + 1}/{max_attempts})")
+                    
+            except Exception as e:
+                error_msg = str(e)
+                if "Connection error" in error_msg or "Cannot connect" in error_msg:
+                    logger.info(f"⏳ Waiting for Elasticsearch connection... (attempt {attempt + 1}/{max_attempts})")
+                else:
+                    logger.info(f"⏳ Elasticsearch not ready... (attempt {attempt + 1}/{max_attempts}): {error_msg[:100]}")
+            
+            if attempt < max_attempts - 1:
+                # Use exponential backoff with max delay of 10 seconds
+                current_delay = min(delay * (1.5 ** attempt), 10.0)
+                await asyncio.sleep(current_delay)
+        
+        logger.error(f"❌ Elasticsearch not ready after {max_attempts} attempts")
+        raise Exception("Elasticsearch failed to become ready within the timeout period")
     
     async def test_connection(self):
         """Test Elasticsearch connection"""
@@ -50,7 +185,7 @@ class ElasticsearchVectorService:
             return False
     
     async def create_vector_indices(self):
-        """Create Elasticsearch indices with vector search mappings"""
+        """Create Elasticsearch indices with vector search mappings - one per category"""
         
         # Products index with vector mapping
         products_mapping = {
@@ -72,6 +207,83 @@ class ElasticsearchVectorService:
                     "compatibility": {"type": "text"},
                     "warranty": {"type": "text"},
                     "support_level": {"type": "keyword"},
+                    
+                    # Dynamic fields that can be strings, numbers, or arrays
+                    "form_factor": {"type": "text"},
+                    "airflow": {"type": "text"},
+                    "noise_level": {"type": "text"},
+                    "rpm": {"type": "text"},
+                    "size": {"type": "text"},
+                    "capacity": {"type": "text"},
+                    "speed": {"type": "text"},
+                    "modules": {"type": "text"},
+                    "core_count": {"type": "text"},
+                    "core_clock": {"type": "text"},
+                    "boost_clock": {"type": "text"},
+                    "tdp": {"type": "text"},
+                    "memory": {"type": "text"},
+                    "wattage": {"type": "text"},
+                    "screen_size": {"type": "text"},
+                    "resolution": {"type": "text"},
+                    "refresh_rate": {"type": "text"},
+                    "response_time": {"type": "text"},
+                    "panel_type": {"type": "text"},
+                    "aspect_ratio": {"type": "text"},
+                    "type": {"type": "text"},
+                    "color": {"type": "text"},
+                    "interface": {"type": "text"},
+                    "efficiency": {"type": "text"},
+                    "modular": {"type": "text"},
+                    "socket": {"type": "text"},
+                    "max_memory": {"type": "text"},
+                    "memory_slots": {"type": "text"},
+                    "side_panel": {"type": "text"},
+                    "external_volume": {"type": "text"},
+                    "internal_35_bays": {"type": "text"},
+                    "channels": {"type": "text"},
+                    "channel_wattage": {"type": "text"},
+                    "pwm": {"type": "text"},
+                    "frequency_response": {"type": "text"},
+                    "microphone": {"type": "text"},
+                    "wireless": {"type": "text"},
+                    "enclosure_type": {"type": "text"},
+                    "style": {"type": "text"},
+                    "switches": {"type": "text"},
+                    "backlit": {"type": "text"},
+                    "tenkeyless": {"type": "text"},
+                    "connection_type": {"type": "text"},
+                    "tracking_method": {"type": "text"},
+                    "max_dpi": {"type": "text"},
+                    "hand_orientation": {"type": "text"},
+                    "bd": {"type": "text"},
+                    "dvd": {"type": "text"},
+                    "cd": {"type": "text"},
+                    "bd_write": {"type": "text"},
+                    "dvd_write": {"type": "text"},
+                    "cd_write": {"type": "text"},
+                    "mode": {"type": "text"},
+                    "digital_audio": {"type": "text"},
+                    "snr": {"type": "text"},
+                    "sample_rate": {"type": "text"},
+                    "chipset": {"type": "text"},
+                    "configuration": {"type": "text"},
+                    "amount": {"type": "text"},
+                    "capacity_w": {"type": "text"},
+                    "capacity_va": {"type": "text"},
+                    "chipset": {"type": "text"},
+                    "length": {"type": "text"},
+                    "resolutions": {"type": "text"},
+                    "focus_type": {"type": "text"},
+                    "os": {"type": "text"},
+                    "fov": {"type": "text"},
+                    "protocol": {"type": "text"},
+                    "price_per_gb": {"type": "text"},
+                    "first_word_latency": {"type": "text"},
+                    "cas_latency": {"type": "text"},
+                    "cache": {"type": "text"},
+                    "graphics": {"type": "text"},
+                    "smt": {"type": "text"},
+                    
                     # Vector fields
                     "content_vector": {
                         "type": "dense_vector",
@@ -84,12 +296,34 @@ class ElasticsearchVectorService:
             },
             "settings": {
                 "number_of_shards": 1,
-                "number_of_replicas": 0,
-                "index.knn": True
+                "number_of_replicas": 0
             }
         }
         
-        # Solutions index with vector mapping
+        # Create per-category product indices
+        for category, index_name in CATEGORY_INDEX_MAP.items():
+            try:
+                exists = await self.client.indices.exists(index=index_name)
+                if not exists:
+                    await self.client.indices.create(index=index_name, **products_mapping)
+                    logger.info(f"Created category vector index: {index_name} for category: {category}")
+                else:
+                    logger.info(f"Category index already exists: {index_name}")
+            except Exception as e:
+                logger.warning(f"Category vector index creation issue for {index_name}: {e}")
+        
+        # Create default index for uncategorized products
+        try:
+            exists = await self.client.indices.exists(index=DEFAULT_PRODUCTS_INDEX)
+            if not exists:
+                await self.client.indices.create(index=DEFAULT_PRODUCTS_INDEX, **products_mapping)
+                logger.info(f"Created default products vector index: {DEFAULT_PRODUCTS_INDEX}")
+            else:
+                logger.info(f"Default products index already exists: {DEFAULT_PRODUCTS_INDEX}")
+        except Exception as e:
+            logger.warning(f"Default products vector index creation issue: {e}")
+
+        # Solutions index with vector mapping (keep as single index for now)
         solutions_mapping = {
             "mappings": {
                 "properties": {
@@ -117,21 +351,9 @@ class ElasticsearchVectorService:
             },
             "settings": {
                 "number_of_shards": 1,
-                "number_of_replicas": 0,
-                "index.knn": True
+                "number_of_replicas": 0
             }
         }
-        
-        # Create products vector index
-        try:
-            exists = await self.client.indices.exists(index=self.products_index)
-            if not exists:
-                await self.client.indices.create(index=self.products_index, **products_mapping)
-                logger.info(f"Created products vector index: {self.products_index}")
-            else:
-                logger.info(f"Products vector index already exists: {self.products_index}")
-        except Exception as e:
-            logger.warning(f"Products vector index creation issue: {e}")
         
         # Create solutions vector index
         try:
@@ -176,53 +398,70 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to get embeddings: {e}")
             raise
     
-    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product") -> str:
-        """Create searchable text content for embedding"""
-        text_parts = []
+    def _infer_category_from_filename(self, filename: str) -> str:
+        """Infer product category from filename with flexible pattern matching"""
+        # Remove .json extension
+        base_name = filename.replace(".json", "")
         
-        if item_type == "product":
-            # Product-specific content
-            if item.get("name"):
-                text_parts.append(f"Product: {item['name']}")
-            if item.get("category"):
-                text_parts.append(f"Category: {item['category']}")
-            if item.get("subcategory"):
-                text_parts.append(f"Subcategory: {item['subcategory']}")
-            if item.get("description"):
-                text_parts.append(f"Description: {item['description']}")
-            if item.get("features"):
-                text_parts.append(f"Features: {item['features']}")
-            if item.get("use_cases"):
-                text_parts.append(f"Use cases: {item['use_cases']}")
-            if item.get("tags"):
-                tags = item["tags"] if isinstance(item["tags"], list) else [item["tags"]]
-                text_parts.append(f"Tags: {', '.join(tags)}")
-            if item.get("target_industries"):
-                industries = item["target_industries"] if isinstance(item["target_industries"], list) else [item["target_industries"]]
-                text_parts.append(f"Industries: {', '.join(industries)}")
-                
-        else:  # solution
-            if item.get("name"):
-                text_parts.append(f"Solution: {item['name']}")
-            if item.get("description"):
-                text_parts.append(f"Description: {item['description']}")
-            if item.get("use_case"):
-                text_parts.append(f"Use case: {item['use_case']}")
-            if item.get("industry"):
-                industries = item["industry"] if isinstance(item["industry"], list) else [item["industry"]]
-                text_parts.append(f"Industries: {', '.join(industries)}")
-            if item.get("benefits"):
-                text_parts.append(f"Benefits: {item['benefits']}")
-            if item.get("requirements"):
-                text_parts.append(f"Requirements: {item['requirements']}")
+        # Try to match against known categories in FIELD_MAP
+        for category in FIELD_MAP.keys():
+            # Handle various separators and formats
+            if re.match(rf'^{re.escape(category)}$', base_name, re.IGNORECASE):
+                return category
+            # Handle underscore variants
+            if re.match(rf'^{re.escape(category).replace("-", "_")}$', base_name, re.IGNORECASE):
+                return category
+            # Handle space variants
+            if re.match(rf'^{re.escape(category).replace("-", " ")}$', base_name, re.IGNORECASE):
+                return category
+        
+        # If no exact match, try to normalize and find closest match
+        normalized = re.sub(r'[_\s]+', '-', base_name.lower())
+        for category in FIELD_MAP.keys():
+            if normalized == category:
+                return category
+        
+        # Fallback: return the base name as-is
+        return base_name
+
+    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: str = None) -> str:
+        """Create searchable text content for embedding, category-aware"""
+        text_parts = []
+        category = None
+        
+        if filename:
+            category = self._infer_category_from_filename(Path(filename).name)
+        
+        if item_type == "product" and category and category in FIELD_MAP:
+            # Use category-specific field mapping
+            text_parts.append(f"Category: {category}")
+            for field in FIELD_MAP[category]:
+                value = item.get(field)
+                if value is not None:
+                    text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
+        else:
+            # Fallback to general field extraction
+            text_parts.append(f"Type: {item_type}")
+            
+            # Add common fields
+            common_fields = ['name', 'description', 'category', 'type', 'price', 'features', 'tags']
+            for field in common_fields:
+                value = item.get(field)
+                if value is not None:
+                    text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
+            
+            # Add any other fields that might be useful
+            for key, value in item.items():
+                if key not in common_fields and value is not None and isinstance(value, (str, int, float)):
+                    text_parts.append(f"{key.replace('_', ' ').capitalize()}: {value}")
         
         return " | ".join(text_parts)
     
-    async def index_product(self, product: Dict[str, Any]):
-        """Index a product with vector embedding"""
+    async def index_product(self, product: Dict[str, Any], filename: str = None):
+        """Index a product with vector embedding into category-specific index"""
         try:
             # Generate searchable content
-            searchable_content = self._create_searchable_content(product, "product")
+            searchable_content = self._create_searchable_content(product, "product", filename)
             
             # Get embedding
             embeddings = await self.get_embeddings([searchable_content])
@@ -237,14 +476,24 @@ class ElasticsearchVectorService:
             if not doc.get("id"):
                 doc["id"] = f"product_{hash(str(product))}"
             
-            # Index document
+            # Determine which index to use based on category
+            category = product.get("category")
+            if not category and filename:
+                # Try to infer category from filename if not present in product
+                category = self._infer_category_from_filename(Path(filename).name)
+                doc["category"] = category
+            
+            # Get the appropriate index for this category
+            index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+            
+            # Index document into category-specific index
             await self.client.index(
-                index=self.products_index,
+                index=index_name,
                 id=doc["id"],
                 document=doc
             )
             
-            logger.debug(f"Indexed product with vector: {doc.get('name', 'Unknown')}")
+            logger.debug(f"Indexed product '{doc.get('name', 'Unknown')}' in category '{category}' to index '{index_name}'")
             
         except Exception as e:
             logger.error(f"Failed to index product: {e}")
@@ -287,13 +536,40 @@ class ElasticsearchVectorService:
         query: str, 
         size: int = 10,
         filters: Optional[Dict] = None,
-        hybrid_weight: float = 0.1
+        hybrid_weight: float = 0.1,
+        categories: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Perform vector search on products with optional hybrid scoring"""
+        """Perform vector search on products with optional category filtering and balanced results"""
         try:
+            logger.info(f"🔍 Vector search called with categories: {categories}")
+            
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
+            
+            # If categories are specified, search each category separately for balanced results
+            if categories and len(categories) > 1:
+                logger.info(f"🎯 Performing balanced search across {len(categories)} categories")
+                return await self._balanced_category_search(query_vector, query, categories, size, filters, hybrid_weight)
+            elif categories and len(categories) == 1:
+                logger.info(f"🎯 Single category search for: {categories[0]}")
+            else:
+                logger.info(f"🔍 No categories or insufficient categories for balanced search - using standard search")
+            
+            # Determine which indices to search
+            if categories:
+                # Search only in specified category indices
+                index_names = []
+                for category in categories:
+                    index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+                    index_names.append(index_name)
+                # Remove duplicates
+                index_names = list(set(index_names))
+                logger.info(f"🎯 Searching in category-specific indices: {index_names}")
+            else:
+                # Search in all category indices
+                index_names = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
+                logger.info(f"🌐 Searching in all indices: {len(index_names)} indices")
             
             # Build the search query
             search_query = {
@@ -355,8 +631,8 @@ class ElasticsearchVectorService:
                     else:
                         search_query["query"]["bool"]["filter"].append({"term": {field: value}})
             
-            # Execute search
-            response = await self.client.search(index=self.products_index, body=search_query)
+            # Execute search across relevant indices
+            response = await self.client.search(index=index_names, body=search_query)
             
             # Process results
             products = []
@@ -364,13 +640,154 @@ class ElasticsearchVectorService:
                 product = hit["_source"]
                 product["_score"] = hit["_score"]
                 product["_similarity_score"] = hit["_score"]  # For compatibility
+                product["_index"] = hit["_index"]  # Track which index this came from
                 products.append(product)
             
-            logger.info(f"Vector search returned {len(products)} products for query: '{query}'")
+            logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
+            logger.info(f"   Searched indices: {index_names}")
+            if products:
+                # Log product categories for debugging
+                product_categories = [p.get('category', 'unknown') for p in products[:5]]
+                logger.info(f"   Top 5 product categories: {product_categories}")
+            
             return products
             
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
+            return []
+
+    async def _balanced_category_search(
+        self, 
+        query_vector: List[float], 
+        query: str, 
+        categories: List[str], 
+        total_size: int, 
+        filters: Optional[Dict] = None,
+        hybrid_weight: float = 0.1
+    ) -> List[Dict[str, Any]]:
+        """Perform balanced search across multiple categories to ensure diverse results"""
+        try:
+            # Calculate how many results to get from each category
+            results_per_category = max(2, total_size // len(categories))  # At least 2 per category
+            remainder = total_size % len(categories)
+            
+            logger.info(f"🎯 Balanced search: {results_per_category} products per category + {remainder} extra")
+            
+            all_products = []
+            category_results = {}
+            
+            # Search each category separately
+            for i, category in enumerate(categories):
+                # Get index name for this category
+                index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+                
+                # Check if this category should get extra results
+                category_size = results_per_category
+                if i < remainder:
+                    category_size += 1
+                
+                try:
+                    # Build the search query for this specific category
+                    search_query = {
+                        "size": category_size,
+                        "query": {
+                            "bool": {
+                                "should": []
+                            }
+                        },
+                        "_source": {"excludes": ["content_vector"]}
+                    }
+                    
+                    # Add vector similarity search
+                    knn_query = {
+                        "script_score": {
+                            "query": {"match_all": {}},
+                            "script": {
+                                "source": "cosineSimilarity(params.query_vector, 'content_vector') + 1.0",
+                                "params": {"query_vector": query_vector}
+                            }
+                        }
+                    }
+                    
+                    # Add text search for hybrid approach
+                    text_query = {
+                        "multi_match": {
+                            "query": query,
+                            "fields": [
+                                "name^4",                    
+                                "description^3",             
+                                "features^2",                
+                                "use_cases^2",               
+                                "tags^2",                    
+                                "category^1.5",              
+                                "searchable_content^1.5"     
+                            ],
+                            "type": "best_fields",
+                            "fuzziness": "AUTO",
+                            "operator": "or"
+                        }
+                    }
+                    
+                    if hybrid_weight > 0:
+                        # Hybrid search
+                        search_query["query"]["bool"]["should"].extend([
+                            {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
+                            {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
+                        ])
+                    else:
+                        # Pure vector search
+                        search_query["query"] = knn_query
+                    
+                    # Add filters if provided
+                    if filters:
+                        search_query["query"]["bool"]["filter"] = []
+                        for field, value in filters.items():
+                            if isinstance(value, list):
+                                search_query["query"]["bool"]["filter"].append({"terms": {field: value}})
+                            else:
+                                search_query["query"]["bool"]["filter"].append({"term": {field: value}})
+                    
+                    # Execute search for this category
+                    response = await self.client.search(index=index_name, body=search_query)
+                    
+                    # Process results for this category
+                    category_products = []
+                    for hit in response["hits"]["hits"]:
+                        product = hit["_source"]
+                        product["_score"] = hit["_score"]
+                        product["_similarity_score"] = hit["_score"]
+                        product["_index"] = hit["_index"]
+                        product["_category_search"] = category  # Mark which category search this came from
+                        category_products.append(product)
+                    
+                    category_results[category] = len(category_products)
+                    all_products.extend(category_products)
+                    
+                    logger.info(f"   📦 {category}: {len(category_products)} products from {index_name}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to search category {category} ({index_name}): {e}")
+                    category_results[category] = 0
+            
+            # Sort all results by similarity score to maintain quality ranking
+            all_products.sort(key=lambda x: x.get('_similarity_score', 0), reverse=True)
+            
+            # Limit to requested total size
+            final_products = all_products[:total_size]
+            
+            logger.info(f"🎯 Balanced search complete: {len(final_products)} total products")
+            logger.info(f"   Category breakdown: {category_results}")
+            
+            # Log final diversity
+            if final_products:
+                final_categories = [p.get('category', 'unknown') for p in final_products]
+                category_counts = {cat: final_categories.count(cat) for cat in set(final_categories)}
+                logger.info(f"   Final category distribution: {category_counts}")
+            
+            return final_products
+            
+        except Exception as e:
+            logger.error(f"Balanced category search failed: {e}")
             return []
     
     async def vector_search_solutions(
@@ -465,70 +882,91 @@ class ElasticsearchVectorService:
             return []
     
     async def load_data_from_json(self, max_per_file: int = 50):
-        """Load data from JSON files with vector embeddings"""
+        """Load data from JSON files with vector embeddings, passing filename for category inference"""
         try:
-            logger.info(f"Loading data into Elasticsearch with vector embeddings...")
+            # Check if data loading should be skipped
+            skip_loading = getattr(settings, 'skip_data_loading', False)
+            if skip_loading:
+                logger.info("Data loading skipped due to SKIP_DATA_LOADING configuration")
+                return {
+                    "files_processed": 0,
+                    "products_indexed": 0,
+                    "solutions_indexed": 0,
+                    "skipped": True
+                }
             
+            # Ensure Elasticsearch is ready before loading data
+            await self._wait_for_elasticsearch_ready()
+            
+            logger.info(f"Loading data into Elasticsearch with vector embeddings...")
             data_dir = settings.data_dir
             total_products_indexed = 0
             total_solutions_indexed = 0
             files_processed = 0
-            
-            # Process all JSON files
             for json_file in data_dir.glob("*.json"):
                 try:
                     logger.info(f"Processing file: {json_file.name}")
-                    
                     with open(json_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    
                     file_products = 0
                     file_solutions = 0
-                    
-                    # Handle different JSON structures
                     if isinstance(data, list):
                         items = data[:max_per_file]
                         for item in items:
                             if self._is_product_data(item):
-                                await self.index_product(item)
+                                await self.index_product(item, filename=json_file.name)
                                 file_products += 1
                             elif self._is_solution_data(item):
                                 await self.index_solution(item)
                                 file_solutions += 1
-                    
                     elif isinstance(data, dict):
                         if 'products' in data:
                             products = data['products'][:max_per_file]
                             for product in products:
                                 if self._is_valid_product(product):
-                                    await self.index_product(product)
+                                    await self.index_product(product, filename=json_file.name)
                                     file_products += 1
-                        
                         if 'solutions' in data:
                             solutions = data['solutions'][:max_per_file]
                             for solution in solutions:
                                 if self._is_valid_solution(solution):
                                     await self.index_solution(solution)
                                     file_solutions += 1
-                    
                     total_products_indexed += file_products
                     total_solutions_indexed += file_solutions
                     files_processed += 1
-                    
                     logger.info(f"✅ {json_file.name}: {file_products} products, {file_solutions} solutions")
-                    
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to process {json_file.name}: {e}")
                     continue
-            
             # Refresh indices - only if they exist and have data
-            try:
-                if total_products_indexed > 0:
-                    await self.client.indices.refresh(index=self.products_index)
-                    logger.info(f"✅ Refreshed products index with {total_products_indexed} documents")
-            except Exception as e:
-                logger.warning(f"Failed to refresh products index: {e}")
+            category_counts = {}
             
+            # Refresh category indices that have data
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    count_response = await self.client.count(index=index_name)
+                    count = count_response.get('count', 0)
+                    category_counts[category] = count
+                    if count > 0:
+                        await self.client.indices.refresh(index=index_name)
+                        logger.info(f"✅ Refreshed {category} index ({index_name}) with {count} documents")
+                except Exception as e:
+                    logger.debug(f"Category index {index_name} not found or empty: {e}")
+                    category_counts[category] = 0
+            
+            # Refresh default index if it has data
+            try:
+                count_response = await self.client.count(index=DEFAULT_PRODUCTS_INDEX)
+                default_count = count_response.get('count', 0)
+                if default_count > 0:
+                    await self.client.indices.refresh(index=DEFAULT_PRODUCTS_INDEX)
+                    logger.info(f"✅ Refreshed default products index with {default_count} documents")
+            except Exception as e:
+                logger.debug(f"Default products index not found or empty: {e}")
+                default_count = 0
+            
+            # Refresh solutions index
             try:
                 if total_solutions_indexed > 0:
                     await self.client.indices.refresh(index=self.solutions_index)
@@ -542,6 +980,14 @@ class ElasticsearchVectorService:
             logger.info(f"   Files processed: {files_processed}")
             logger.info(f"   Products indexed: {total_products_indexed}")
             logger.info(f"   Solutions indexed: {total_solutions_indexed}")
+            
+            # Log category breakdown
+            logger.info(f"📊 Products by category:")
+            for category, count in category_counts.items():
+                if count > 0:
+                    logger.info(f"   {category}: {count} products")
+            if default_count > 0:
+                logger.info(f"   other/uncategorized: {default_count} products")
             
             return {
                 "files_processed": files_processed,
@@ -574,14 +1020,31 @@ class ElasticsearchVectorService:
     async def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about vector indices"""
         try:
-            # Get products stats
+            # Get products stats across all category indices
             products_count = 0
-            try:
-                products_stats = await self.client.count(index=self.products_index)
-                products_count = products_stats["count"]
-            except Exception as e:
-                logger.warning(f"Failed to get products stats: {e}")
+            category_stats = {}
             
+            # Count products in each category index
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    category_stats_response = await self.client.count(index=index_name)
+                    count = category_stats_response["count"]
+                    category_stats[category] = count
+                    products_count += count
+                except Exception as e:
+                    logger.debug(f"Failed to get stats for {category} index ({index_name}): {e}")
+                    category_stats[category] = 0
+            
+            # Count products in default index
+            try:
+                default_stats = await self.client.count(index=DEFAULT_PRODUCTS_INDEX)
+                default_count = default_stats["count"]
+                category_stats["other"] = default_count
+                products_count += default_count
+            except Exception as e:
+                logger.debug(f"Failed to get stats for default products index: {e}")
+                category_stats["other"] = 0
+
             # Get solutions stats - handle missing index gracefully
             solutions_count = 0
             try:
@@ -589,9 +1052,10 @@ class ElasticsearchVectorService:
                 solutions_count = solutions_stats["count"]
             except Exception as e:
                 logger.debug(f"Solutions index not found or empty: {e}")
-            
+
             return {
                 "products_count": products_count,
+                "category_breakdown": category_stats,
                 "solutions_count": solutions_count,
                 "status": "healthy",
                 "service": "elasticsearch_vector",
@@ -601,6 +1065,7 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to get vector service stats: {e}")
             return {
                 "products_count": 0,
+                "category_breakdown": {},
                 "solutions_count": 0,
                 "status": "error",
                 "error": str(e),
@@ -611,6 +1076,610 @@ class ElasticsearchVectorService:
         """Close Elasticsearch connection"""
         await self.client.close()
 
+    async def _extract_categories_from_requirements(self, requirements: Dict[str, Any]) -> List[str]:
+        """Extract relevant product categories from requirements using LLM intelligence"""
+        
+        try:
+            # Use LLM-powered category extraction
+            logger.info("🧠 Attempting LLM-powered category analysis...")
+            categories = await self._extract_categories_with_llm(requirements)
+            
+            # If no categories found, try the fallback method
+            if not categories:
+                logger.info("🔄 LLM analysis returned no categories, using enhanced fallback...")
+                categories = await self._extract_categories_fallback(requirements)
+            
+        except Exception as e:
+            logger.warning(f"LLM-powered category extraction failed: {e}")
+            logger.info("🔄 Using enhanced fallback category analysis...")
+            categories = await self._extract_categories_fallback(requirements)
+        
+        # If still no categories, default to core categories based on common use cases
+        if not categories:
+            # Check if this looks like a workstation/professional use case
+            text_content = []
+            for key in ['semantic_query', 'technical_requirements', 'business_requirements']:
+                value = requirements.get(key)
+                if value:
+                    if isinstance(value, list):
+                        text_content.extend([str(item) for item in value])
+                    else:
+                        text_content.append(str(value))
+            
+            combined_text = " ".join(text_content).lower()
+            
+            if any(term in combined_text for term in ['workstation', 'professional', 'video', 'ai', 'ml', 'rendering']):
+                categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
+                logger.info("🎯 Applied workstation default categories")
+            elif any(term in combined_text for term in ['gaming', 'game', 'fps']):
+                categories = ['video-card', 'cpu', 'memory', 'monitor']
+                logger.info("🎯 Applied gaming default categories")
+            elif any(term in combined_text for term in ['storage', 'nas', 'file']):
+                categories = ['internal-hard-drive', 'external-hard-drive']
+                logger.info("🎯 Applied storage default categories")
+            elif any(term in combined_text for term in ['office', 'business', 'productivity']):
+                categories = ['cpu', 'memory', 'monitor']
+                logger.info("🎯 Applied office default categories")
+            else:
+                # Default to most common categories
+                categories = ['cpu', 'memory', 'internal-hard-drive']
+                logger.info("🎯 Applied general default categories")
+        
+        logger.info(f"🎯 Final categories selected: {categories}")
+        return categories
+
+    # ===== COMPATIBILITY METHODS FOR OLD SERVICE INTERFACE =====
+    
+    async def search_products(self, query_body: dict, index: str = "products") -> List[Dict]:
+        """Compatibility method for old service interface - converts to vector search with category awareness"""
+        try:
+            # Extract query from query_body if it's a string
+            if isinstance(query_body, str):
+                query = query_body
+                categories = None
+            elif isinstance(query_body, dict):
+                # Try to extract query from various possible structures
+                if "query" in query_body:
+                    query_part = query_body["query"]
+                    if isinstance(query_part, dict) and "multi_match" in query_part:
+                        query = query_part["multi_match"]["query"]
+                    elif isinstance(query_part, dict) and "match" in query_part:
+                        query = query_part["match"].get("name", "")
+                    else:
+                        query = str(query_part)
+                else:
+                    query = str(query_body)
+                
+                # Try to extract categories if available (FIX: Add await)
+                categories = await self._extract_categories_from_requirements(query_body)
+            else:
+                query = str(query_body)
+                categories = None
+            
+            # Use vector search with hybrid approach and category filtering
+            return await self.vector_search_products(
+                query, 
+                size=20, 
+                hybrid_weight=0.2, 
+                categories=categories
+            )
+            
+        except Exception as e:
+            logger.error(f"Compatibility search_products failed: {e}")
+            return []
+    
+    async def search_products_by_requirements(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
+        """Compatibility method for old service interface - converts requirements to vector search with category filtering"""
+        try:
+            # Build query from requirements
+            search_terms = requirements.get('search_terms', [])
+            categories = requirements.get('product_categories', [])
+            tech_reqs = requirements.get('technical_requirements', [])
+            business_reqs = requirements.get('business_requirements', [])
+            
+            # Combine all search terms
+            all_terms = search_terms + categories + tech_reqs + business_reqs
+            query = " ".join([str(term) for term in all_terms if term])
+            
+            if not query:
+                query = "business technology professional enterprise"
+            
+            # Extract relevant categories from requirements (FIX: Add await)
+            relevant_categories = await self._extract_categories_from_requirements(requirements)
+            
+            # Use vector search with hybrid approach and category filtering
+            return await self.vector_search_products(
+                query, 
+                size=size, 
+                hybrid_weight=0.2,
+                categories=relevant_categories if relevant_categories else None
+            )
+            
+        except Exception as e:
+            logger.error(f"Compatibility search_products_by_requirements failed: {e}")
+            return []
+    
+    async def search_products_with_fallback(self, requirements: Dict[str, Any], size: int = 20) -> List[Dict]:
+        """Compatibility method for old service interface - uses vector search with fallback"""
+        try:
+            results = await self.search_products_by_requirements(requirements, size)
+            if results:
+                return results
+            
+            # Fallback to random products
+            return await self.get_random_products(size)
+            
+        except Exception as e:
+            logger.error(f"Compatibility search_products_with_fallback failed: {e}")
+            return []
+    
+    async def get_random_products(self, size: int = 10) -> List[Dict]:
+        """Compatibility method for old service interface - get random products from all categories"""
+        try:
+            # Get indices to search
+            all_indices = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
+            
+            search_body = {
+                "size": size,
+                "query": {
+                    "function_score": {
+                        "query": {"match_all": {}},
+                        "random_score": {},
+                        "boost_mode": "replace"
+                    }
+                }
+            }
+            
+            response = await self.client.search(index=all_indices, body=search_body)
+            
+            results = []
+            for hit in response["hits"]["hits"]:
+                product = hit["_source"]
+                product["_index"] = hit["_index"]  # Track source index
+                results.append(product)
+            
+            logger.info(f"Retrieved {len(results)} random products from all categories")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Random products retrieval failed: {e}")
+            return []
+    
+    async def search_solutions(self, requirements: Dict[str, Any], size: int = 5) -> List[Dict]:
+        """Compatibility method for old service interface - search solutions"""
+        try:
+            # Build query from requirements
+            use_case = requirements.get('use_case', '')
+            industry = requirements.get('industry', '')
+            company_size = requirements.get('company_size', '')
+            
+            query = f"{use_case} {industry} {company_size}".strip()
+            if not query:
+                query = "business solution"
+            
+            return await self.vector_search_solutions(query, size=size, hybrid_weight=0.2)
+            
+        except Exception as e:
+            logger.error(f"Solution search failed: {e}")
+            return []
+    
+    async def get_product_categories(self) -> List[str]:
+        """Compatibility method for old service interface - get product categories"""
+        try:
+            # Return available categories based on indices that have data
+            categories = []
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    count_response = await self.client.count(index=index_name)
+                    if count_response.get('count', 0) > 0:
+                        categories.append(category)
+                except Exception:
+                    continue  # Index doesn't exist or is empty
+            
+            return categories
+        except Exception as e:
+            logger.error(f"Failed to get categories: {e}")
+            return []
+    
+    async def get_product_stats(self) -> Dict[str, Any]:
+        """Compatibility method for old service interface - get product statistics"""
+        try:
+            total_products = 0
+            categories = {}
+            price_stats = {"min": None, "max": None, "avg": None}
+            
+            # Get stats from each category index
+            for category, index_name in CATEGORY_INDEX_MAP.items():
+                try:
+                    # Get count
+                    count_response = await self.client.count(index=index_name)
+                    count = count_response.get('count', 0)
+                    if count > 0:
+                        categories[category] = count
+                        total_products += count
+                        
+                        # Get price stats for this category
+                        price_agg_response = await self.client.search(
+                            index=index_name,
+                            body={
+                                "size": 0,
+                                "aggs": {
+                                    "price_stats": {
+                                        "stats": {"field": "price"}
+                                    }
+                                }
+                            }
+                        )
+                        
+                        if "aggregations" in price_agg_response:
+                            category_price_stats = price_agg_response["aggregations"]["price_stats"]
+                            if category_price_stats.get("count", 0) > 0:
+                                min_price = category_price_stats.get("min")
+                                max_price = category_price_stats.get("max")
+                                
+                                if min_price is not None:
+                                    if price_stats["min"] is None or min_price < price_stats["min"]:
+                                        price_stats["min"] = min_price
+                                
+                                if max_price is not None:
+                                    if price_stats["max"] is None or max_price > price_stats["max"]:
+                                        price_stats["max"] = max_price
+                        
+                except Exception as e:
+                    logger.debug(f"Failed to get stats for {category}: {e}")
+                    continue
+            
+            # Check default index
+            try:
+                count_response = await self.client.count(index=DEFAULT_PRODUCTS_INDEX)
+                default_count = count_response.get('count', 0)
+                if default_count > 0:
+                    categories["other"] = default_count
+                    total_products += default_count
+            except Exception:
+                pass
+            
+            # Calculate average price (simplified)
+            if price_stats["min"] is not None and price_stats["max"] is not None:
+                price_stats["avg"] = (price_stats["min"] + price_stats["max"]) / 2
+            
+            return {
+                "total_products": total_products,
+                "categories": categories,
+                "price_range": price_stats
+            }
+        except Exception as e:
+            logger.error(f"Failed to get product stats: {e}")
+            return {"total_products": 0, "categories": {}, "price_range": {}}
+    
+    async def reindex_all_data(self, force_replace: bool = False):
+        """Compatibility method for old service interface - reindex all data"""
+        try:
+            logger.info("Reindexing all data with vector embeddings...")
+            await self.load_data_from_json(max_per_file=50)
+            logger.info("Successfully reindexed all data with vectors")
+        except Exception as e:
+            logger.error(f"Failed to reindex data: {e}")
+            raise
+    
+    async def get_cluster_health(self) -> Dict[str, Any]:
+        """Compatibility method for old service interface - get cluster health"""
+        try:
+            health = await self.client.cluster.health()
+            return {
+                "status": health["status"],
+                "number_of_nodes": health["number_of_nodes"],
+                "active_primary_shards": health["active_primary_shards"],
+                "active_shards": health["active_shards"]
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cluster health: {e}")
+            return {"status": "red", "error": str(e)}
+    
+    async def _safe_count(self, index: str) -> int:
+        """Compatibility method for old service interface - safe count"""
+        try:
+            response = await self.client.count(index=index)
+            return response.get('count', 0)
+        except Exception as e:
+            logger.error(f"Count failed for {index}: {e}")
+            return 0
+    
+    async def _wait_for_cluster_ready(self, max_attempts: int = 10, delay: float = 2.0):
+        """Compatibility method for old service interface - wait for cluster"""
+        for attempt in range(max_attempts):
+            try:
+                health = await self.client.cluster.health(
+                    wait_for_status='yellow',
+                    timeout='2s',
+                    request_timeout=3
+                )
+                
+                if health['status'] in ['green', 'yellow']:
+                    logger.info(f"Cluster ready: {health['status']} status")
+                    return True
+                    
+            except Exception as e:
+                logger.warning(f"Cluster not ready (attempt {attempt + 1}/{max_attempts}): {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(delay)
+        
+        logger.warning("Cluster readiness timeout - proceeding anyway")
+        return False
+
+    def set_llm_provider(self, llm_provider):
+        """Set the LLM provider for intelligent category detection"""
+        self.llm_provider = llm_provider
+        logger.info("✅ LLM provider set for intelligent category detection")
+
+    async def _extract_categories_with_llm(self, requirements: Dict[str, Any]) -> List[str]:
+        """Use LLM with Pydantic function calling to intelligently extract relevant product categories"""
+        
+        if not self.llm_provider:
+            logger.warning("No LLM provider available for category extraction, using fallback")
+            return await self._extract_categories_fallback(requirements)
+        
+        try:
+            # Get available categories dynamically
+            available_categories = await self._get_active_categories()
+            
+            if not available_categories:
+                logger.warning("No active categories found")
+                return []
+            
+            # Build context for LLM analysis
+            context_parts = []
+            
+            # Add semantic query if available
+            if requirements.get('semantic_query'):
+                context_parts.append(f"Query: {requirements['semantic_query']}")
+            
+            # Add technical requirements
+            if requirements.get('technical_requirements'):
+                tech_reqs = requirements['technical_requirements']
+                if isinstance(tech_reqs, list):
+                    context_parts.append(f"Technical Requirements: {', '.join(str(req) for req in tech_reqs)}")
+                else:
+                    context_parts.append(f"Technical Requirements: {tech_reqs}")
+            
+            # Add business requirements
+            if requirements.get('business_requirements'):
+                business_reqs = requirements['business_requirements']
+                if isinstance(business_reqs, list):
+                    context_parts.append(f"Business Requirements: {', '.join(str(req) for req in business_reqs)}")
+                else:
+                    context_parts.append(f"Business Requirements: {business_reqs}")
+            
+            # Add use case
+            if requirements.get('use_case'):
+                context_parts.append(f"Use Case: {requirements['use_case']}")
+            
+            # Add industry
+            if requirements.get('industry'):
+                context_parts.append(f"Industry: {requirements['industry']}")
+            
+            # Add LLM context if available
+            llm_context = requirements.get('llm_context', {})
+            if llm_context.get('primary_need'):
+                context_parts.append(f"Primary Need: {llm_context['primary_need']}")
+            if llm_context.get('business_context'):
+                context_parts.append(f"Business Context: {llm_context['business_context']}")
+            
+            requirements_text = "\n".join(context_parts)
+            
+            # Create intelligent prompt for Pydantic function calling
+            category_prompt = f"""You are an expert B2B technology consultant analyzing customer requirements to determine which product categories are most relevant for their needs.
+
+CUSTOMER REQUIREMENTS:
+{requirements_text}
+
+AVAILABLE PRODUCT CATEGORIES:
+{', '.join(available_categories)}
+
+CATEGORY DESCRIPTIONS:
+• cpu: Processors, CPUs for workstations, servers, gaming systems
+• video-card: Graphics cards, GPUs for gaming, AI/ML, rendering, professional workstations  
+• memory: RAM, system memory, DDR4/DDR5 modules for performance
+• monitor: Displays, screens, monitors for professional work, gaming, content creation
+• internal-hard-drive: Internal storage drives, SSDs, HDDs, NVMe drives for data storage
+• external-hard-drive: External storage, portable drives, backup storage solutions
+• motherboard: System boards, platforms, chipsets - foundation of any system
+• power-supply: Power supplies, PSUs for stable system operation
+• case: Computer cases, enclosures, chassis for housing components
+• cpu-cooler: CPU cooling solutions, thermal management for performance
+• keyboard: Input devices, mechanical keyboards, wireless keyboards
+• mouse: Pointing devices, gaming mice, professional mice for productivity
+• headphones: Audio devices, headsets, professional audio equipment
+• speakers: Audio output, sound systems for multimedia
+• webcam: Video devices, conferencing cameras for communication
+• optical-drive: CD/DVD/Blu-ray drives for legacy media
+• ups: Uninterruptible power supplies, backup power for critical systems
+• wireless-network-card: WiFi adapters, wireless networking solutions
+• wired-network-card: Ethernet adapters, wired networking for reliability
+
+ANALYSIS GUIDELINES:
+1. Focus on categories that directly solve the customer's stated needs
+2. Consider the primary use case and industry context
+3. Prioritize essential components over accessories
+4. Limit to 3-5 most relevant categories for focused search
+5. Consider complementary products that work together
+
+COMMON USE CASE PATTERNS:
+• Gaming: video-card, cpu, memory, monitor
+• Workstation/Professional: cpu, video-card, memory, internal-hard-drive
+• AI/ML Training: video-card, cpu, memory, internal-hard-drive  
+• Office/Productivity: cpu, memory, monitor, keyboard, mouse
+• Storage/NAS: internal-hard-drive, external-hard-drive
+• Content Creation: video-card, cpu, memory, monitor
+
+Analyze the requirements and provide structured category recommendations."""
+
+            try:
+                # Use Pydantic function calling for structured response
+                logger.info("🧠 Using Pydantic function calling for category analysis...")
+                category_analysis = await self.llm_provider.generate_structured_response(
+                    [AIMessage(role="user", content=category_prompt)],
+                    CategoryAnalysis
+                )
+                
+                # Validate that returned categories are in available categories
+                valid_categories = [
+                    cat for cat in category_analysis.relevant_categories 
+                    if cat in available_categories
+                ]
+                
+                logger.info(f"🧠 LLM Category Analysis:")
+                logger.info(f"   Primary Use Case: {category_analysis.primary_use_case}")
+                logger.info(f"   Technical Focus: {category_analysis.technical_focus}")
+                logger.info(f"   Selected Categories: {valid_categories}")
+                logger.info(f"   Confidence: {category_analysis.confidence:.1%}")
+                logger.info(f"   Reasoning: {category_analysis.reasoning}")
+                
+                if category_analysis.alternative_categories:
+                    valid_alternatives = [
+                        cat for cat in category_analysis.alternative_categories 
+                        if cat in available_categories
+                    ]
+                    logger.info(f"   Alternative Categories: {valid_alternatives}")
+                
+                return valid_categories[:5]  # Limit to 5 categories max
+                    
+            except Exception as e:
+                logger.warning(f"Pydantic function calling failed: {e}")
+                return await self._extract_categories_fallback(requirements)
+                
+        except Exception as e:
+            logger.error(f"LLM category extraction failed: {e}")
+            return await self._extract_categories_fallback(requirements)
+
+    async def _extract_categories_fallback(self, requirements: Dict[str, Any]) -> List[str]:
+        """Fallback category extraction using pattern matching"""
+        
+        categories = set()
+        
+        # Get text to analyze
+        text_parts = []
+        
+        for key in ['semantic_query', 'technical_requirements', 'business_requirements', 'use_case']:
+            value = requirements.get(key)
+            if value:
+                if isinstance(value, list):
+                    text_parts.extend([str(item) for item in value])
+                else:
+                    text_parts.append(str(value))
+        
+        # Add LLM context if available
+        llm_context = requirements.get('llm_context', {})
+        if llm_context.get('primary_need'):
+            text_parts.append(str(llm_context['primary_need']))
+        if llm_context.get('business_context'):
+            text_parts.append(str(llm_context['business_context']))
+        if llm_context.get('technical_requirements'):
+            if isinstance(llm_context['technical_requirements'], list):
+                text_parts.extend([str(req) for req in llm_context['technical_requirements']])
+            else:
+                text_parts.append(str(llm_context['technical_requirements']))
+        
+        text = " ".join(text_parts).lower()
+        
+        logger.info(f"🔍 Fallback category analysis for text: {text[:200]}...")
+        
+        # Enhanced pattern matching with more specific keywords
+        
+        # Storage solutions
+        if any(word in text for word in ['storage', 'nas', 'file sharing', 'raid', 'backup', 'ssd', 'hdd', 'nvme', 'drive']):
+            categories.update(['internal-hard-drive', 'external-hard-drive'])
+            logger.info("🗂️ Detected storage needs")
+        
+        # Gaming and graphics
+        if any(word in text for word in ['gaming', '1440p', '4k gaming', 'fps', 'ray tracing', 'gpu', 'graphics', 'rtx', 'radeon']):
+            categories.update(['video-card', 'cpu', 'memory', 'monitor'])
+            logger.info("🎮 Detected gaming needs")
+        
+        # Professional workstation
+        if any(word in text for word in ['workstation', 'professional', 'video editing', '3d rendering', 'cad', 'autocad', 'blender']):
+            categories.update(['video-card', 'cpu', 'memory', 'internal-hard-drive'])
+            logger.info("💼 Detected workstation needs")
+        
+        # AI/ML and compute
+        if any(word in text for word in ['ai', 'ml', 'machine learning', 'training', 'dataset', 'tensorflow', 'pytorch', 'cuda']):
+            categories.update(['video-card', 'cpu', 'memory', 'internal-hard-drive'])
+            logger.info("🤖 Detected AI/ML needs")
+        
+        # Display and monitors
+        if any(word in text for word in ['monitor', 'display', 'screen', '27-inch', '32-inch', '4k', '1440p', 'ultrawide']):
+            categories.add('monitor')
+            logger.info("🖥️ Detected monitor needs")
+        
+        # Productivity and office
+        if any(word in text for word in ['office', 'productivity', 'business', 'excel', 'word', 'spreadsheet']):
+            categories.update(['cpu', 'memory', 'monitor'])
+            logger.info("📊 Detected office/productivity needs")
+        
+        # Input devices
+        if any(word in text for word in ['keyboard', 'typing', 'mechanical', 'wireless keyboard']):
+            categories.add('keyboard')
+            logger.info("⌨️ Detected keyboard needs")
+        
+        if any(word in text for word in ['mouse', 'pointing', 'trackball', 'wireless mouse']):
+            categories.add('mouse')
+            logger.info("🖱️ Detected mouse needs")
+        
+        # Audio devices
+        if any(word in text for word in ['headphones', 'headset', 'audio', 'microphone', 'streaming']):
+            categories.add('headphones')
+            logger.info("🎧 Detected audio needs")
+        
+        if any(word in text for word in ['speakers', 'sound system', 'multimedia']):
+            categories.add('speakers')
+            logger.info("🔊 Detected speaker needs")
+        
+        # Webcam and communication
+        if any(word in text for word in ['webcam', 'camera', 'video call', 'conference', 'zoom', 'teams']):
+            categories.add('webcam')
+            logger.info("📹 Detected webcam needs")
+        
+        # Networking
+        if any(word in text for word in ['wifi', 'wireless', 'network card', 'ethernet', 'networking']):
+            categories.update(['wireless-network-card', 'wired-network-card'])
+            logger.info("🌐 Detected networking needs")
+        
+        # Power management
+        if any(word in text for word in ['ups', 'backup power', 'power supply', 'psu']):
+            categories.add('power-supply')
+            if 'ups' in text or 'backup power' in text:
+                categories.add('ups')
+            logger.info("⚡ Detected power needs")
+        
+        # System building
+        if any(word in text for word in ['build', 'custom', 'system', 'motherboard', 'case', 'cooling']):
+            categories.update(['motherboard', 'case', 'cpu-cooler'])
+            logger.info("🔧 Detected system building needs")
+        
+        # If no specific categories found, provide sensible defaults based on context
+        if not categories:
+            logger.info("🔄 No specific categories detected, using default business categories")
+            categories.update(['cpu', 'memory', 'internal-hard-drive'])
+        
+        final_categories = list(categories)
+        logger.info(f"🎯 Fallback analysis selected categories: {final_categories}")
+        
+        return final_categories
+
+    async def _get_active_categories(self) -> List[str]:
+        """Get categories that actually have data"""
+        active_categories = []
+        
+        for category, index_name in CATEGORY_INDEX_MAP.items():
+            try:
+                count_response = await self.client.count(index=index_name)
+                if count_response.get('count', 0) > 0:
+                    active_categories.append(category)
+            except:
+                continue
+                
+        return active_categories
+
 # Global instance
 _elasticsearch_vector_service = None
 
@@ -619,4 +1688,18 @@ def get_elasticsearch_vector_service(azure_embedding_endpoint: str, azure_embedd
     global _elasticsearch_vector_service
     if _elasticsearch_vector_service is None:
         _elasticsearch_vector_service = ElasticsearchVectorService(azure_embedding_endpoint, azure_embedding_key)
-    return _elasticsearch_vector_service 
+    return _elasticsearch_vector_service
+
+# Compatibility wrapper for drop-in replacement
+def get_elasticsearch_service() -> ElasticsearchVectorService:
+    """Compatibility function to replace the old service - uses vector service with default Azure credentials"""
+    from config import settings
+    
+    # Use the same Azure credentials as the main AI service
+    azure_embedding_endpoint = settings.azure_embedding_endpoint
+    azure_embedding_key = settings.azure_embedding_api_key
+    
+    if not azure_embedding_endpoint or not azure_embedding_key:
+        raise ValueError("Azure embedding credentials not configured. Please set AZURE_EMBEDDING_ENDPOINT and AZURE_OPENAI_API_KEY environment variables.")
+    
+    return get_elasticsearch_vector_service(azure_embedding_endpoint, azure_embedding_key) 

@@ -10,14 +10,14 @@ from datetime import datetime
 import uuid
 from pathlib import Path
 import logging
-from services import elasticsearch_service
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text, func, and_
 import asyncio
+import time
 
 # Import database components
-from db.database import get_db, engine, create_tables, test_connection
+from db.database import get_db, engine, create_tables, test_connection, reset_database, cleanup_conflicting_data
 from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 
 # Import routes
@@ -38,9 +38,10 @@ from models.chat import MessageType, ChatRequest, ChatResponse
 from models.lead import Lead
 
 # Import services
-from services.elasticsearch_service import get_elasticsearch_service
-from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from services.cache_service import get_cache_service, start_cache_cleanup_task
+from services.elasticsearch_vector_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_vector_service
+from services.metrics_service import metrics_middleware, metrics_endpoint, get_metrics_service
 
 # Import configuration
 from config import settings
@@ -93,6 +94,9 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Add metrics middleware
+app.middleware("http")(metrics_middleware)
+
 # Add compression middleware for better response times
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -114,6 +118,9 @@ app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
 app.include_router(admin_router)
+
+# Add metrics endpoint
+app.get("/metrics")(metrics_endpoint)
 
 # Keep your working models
 class SalesChatMessage(BaseModel):
@@ -198,6 +205,17 @@ async def startup_event():
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
         
+        # Test database connection first
+        if not test_connection():
+            logger.error("❌ Database connection failed")
+            raise Exception("Database connection failed")
+        
+        # Clean up any conflicting data from previous setups
+        cleanup_conflicting_data()
+        
+        # Create tables using SQLAlchemy models as source of truth
+        create_tables()
+        
         # Initialize cache service and start cleanup task
         cache_service = get_cache_service()
         asyncio.create_task(start_cache_cleanup_task())
@@ -208,56 +226,63 @@ async def startup_event():
             elasticsearch_service = get_elasticsearch_service()
             await elasticsearch_service.initialize()
             logger.info("✅ Elasticsearch initialized successfully")
-        except Exception as e:
-            logger.error(f"❌ Elasticsearch initialization failed: {e}")
-            raise  # Re-raise the exception since Elasticsearch is critical
-        
-        # Test database connection (remove await since it's not async)
-        test_connection()
-        
-        # Create database tables
-        create_tables()
-        
-        # Initialize Elasticsearch Vector Service if hybrid retriever is enabled
-        if settings.use_hybrid_retriever and settings.azure_embedding_endpoint:
-            try:
-                vector_service = get_elasticsearch_vector_service(
-                    azure_embedding_endpoint=settings.azure_embedding_endpoint,
-                    azure_embedding_key=settings.azure_embedding_api_key
-                )
-                await vector_service.initialize()
-                logger.info("✅ Elasticsearch Vector Service initialized successfully")
+            
+            # If hybrid retriever is enabled, the vector service is already initialized
+            if settings.use_hybrid_retriever:
+                vector_service = elasticsearch_service
+                logger.info("✅ Vector service initialized (hybrid retriever enabled)")
+            else:
+                logger.info("ℹ️ Vector service not initialized (hybrid retriever disabled)")
                 
-                # Check if vector indices are empty and need population
-                stats = await vector_service.get_collection_stats()
-                if stats["products_count"] == 0 and stats["solutions_count"] == 0:
-                    logger.info("🔄 Vector indices are empty, loading data from JSON files...")
-                    result = await vector_service.load_data_from_json(max_per_file=50)
-                    logger.info(f"✅ Vector data loading completed: {result}")
-                elif settings.force_reload_data:
-                    logger.info("🔄 Force reload enabled, reloading vector data...")
-                    result = await vector_service.load_data_from_json(max_per_file=50)
-                    logger.info(f"✅ Vector force reload completed: {result}")
-                else:
-                    logger.info(f"✅ Vector indices already have data: {stats}")
-                
-            except Exception as vector_error:
-                logger.error(f"❌ Elasticsearch Vector Service initialization failed: {vector_error}")
-                vector_service = None
-                logger.info("🔄 Continuing without vector search...")
-        else:
-            logger.info("⚠️ Vector search disabled or Azure embeddings not configured")
+        except Exception as es_error:
+            logger.error(f"❌ Elasticsearch initialization failed: {es_error}")
+            logger.warning("⚠️ Continuing without Elasticsearch - some features may be limited")
         
-        # Initialize SpeechService ONCE
-        speech_service = SpeechService(model_name="medium")
-        await speech_service.initialize()
-        logger.info("✅ SpeechService initialized successfully")
+        # Initialize speech service
+        try:
+            speech_service = SpeechService()
+            await speech_service.initialize()
+            logger.info("✅ Speech service initialized")
+        except Exception as speech_error:
+            logger.error(f"❌ Speech service initialization failed: {speech_error}")
+            logger.warning("⚠️ Continuing without speech service - text-to-speech will be disabled")
         
-        logger.info("✅ Application startup completed")
+        # Start periodic metrics update task
+        asyncio.create_task(periodic_metrics_update())
+        logger.info("✅ Metrics update task started")
+        
+        logger.info("🎉 B2B Sales AI Assistant startup completed successfully!")
         
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
         raise
+
+async def periodic_metrics_update():
+    """Periodically update lead and database metrics"""
+    while True:
+        try:
+            await asyncio.sleep(60)  # Update every minute
+            
+            # Get database session
+            db = next(get_db())
+            try:
+                metrics_service = get_metrics_service()
+                
+                # Update lead metrics
+                metrics_service.update_lead_metrics(db)
+                
+                # Update database connection metrics
+                metrics_service.update_db_connection_metrics(db)
+                
+                # Update token usage metrics
+                metrics_service.update_token_usage_metrics()
+                
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error in periodic metrics update: {e}")
+            await asyncio.sleep(60)  # Wait before retrying
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -279,6 +304,9 @@ async def root():
 @app.post("/api/chat")
 async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     """Optimized sales chat endpoint with reduced latency"""
+    metrics_service = get_metrics_service()
+    start_time = time.time()
+    
     try:
         # Get speech service
         global speech_service
@@ -298,6 +326,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 db.add(lead)
                 db.commit()
                 logger.info(f"Created new lead: {lead_id}")
+                
+                # Update lead metrics immediately after creation
+                metrics_service.update_lead_metrics(db)
             
             # Save user message
             user_message = DBChatMessage(
@@ -309,6 +340,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             )
             db.add(user_message)
             db.commit()
+            
+            # Record chat message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
             # Get conversation history with limit for better performance
             messages = []
@@ -355,7 +389,11 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 logger.info("✅ Serving response from cache")
                 response_content = cached_response
                 response_metadata = {"cached": True, "provider": "cache"}
+                metrics_service.record_cache_hit()
             else:
+                # Record cache miss
+                metrics_service.record_cache_miss()
+                
                 # Create simple conversational agent for natural responses
                 base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
                 conversational_agent = SimpleConversationalAgent(base_provider,language=lang)
@@ -365,8 +403,17 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 
                 # Let the conversational agent handle all types of requests naturally
                 # No hardcoded phrase detection - let the AI determine the best response
+                ai_start_time = time.time()
                 response = await conversational_agent.generate_response(
                     messages, customer_context, language=lang
+                )
+                ai_duration = time.time() - ai_start_time
+                
+                # Record AI response time
+                metrics_service.record_ai_response_time(
+                    duration=ai_duration,
+                    provider=response.provider,
+                    model=response.model
                 )
                 
                 response_content = response.content
@@ -387,7 +434,14 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 speech_service.text_to_speech(text=response_content, language=lang)
             )
             
-            # Save assistant response
+            # Wait for speech generation first
+            speech_result = await speech_task
+            logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
+            
+            # Update metadata with speech data
+            response_metadata['speech_data'] = speech_result
+            
+            # Save assistant response with speech data included
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
@@ -398,12 +452,10 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             )
             db.add(assistant_message)
             db.commit()
+            logger.info(f"💾 Assistant message saved with speech data: {assistant_message.id}")
             
-            # Wait for speech generation
-            speech_result = await speech_task
-            
-            # Update metadata with speech data
-            response_metadata['speech_data'] = speech_result
+            # Record assistant message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="assistant")
             
             # Prepare enhanced response
             chat_response = ChatResponse(
@@ -451,6 +503,9 @@ async def get_products():
 @app.post("/api/generate-quote")
 async def generate_quote(quote_request: Dict[str, Any]):
     """Generate a detailed quotation and pitch deck using QuoteGenerationAgent"""
+    metrics_service = get_metrics_service()
+    start_time = time.time()
+    
     try:
         # Create and initialize the quote generation agent
         base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
@@ -484,10 +539,15 @@ async def generate_quote(quote_request: Dict[str, Any]):
         
         # Check if quote generation was successful
         if not quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
         
         if 'error' in quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail=quote['error'])
+        
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
         
         # Generate unique IDs
         quote_id = quote.get('quote_id', str(uuid.uuid4()))
@@ -524,10 +584,13 @@ async def generate_quote(quote_request: Dict[str, Any]):
         }
     except Exception as e:
         logger.error(f"Quote generation failed: {e}")
+        metrics_service.record_quote_generation(status="error")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/send")
 async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
+    metrics_service = get_metrics_service()
+    
     try:
         # Get speech service
         global speech_service
@@ -547,6 +610,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                 db.add(lead)
                 db.commit()
                 logger.info(f"Created new lead: {lead_id}")
+                
+                # Update lead metrics immediately after creation
+                metrics_service.update_lead_metrics(db)
             
             # Save user message
             user_message = DBChatMessage(
@@ -558,6 +624,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             )
             db.add(user_message)
             db.commit()
+            
+            # Record user message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
             # Get conversation history with limit for better performance
             messages = []
@@ -571,7 +640,16 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             
             # Get AI response
             ai_provider = AIServiceFactory.create_provider()
+            ai_start_time = time.time()
             response = await ai_provider.generate_response(messages)
+            ai_duration = time.time() - ai_start_time
+            
+            # Record AI response time
+            metrics_service.record_ai_response_time(
+                duration=ai_duration,
+                provider=response.provider,
+                model=response.model
+            )
             
             # Generate speech for the response
             speech_result = await speech_service.text_to_speech(
@@ -596,6 +674,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             db.add(assistant_message)
             db.commit()
             logger.info(f"Saved assistant message to database: {assistant_message.id}")
+            
+            # Record assistant message metric
+            metrics_service.record_chat_message(lead_id=lead_id, message_type="assistant")
             
             return ChatResponse(
                 message=response.content,
@@ -679,16 +760,47 @@ async def get_chat_history(lead_id: str):
             
             history = []
             for msg in messages:
+                metadata = msg.message_metadata or {}
+                
+                # Extract voice data from metadata
+                voice_data = None
+                has_voice = False
+                
+                # For assistant messages, get speech_data
+                if msg.message_type == MessageType.ASSISTANT.value:
+                    speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                    if speech_data and speech_data.get('audio_data'):
+                        voice_data = speech_data
+                        has_voice = True
+                        logger.debug(f"🎤 Found voice data for assistant message {msg.id}: {len(speech_data.get('audio_data', ''))} chars")
+                    else:
+                        logger.debug(f"⚠️ No voice data found for assistant message {msg.id}")
+                
+                # For user messages, get transcription metadata
+                elif msg.message_type == MessageType.USER.value:
+                    transcription_metadata = metadata.get('transcription_metadata')
+                    if transcription_metadata:
+                        voice_data = {
+                            "type": "transcription",
+                            "data": transcription_metadata
+                        }
+                        has_voice = True
+                        logger.debug(f"🎤 Found transcription data for user message {msg.id}")
+                    else:
+                        logger.debug(f"⚠️ No transcription data found for user message {msg.id}")
+                
                 history.append({
                     "id": msg.id,
                     "role": msg.message_type.value.lower(),
                     "content": msg.content,
                     "timestamp": msg.created_at.isoformat(),
                     "stage": msg.stage,
-                    "metadata": msg.message_metadata
+                    "metadata": metadata,
+                    "has_voice": has_voice,
+                    "voice_data": voice_data
                 })
             
-            logger.info(f"Returning chat history: {history}")
+            logger.info(f"Returning chat history with voice data: {len([h for h in history if h['has_voice']])} voice messages")
             return {"history": history}
         finally:
             db.close()
@@ -854,13 +966,39 @@ async def get_conversation(lead_id: str, db: Session = Depends(get_db)):
         for msg in messages:
             # Fix enum comparison
             role = "user" if msg.message_type == MessageType.USER.value else "assistant"
+            
+            metadata = msg.message_metadata or {}
+            
+            # Extract voice data from metadata
+            voice_data = None
+            has_voice = False
+            
+            # For assistant messages, get speech_data
+            if msg.message_type == MessageType.ASSISTANT.value:
+                speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                if speech_data and speech_data.get('audio_data'):
+                    voice_data = speech_data
+                    has_voice = True
+            
+            # For user messages, get transcription metadata
+            elif msg.message_type == MessageType.USER.value:
+                transcription_metadata = metadata.get('transcription_metadata')
+                if transcription_metadata:
+                    voice_data = {
+                        "type": "transcription",
+                        "data": transcription_metadata
+                    }
+                    has_voice = True
+            
             conversation.append({
                 "id": msg.id,
                 "role": role,
                 "content": msg.content,
                 "timestamp": msg.created_at.isoformat() if msg.created_at else None,
                 "stage": msg.stage,
-                "metadata": msg.message_metadata
+                "metadata": metadata,
+                "has_voice": has_voice,
+                "voice_data": voice_data
             })
         
         return {"conversation": conversation}
@@ -1217,6 +1355,9 @@ async def get_performance_stats():
 @app.post("/api/generate-quote-from-conversation/{lead_id}")
 async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(get_db)):
     """Generate a quote from existing conversation history"""
+    metrics_service = get_metrics_service()
+    start_time = time.time()
+    
     try:
         # Get conversation history for the lead
         messages = db.query(DBChatMessage).filter(
@@ -1224,6 +1365,7 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         ).order_by(DBChatMessage.created_at).all()
         
         if not messages:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=404, detail="No conversation history found for this lead")
         
         # Convert to AIMessage format
@@ -1258,10 +1400,15 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         
         # Check if quote generation was successful
         if not quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
         
         if 'error' in quote:
+            metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail=quote['error'])
+        
+        # Record successful quote generation
+        metrics_service.record_quote_generation(status="success")
         
         # Generate pitch deck if quote was successful
         deck_id = str(uuid.uuid4())
@@ -1296,6 +1443,7 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         }
     except Exception as e:
         logger.error(f"Quote generation from conversation failed: {e}")
+        metrics_service.record_quote_generation(status="error")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
