@@ -1,7 +1,7 @@
 """Add fuzzy search support using pg_trgm
 
 Revision ID: add_fuzzy_search
-Revises: add_chat_search_index
+Revises: add_multiple_selections
 Create Date: 2024-03-27 11:00:00.000000
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 # revision identifiers
 revision = 'add_fuzzy_search'
-down_revision = 'add_chat_search_index'
+down_revision = 'add_multiple_selections'
 branch_labels = None
 depends_on = None
 
