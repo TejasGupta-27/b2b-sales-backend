@@ -112,6 +112,7 @@ jobs:
               
               # Pull latest changes from git
               git fetch origin
+              git checkout master
               git reset --hard origin/master
               
               # Copy environment file if it doesn't exist
