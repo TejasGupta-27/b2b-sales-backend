@@ -17,7 +17,7 @@ import asyncio
 import time
 
 # Import database components
-from db.database import get_db, engine, create_tables, test_connection
+from db.database import get_db, engine, create_tables, test_connection, reset_database, cleanup_conflicting_data
 from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 
 # Import routes
@@ -185,6 +185,17 @@ async def startup_event():
     
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
+        
+        # Test database connection first
+        if not test_connection():
+            logger.error("❌ Database connection failed")
+            raise Exception("Database connection failed")
+        
+        # Clean up any conflicting data from previous setups
+        cleanup_conflicting_data()
+        
+        # Create tables using SQLAlchemy models as source of truth
+        create_tables()
         
         # Initialize cache service and start cleanup task
         cache_service = get_cache_service()

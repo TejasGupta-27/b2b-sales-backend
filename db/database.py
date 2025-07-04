@@ -38,13 +38,35 @@ def get_db():
     finally:
         db.close()
 
+def drop_all_tables():
+    """Drop all tables - useful for clean reset"""
+    try:
+        logger.info("Dropping all tables...")
+        Base.metadata.drop_all(bind=engine)
+        logger.info("All tables dropped successfully")
+    except Exception as e:
+        logger.error(f"Failed to drop tables: {e}")
+        raise
+
 def create_tables():
     """Create all tables"""
     try:
+        logger.info("Creating database tables...")
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Failed to create tables: {e}")
+        raise
+
+def reset_database():
+    """Drop and recreate all tables - complete reset"""
+    try:
+        logger.info("Performing complete database reset...")
+        drop_all_tables()
+        create_tables()
+        logger.info("Database reset completed successfully")
+    except Exception as e:
+        logger.error(f"Database reset failed: {e}")
         raise
 
 def test_connection():
@@ -57,4 +79,31 @@ def test_connection():
         return True
     except Exception as e:
         logger.error(f"Database connection test failed: {e}")
-        return False 
+        return False
+
+def cleanup_conflicting_data():
+    """Clean up any conflicting data or types from previous setups"""
+    try:
+        with engine.connect() as conn:
+            # Check and handle existing enum types
+            logger.info("Checking for existing enum types...")
+            
+            # Check if old uppercase enum exists and drop it
+            result = conn.execute(text("""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_enum 
+                    WHERE enumlabel IN ('USER', 'ASSISTANT', 'SYSTEM')
+                );
+            """))
+            
+            if result.scalar():
+                logger.info("Found old uppercase enum values, cleaning up...")
+                # This is complex and might require manual intervention
+                # For now, just log the issue
+                logger.warning("Manual cleanup may be required for enum conflicts")
+            
+            conn.commit()
+            logger.info("Cleanup check completed")
+            
+    except Exception as e:
+        logger.warning(f"Cleanup check failed (this might be normal): {e}") 

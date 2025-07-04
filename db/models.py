@@ -6,18 +6,18 @@ from enum import Enum as PyEnum
 import uuid
 
 class MessageType(PyEnum):
-    USER = "USER"
-    ASSISTANT = "ASSISTANT"
-    SYSTEM = "SYSTEM"
+    USER = "user"  # Changed to lowercase to match database
+    ASSISTANT = "assistant"  # Changed to lowercase to match database 
+    SYSTEM = "system"  # Changed to lowercase to match database
 
 class LeadStatus(PyEnum):
-    NEW = "NEW"
-    CONTACTED = "CONTACTED"
-    QUALIFIED = "QUALIFIED"
-    PROPOSAL = "PROPOSAL"
-    NEGOTIATION = "NEGOTIATION"
-    CLOSED_WON = "CLOSED_WON"
-    CLOSED_LOST = "CLOSED_LOST"
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUALIFIED = "qualified"
+    PROPOSAL = "proposal"
+    NEGOTIATION = "negotiation"
+    CLOSED_WON = "closed_won"
+    CLOSED_LOST = "closed_lost"
 
 class Lead(Base):
     __tablename__ = "leads"
@@ -36,6 +36,7 @@ class Lead(Base):
     decision_timeline = Column(String)
     status = Column(Enum(LeadStatus), default=LeadStatus.NEW)
     lead_source = Column(String)
+    lead_score = Column(Integer)
     notes = Column(Text)
     last_contact = Column(DateTime)
     next_follow_up = Column(DateTime)
