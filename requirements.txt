@@ -21,6 +21,7 @@ torch
 datasets
 sentence-transformers
 elasticsearch==8.11.0
+langdetect==1.0.9
 chromadb
 numpy
 pandas

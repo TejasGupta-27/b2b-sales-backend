@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import asyncio
 from pydantic import BaseModel, Field
-
+import langdetect
 from .base import AIProvider, AIMessage, AIResponse
 from services.prompt_manager import get_prompt_manager
 from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
@@ -305,96 +305,129 @@ Note: You might want to learn more about their needs as the conversation progres
             response.metadata['requirements_complete'] = False
         
         return response
-    
-    def _enhance_response_with_quote_info(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
-        """Enhance response with quote information including PDF and pitch deck"""
-        
-        # Check if the response already contains conversational content about the quote
+
+    def _enhance_response_with_quote_info(self, response: AIResponse, quote: dict) -> AIResponse:
+        """Enhance response with quote information including PDF and pitch deck,
+        switching language based on detected language of the initial response."""
+
         original_content = response.content.strip()
-        
-        # If the response is already conversational and mentions the quote, enhance it naturally
-        if any(keyword in original_content.lower() for keyword in ['quote', 'price', 'cost', 'total', 'pricing']):
-            # The LLM already handled the quote conversation naturally, just add the technical details
-            response.content += f"\n\n📋 **Quote Details:**"
-            response.content += f"\n• Quote Number: {quote.get('quote_number', 'N/A')}"
-            
-            # Add pricing summary
+        try:
+            detected_lang = langdetect.detect(original_content)
+        except:
+            detected_lang = "en"  # fallback to English
+
+        is_japanese = detected_lang.startswith("ja")
+
+        # Localization dictionary for Japanese / English
+        localized = {
+            "quote_details": "📋 **見積もり詳細:**" if is_japanese else "📋 **Quote Details:**",
+            "quote_number": "見積番号" if is_japanese else "Quote Number",
+            "subtotal": "小計" if is_japanese else "Subtotal",
+            "tax": "税金" if is_japanese else "Tax",
+            "total": "合計" if is_japanese else "Total",
+            "valid_until": "有効期限" if is_japanese else "Valid until",
+            "download_pdf": "📄 **[見積書PDFをダウンロード]({url})**" if is_japanese else "📄 **[Download Complete Quote PDF]({url})**",
+            "download_pitch_deck": "📊 **[ピッチデッキをダウンロード]({url})**" if is_japanese else "📊 **[Download Pitch Deck]({url})**",
+            "whats_next": "次のステップ" if is_japanese else "What's next?",
+            "review_quote": "見積もり内容をご確認いただき、ご質問があればお知らせください" if is_japanese else "Review the detailed quote and let me know if you have any questions",
+            "check_pitch_deck": "ピッチデッキでビジュアル概要をご覧ください" if is_japanese else "Check out the pitch deck for a visual overview",
+            "here_to_help": "ご不明な点や調整がありましたらお手伝いいたします" if is_japanese else "I'm here to help with any clarifications or adjustments",
+            "perfect_intro": "完璧です！ご相談に基づいて詳細な見積もりを作成しました。" if is_japanese else "Perfect! I've put together a detailed quote based on our discussion.",
+            "quote_valid_until": "見積有効期限" if is_japanese else "Quote valid until",
+            "pdf_generating": "見積書PDF：現在生成中..." if is_japanese else "Quote PDF: Currently being generated...",
+            "pdf_error_note": "（注：PDF生成に問題が発生しました。必要に応じてサポートにお問い合わせください）" if is_japanese else "(Note: PDF generation encountered an issue - please contact support if needed)",
+            "what_happens_next": "次に何が起こるか" if is_japanese else "What happens next?",
+            "take_look": "詳細な見積もりをご確認いただき、調整が必要な場合はお知らせください" if is_japanese else "Take a look at the detailed quote and let me know if anything needs adjusting",
+            "feel_free_questions": "ご質問や変更のリクエストはお気軽にどうぞ" if is_japanese else "Feel free to ask any questions or request changes",
+            "move_forward": "ご満足いただけましたら、次のステップに進みましょう" if is_japanese else "Once you're happy with it, we can move forward with the next steps",
+        }
+
+        # Helper to format money with comma and 2 decimals
+        def fmt_money(val):
+            return f"${val:,.2f}"
+
+        # Check if the response already mentions quote
+        keywords = ['quote', 'price', 'cost', 'total', 'pricing']
+        has_quote_mention = any(kw in original_content.lower() for kw in keywords)
+
+        if has_quote_mention:
+            # Add details naturally
+            response.content += f"\n\n{localized['quote_details']}"
+            response.content += f"\n• {localized['quote_number']}: {quote.get('quote_number', 'N/A')}"
+
             if 'financials' in quote:
-                financials = quote['financials']
-                response.content += f"\n• Subtotal: ${financials['subtotal']:,.2f}"
-                response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
-                response.content += f"\n• **Total: ${financials['total']:,.2f}**"
+                fin = quote['financials']
+                response.content += f"\n• {localized['subtotal']}: {fmt_money(fin['subtotal'])}"
+                response.content += f"\n• {localized['tax']}: {fmt_money(fin['tax_amount'])}"
+                response.content += f"\n• **{localized['total']}: {fmt_money(fin['total'])}**"
             elif 'pricing' in quote:
                 pricing = quote['pricing']
-                response.content += f"\n• Subtotal: ${pricing['subtotal']:,.2f}"
-                response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
-                response.content += f"\n• **Total: ${pricing['total']:,.2f}**"
-            
+                response.content += f"\n• {localized['subtotal']}: {fmt_money(pricing['subtotal'])}"
+                response.content += f"\n• {localized['tax']}: {fmt_money(pricing['tax_amount'])}"
+                response.content += f"\n• **{localized['total']}: {fmt_money(pricing['total'])}**"
+
             if quote.get('valid_until'):
                 try:
-                    response.content += f"\n• Valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
+                    dt_str = datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')
                 except:
-                    response.content += f"\n• Valid until: {quote['valid_until']}"
-            
-            # Add download links
+                    dt_str = quote['valid_until']
+                response.content += f"\n• {localized['valid_until']}: {dt_str}"
+
             if quote.get('pdf_generated', False) and quote.get('pdf_url'):
-                response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
-            
+                response.content += "\n\n" + localized['download_pdf'].format(url=quote['pdf_url'])
             if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
-                response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
-            
-            # Add natural next steps
-            response.content += f"\n\n**What's next?**"
-            response.content += f"\n• Review the detailed quote and let me know if you have any questions"
+                response.content += "\n\n" + localized['download_pitch_deck'].format(url=quote['pitch_deck_url'])
+
+            response.content += f"\n\n**{localized['whats_next']}**"
+            response.content += f"\n• {localized['review_quote']}"
             if quote.get('pitch_deck_generated', False):
-                response.content += f"\n• Check out the pitch deck for a visual overview"
-            response.content += f"\n• I'm here to help with any clarifications or adjustments"
-            
+                response.content += f"\n• {localized['check_pitch_deck']}"
+            response.content += f"\n• {localized['here_to_help']}"
+
         else:
-            # The LLM didn't mention the quote, so provide a more conversational introduction
-            response.content += f"\n\nPerfect! I've put together a detailed quote based on our discussion."
-            response.content += f"\n\n📋 **Quote #{quote.get('quote_number', 'N/A')}**"
-            
-            # Add pricing summary
+            # LLM did not mention quote, add full conversational intro & details
+            response.content += f"\n\n{localized['perfect_intro']}"
+            response.content += f"\n\n📋 **{localized['quote_number']} #{quote.get('quote_number', 'N/A')}**"
+
             if 'financials' in quote:
-                financials = quote['financials']
-                response.content += f"\n\n💰 **Here's the breakdown:**"
-                response.content += f"\n• Subtotal: ${financials['subtotal']:,.2f}"
-                response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
-                response.content += f"\n• **Total: ${financials['total']:,.2f}**"
+                fin = quote['financials']
+                response.content += f"\n\n💰 **{localized['subtotal']}・{localized['tax']}・{localized['total']} の内訳はこちら：**" if is_japanese else f"\n\n💰 Here's the breakdown:"
+                response.content += f"\n• {localized['subtotal']}: {fmt_money(fin['subtotal'])}"
+                response.content += f"\n• {localized['tax']}: {fmt_money(fin['tax_amount'])}"
+                response.content += f"\n• **{localized['total']}: {fmt_money(fin['total'])}**"
             elif 'pricing' in quote:
                 pricing = quote['pricing']
-                response.content += f"\n\n💰 **Here's the breakdown:**"
-                response.content += f"\n• Subtotal: ${pricing['subtotal']:,.2f}"
-                response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
-                response.content += f"\n• **Total: ${pricing['total']:,.2f}**"
-            
+                response.content += f"\n\n💰 **{localized['subtotal']}・{localized['tax']}・{localized['total']} の内訳はこちら：**" if is_japanese else f"\n\n💰 Here's the breakdown:"
+                response.content += f"\n• {localized['subtotal']}: {fmt_money(pricing['subtotal'])}"
+                response.content += f"\n• {localized['tax']}: {fmt_money(pricing['tax_amount'])}"
+                response.content += f"\n• **{localized['total']}: {fmt_money(pricing['total'])}**"
+
             if quote.get('valid_until'):
                 try:
-                    response.content += f"\n• Quote valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
+                    dt_str = datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')
                 except:
-                    response.content += f"\n• Quote valid until: {quote['valid_until']}"
-            
-            # Add download links
+                    dt_str = quote['valid_until']
+                response.content += f"\n• {localized['quote_valid_until']}: {dt_str}"
+
             if quote.get('pdf_generated', False) and quote.get('pdf_url'):
-                response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
+                response.content += "\n\n" + localized['download_pdf'].format(url=quote['pdf_url'])
             else:
-                response.content += f"\n\n📄 **Quote PDF:** Currently being generated..."
+                response.content += f"\n\n{localized['pdf_generating']}"
                 if quote.get('pdf_error'):
-                    response.content += f" (Note: PDF generation encountered an issue - please contact support if needed)"
-            
+                    response.content += f" {localized['pdf_error_note']}"
+
             if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
-                response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
-            
-            # Add conversational next steps
-            response.content += f"\n\n**What happens next?**"
-            response.content += f"\n• Take a look at the detailed quote and let me know if anything needs adjusting"
+                response.content += "\n\n" + localized['download_pitch_deck'].format(url=quote['pitch_deck_url'])
+
+            response.content += f"\n\n**{localized['what_happens_next']}**"
+            response.content += f"\n• {localized['take_look']}"
             if quote.get('pitch_deck_generated', False):
-                response.content += f"\n• The pitch deck gives you a nice visual overview of everything"
-            response.content += f"\n• Feel free to ask any questions or request changes"
-            response.content += f"\n• Once you're happy with it, we can move forward with the next steps"
-        
+                response.content += f"\n• {localized['check_pitch_deck']}"
+            response.content += f"\n• {localized['feel_free_questions']}"
+            response.content += f"\n• {localized['move_forward']}"
+
         return response
+
     
     async def _generate_product_response(
         self, 

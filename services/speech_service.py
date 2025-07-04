@@ -1,4 +1,5 @@
 from faster_whisper import WhisperModel
+from services.language_service import LanguageService
 import numpy as np
 import io
 import soundfile as sf
@@ -42,6 +43,8 @@ class SpeechService:
         self.target_sr = 16000  # Whisper expects 16kHz audio
         self._session = None
         self._timeout = aiohttp.ClientTimeout(total=30)  # 30 second timeout
+
+        self.language_service = LanguageService()
         
         # ElevenLabs setup
         self.elevenlabs_client = None
@@ -132,7 +135,7 @@ class SpeechService:
     def _preprocess_audio(self, audio_data: Union[BinaryIO, bytes]) -> tuple[np.ndarray, int]:
         """
         Preprocess audio data to ensure it's in the correct format for Whisper.
-        
+    
         Args:
             audio_data: Audio data as file-like object or bytes
             
@@ -476,40 +479,25 @@ class SpeechService:
                     result = await self._elevenlabs_speech_to_text(audio_data, language)
                     
                     # Check if we got meaningful transcription results
+                    
                     transcription_text = result.get('text', '').strip()
                     if transcription_text:  # Non-empty transcription
-                        logger.info("✅ ElevenLabs STT successful")
-                        return result
-                    else:
-                        logger.warning(f"ElevenLabs STT returned empty transcription (attempt {attempt + 1}/{max_retries})")
-                        # Don't retry for empty results, fall back to Whisper immediately
-                        break
-                    
-                except Exception as e:
-                    logger.error(f"ElevenLabs STT failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
-                    if attempt < max_retries - 1:
-                        logger.info(f"Retrying ElevenLabs STT in {retry_delay} seconds...")
-                        await asyncio.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
-                    else:
-                        logger.warning("ElevenLabs STT failed after all retries, falling back to Whisper")
-            
-            # If we reach here, either ElevenLabs failed or returned empty results
-            logger.warning("ElevenLabs STT failed or returned empty results, falling back to Whisper")
-        
-        # Fallback to Whisper if ElevenLabs failed or not configured
-        if settings.speech_fallback_enabled:
-            for attempt in range(max_retries):
-                try:
-                    logger.info(f"Using Whisper STT fallback (attempt {attempt + 1}/{max_retries})")
-                    result = await self._whisper_speech_to_text(audio_data, language)
-                    
-                    # Check Whisper results too
-                    transcription_text = result.get('text', '').strip()
-                    if transcription_text:  # Non-empty transcription
-                        logger.info("✅ Whisper STT fallback successful")
+                        # Detect primary and secondary language
+                        detected_language = self.language_service.detect_language(transcription_text)
+                        result.update({
+                            'detected_language_info': detected_language,
+                            'auto_detected_primary': detected_language['primary_language'],
+                            'language_confidence': detected_language['primary_confidence']
+                        })
+                        if detected_language['primary_confidence'] > 0.8:
+                            result['language'] = detected_language['primary_language']
+
+                        logger.info("✅ Whisper STT fallback successful "
+                                    f"(primary={detected_language['primary_language']}, "
+                                    f"secondary={detected_language.get('secondary_language')})")
                         result["fallback_used"] = True
                         return result
+
                     else:
                         logger.warning(f"Whisper STT also returned empty transcription (attempt {attempt + 1}/{max_retries})")
                         if attempt == max_retries - 1:

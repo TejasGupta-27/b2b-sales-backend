@@ -13,6 +13,7 @@ from .dynamic_extraction_agent import DynamicExtractionAgent
 from pydantic import BaseModel, Field
 from pathlib import Path
 from services.prompt_manager import get_prompt_manager
+from services.language_service import LanguageService
 import os
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,12 @@ class QuoteGenerationAgent(AIProvider):
                     print(f"   Unknown message format: {msg}")
             
             conversation_text = "\n".join(conversation_parts)
+            language_service = LanguageService()
+
+            detected_language = language_service.detect_language(conversation_text)
+            primary_lang = detected_language["primary_language"]
+            print(f"🌐 Detected primary language: {primary_lang}")
+
             print(f"🔍 Debug - Final conversation text length: {len(conversation_text)}")
             
             if not conversation_text.strip():
@@ -166,8 +173,34 @@ class QuoteGenerationAgent(AIProvider):
             print("🔍 Debug - Preparing quote prompt...")
             safe_context = self._safe_serialize_context(customer_context)
             print(f"🔍 Debug - Safe context length: {len(safe_context)}")
-            
-            quote_prompt = f"""Based on this sales conversation, generate a complete structured quote.
+                        
+
+            if primary_lang == "ja":
+                quote_prompt = f"""この営業会話に基づいて、完全な見積書を日本語で作成してください。すべての出力を日本語で記載してください。
+
+会話内容:
+{conversation_text}
+
+顧客情報:
+{safe_context}
+
+見積書には以下を含めてください:
+1. 会話から抽出された顧客情報
+2. 会話で具体的に議論された製品やサービス
+3. 小計・税・合計を含むプロフェッショナルな価格情報
+4. 顧客ニーズにマッチするビジネス背景
+5. 利用規約
+6. 導入ノートと次のステップ
+7. プロフェッショナルな見積書タイトルと会社のキャッチコピー
+
+重要事項:
+- 会話で言及された製品/サービスのみに基づいてください
+- 話題にされていない製品やソリューションを追加しないでください
+- 現実的な価格設定を心がけてください
+- 会話内容に忠実な見積書を作成してください
+"""
+            else:
+                quote_prompt = f"""Based on this sales conversation, generate a complete structured quote.
 
 CONVERSATION:
 {conversation_text}
@@ -195,6 +228,7 @@ IMPORTANT GUIDELINES:
 
 Make sure the quote accurately represents what was discussed in the conversation, not generic business solutions."""
 
+
             print(f"🔍 Debug - Quote prompt length: {len(quote_prompt)}")
             
             # Use Pydantic function calling to generate structured quote
@@ -214,6 +248,8 @@ Make sure the quote accurately represents what was discussed in the conversation
             
             quote_id = quote_dict['quote_number'].split('-')[-1] if '-' in quote_dict['quote_number'] else str(uuid.uuid4())[:8]
             print(f"🔍 Debug - Generated quote_id: {quote_id}")
+
+            quote_dict["language"] = primary_lang
             
             quote_dict.update({
                 'quote_id': quote_id,
@@ -353,6 +389,7 @@ Make sure the quote accurately represents what was discussed in the conversation
             # Convert to the format expected by PDF generator
             pdf_quote_data = {
                 'quote_number': quote_dict.get('quote_number', 'N/A'),
+                'language': quote_dict.get('language', 'en'),
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
                 'created_at': quote_dict.get('created_at', ''),
                 'valid_until': quote_dict.get('valid_until', ''),

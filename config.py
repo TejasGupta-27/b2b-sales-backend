@@ -2,6 +2,8 @@ from pydantic_settings import BaseSettings
 from typing import List, Optional
 from pathlib import Path
 import os
+from typing import ClassVar
+
 
 class Settings(BaseSettings):
     # Disable .env file loading
@@ -59,6 +61,12 @@ class Settings(BaseSettings):
     # Hugging Face
     huggingface_api_key: Optional[str] = os.getenv("HUGGINGFACE_API_KEY")
     huggingface_model: str = os.getenv("HUGGINGFACE_MODEL", "microsoft/DialoGPT-medium")
+
+    # Multilingual settings (✅ FIXED with ClassVar)
+    SUPPORTED_LANGUAGES: ClassVar[list[str]] = ["en", "ja"]
+    DEFAULT_LANGUAGE: ClassVar[str] = "en"
+    LANGUAGE_DETECTION_CONFIDENCE_THRESHOLD: ClassVar[float] = 0.8
+    ENABLE_AUTO_LANGUAGE_DETECTION: ClassVar[bool] = True
     
     # Eleven Labs Configuration
     elevenlabs_api_key: Optional[str] = os.getenv("ELEVENLABS_API_KEY")

@@ -1,3 +1,4 @@
+from services.language_service import LanguageService
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -25,6 +26,7 @@ class EnhancedB2BSalesAgent(AIProvider):
     ):
         super().__init__(**kwargs)
         self.base_provider = base_provider
+        self.language_service = LanguageService()
         self.conversation_analyzer = ConversationFlowAgent(base_provider)
         self.quote_agent = QuoteGenerationAgent(base_provider)
         self.quick_response_generator = QuickResponseGenerator(base_provider)
@@ -218,6 +220,66 @@ class EnhancedB2BSalesAgent(AIProvider):
         })
         
         return response
+    
+
+    async def generate_multilingual_response(
+        self, 
+        messages: List[AIMessage], 
+        customer_context: Optional[Dict] = None,
+        detected_language: Optional[Dict] = None
+    ) -> AIResponse:
+        """
+        Generate response in the detected primary language
+        """
+        # Get the last user message for language detection
+        last_user_message = next((msg.content for msg in reversed(messages) if msg.role == "user"), "")
+        
+        # Detect language if not provided
+        if not detected_language and last_user_message:
+            detected_language = self.language_service.detect_language(last_user_message)
+        
+        primary_lang = detected_language.get('primary_language', 'en') if detected_language else 'en'
+        
+        # Add language instruction to the system prompt
+        language_instruction = self._get_language_instruction(primary_lang)
+        
+        # Modify the last system message or add language context
+        enhanced_messages = self._add_language_context(messages, language_instruction, primary_lang)
+        
+        # Generate response using existing logic
+        response = await self.generate_response(enhanced_messages, customer_context)
+        
+        # Add language metadata
+        if not response.metadata:
+            response.metadata = {}
+        response.metadata.update({
+            'response_language': primary_lang,
+            'language_detection': detected_language
+        })
+        
+        return response
+
+    def _get_language_instruction(self, language_code: str) -> str:
+        """Get language-specific instructions for the AI"""
+        instructions = {
+            'en': "Respond in English. Use professional business language appropriate for B2B sales.",
+            'ja': "日本語で回答してください。B2Bセールスに適した丁寧なビジネス日本語を使用してください。"
+        }
+        return instructions.get(language_code, instructions['en'])
+
+    def _add_language_context(self, messages: List[AIMessage], language_instruction: str, primary_lang: str) -> List[AIMessage]:
+        """Add language context to messages"""
+        enhanced_messages = messages.copy()
+        
+        # Add language instruction as a system message
+        language_system_msg = AIMessage(
+            role="system",
+            content=f"{language_instruction}\n\nPrimary communication language: {primary_lang}"
+        )
+        
+        # Insert after the main system prompt
+        enhanced_messages.insert(1, language_system_msg)
+        return enhanced_messages
     
     async def _handle_premature_pricing_request(
         self,

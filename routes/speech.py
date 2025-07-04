@@ -1,3 +1,4 @@
+from services.language_service import LanguageService
 from fastapi import APIRouter, UploadFile, File, HTTPException, Body, Depends, Form
 from typing import Optional, Union
 from services.speech_service import SpeechService
@@ -245,7 +246,7 @@ async def handle_voice_message(
     """
     Handle voice input just like text input, with an extra transcription step.
     The transcribed text is processed through the enhanced sales chat pipeline.
-    Also includes text-to-speech for the response.
+    Also includes text-to-speech for the response with multilingual support.
     """
     try:
         # Validate audio file
@@ -255,11 +256,29 @@ async def handle_voice_message(
                 detail="File must be an audio file"
             )
         
-        # Transcribe the audio to text
+        # Transcribe the audio to text (now includes automatic language detection)
         transcription_result = await speech_service.transcribe_audio(
             audio.file,
             language=language
         )
+        
+        # Get enhanced language detection from transcription
+        detected_language = transcription_result.get('detected_language_info')
+        primary_language = detected_language.get('primary_language', 'en') if detected_language else 'en'
+        language_confidence = detected_language.get('primary_confidence', 0.0) if detected_language else 0.0
+        
+        logger.info(f"Detected primary language: {primary_language} (confidence: {language_confidence:.2f})")
+        # Log full detection details
+        if detected_language:
+            secondary = detected_language.get('secondary_language')
+            secondary_confidence = detected_language.get('secondary_confidence', 0.0)
+            all_detected = detected_language.get('all_detected', [])
+
+            logger.info(f"🈯 Secondary language: {secondary} (confidence: {secondary_confidence:.2f})")
+            logger.info("📊 Language probabilities:")
+            for lang_info in all_detected:
+                logger.info(f"  - {lang_info['lang']}: {lang_info['prob']:.2f}")
+
         
         # Log STT provider used
         stt_provider = transcription_result.get('provider', 'unknown')
@@ -324,7 +343,7 @@ async def handle_voice_message(
                 db.commit()
                 logger.info(f"Created new lead with provided ID: {lead_id}")
         
-        # Save user message
+        # Save user message with enhanced language metadata
         user_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
@@ -335,7 +354,11 @@ async def handle_voice_message(
                 "is_voice_message": True,
                 "transcription_metadata": transcription_result,
                 "original_filename": audio.filename,
-                "content_type": audio.content_type
+                "content_type": audio.content_type,
+                "detected_language": detected_language,
+                "primary_language": primary_language,
+                "language_confidence": language_confidence,
+                "multilingual_support": True
             }
         )
         db.add(user_message)
@@ -362,10 +385,12 @@ async def handle_voice_message(
                 "company_size": getattr(lead_record, 'company_size', None),
                 "industry": getattr(lead_record, 'industry', None),
                 "budget_range": getattr(lead_record, 'budget_range', None),
-                "timeline": getattr(lead_record, 'decision_timeline', None)
+                "timeline": getattr(lead_record, 'decision_timeline', None),
+                "preferred_language": primary_language,  # Add language preference
+                "language_confidence": language_confidence
             }
         
-        # Create Enhanced B2B Sales Agent
+        # Create Enhanced B2B Sales Agent with multilingual support
         try:
             base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
             enhanced_agent = EnhancedB2BSalesAgent(
@@ -376,11 +401,21 @@ async def handle_voice_message(
             # Initialize if needed
             await enhanced_agent.initialize()
             
-            # Generate response with error handling
-            response = await enhanced_agent.generate_response(
-                messages, 
-                customer_context=customer_context
-            )
+            # Generate multilingual response with detected language context
+            if hasattr(enhanced_agent, 'generate_multilingual_response'):
+                response = await enhanced_agent.generate_multilingual_response(
+                    messages, 
+                    customer_context=customer_context,
+                    detected_language=detected_language
+                )
+                logger.info(f"Generated multilingual response for language: {primary_language}")
+            else:
+                # Fallback to regular response generation
+                response = await enhanced_agent.generate_response(
+                    messages, 
+                    customer_context=customer_context
+                )
+                logger.info("Using standard response generation (multilingual method not available)")
             
         except Exception as agent_error:
             logger.error(f"Agent error: {agent_error}")
@@ -394,18 +429,18 @@ async def handle_voice_message(
             response.metadata['agent_error'] = str(agent_error)
             response.metadata['fallback_used'] = True
         
-        # Generate speech for the response
+        # Generate speech for the response in the detected language
         speech_result = await speech_service.text_to_speech(
             text=response.content,
-            language=language or "en"
+            language=primary_language  # Use detected language instead of form language
         )
         
-        # Log TTS provider used
+        # Log TTS provider used with language info
         tts_provider = speech_result.get('provider', 'unknown')
         tts_fallback_used = speech_result.get('fallback_used', False)
-        logger.info(f"🔊 Voice synthesis using {tts_provider} {'(fallback)' if tts_fallback_used else '(primary)'}")
+        logger.info(f"🔊 Voice synthesis using {tts_provider} {'(fallback)' if tts_fallback_used else '(primary)'} for language: {primary_language}")
         
-        # Save assistant response
+        # Save assistant response with enhanced multilingual metadata
         response_metadata = {
             "model": response.model,
             "provider": response.provider,
@@ -413,7 +448,12 @@ async def handle_voice_message(
             "enhanced_sales_agent": True,
             "is_voice_message": True,
             "transcription_metadata": transcription_result,
-            "speech_metadata": speech_result
+            "speech_metadata": speech_result,
+            "detected_language": detected_language,
+            "response_language": primary_language,
+            "language_confidence": language_confidence,
+            "multilingual_support": True,
+            "language_detection_enabled": True
         }
         
         # Add product intelligence if available
@@ -423,6 +463,10 @@ async def handle_voice_message(
         # Add quote information if generated
         if response.metadata and 'quote' in response.metadata:
             response_metadata['quote'] = response.metadata['quote']
+        
+        # Add multilingual context if available
+        if response.metadata and 'multilingual_context' in response.metadata:
+            response_metadata['multilingual_context'] = response.metadata['multilingual_context']
         
         assistant_message = DBChatMessage(
             id=str(uuid.uuid4()),
@@ -435,7 +479,7 @@ async def handle_voice_message(
         db.add(assistant_message)
         db.commit()
         
-        # Return enhanced response with speech
+        # Return enhanced response with multilingual speech support
         return ChatResponse(
             message=response.content,
             lead_id=lead_id,
@@ -449,7 +493,13 @@ async def handle_voice_message(
                 "timestamp": datetime.now().isoformat(),
                 "is_voice_message": True,
                 "transcription_metadata": transcription_result,
-                "speech_data": speech_result
+                "speech_data": speech_result,
+                "detected_language": detected_language,
+                "response_language": primary_language,
+                "language_confidence": language_confidence,
+                "multilingual_support": True,
+                "language_detection_enabled": True,
+                "multilingual_context": response.metadata.get('multilingual_context') if response.metadata else None
             }
         )
         
