@@ -15,9 +15,13 @@ from datetime import datetime
 from dependencies import get_speech_service
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from config import settings
+from services.language_service import LanguageService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Initialize LanguageService
+language_service = LanguageService()
 
 class AudioData(BaseModel):
     audio_bytes: str  # base64 encoded audio data
@@ -27,6 +31,39 @@ class TextToSpeechRequest(BaseModel):
     text: str
     language: Optional[str] = "en"
 
+class LanguageDetectionRequest(BaseModel):
+    text: str
+
+@router.post("/detect-language")
+async def detect_text_language(request: LanguageDetectionRequest):
+    """
+    Detect the language of provided text using LanguageService.
+    
+    Args:
+        request: Text language detection request
+        
+    Returns:
+        dict: Language detection results with confidence scores
+    """
+    try:
+        detection_result = language_service.detect_language(request.text)
+        logger.info(f"🌐 Language detection: primary={detection_result['primary_language']} "
+                   f"({detection_result['primary_confidence']:.2f}), "
+                   f"secondary={detection_result.get('secondary_language', 'None')}")
+        return {
+            "success": True,
+            "text_length": len(request.text),
+            "detection_result": detection_result,
+            "supported_languages": language_service.supported_languages,
+            "multilingual_detected": detection_result.get('is_multilingual', False)
+        }
+    except Exception as e:
+        logger.error(f"Error in language detection: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error detecting language: {str(e)}"
+        )
+
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(None),
@@ -35,7 +72,7 @@ async def transcribe_audio(
     speech_service: SpeechService = Depends(get_speech_service)
 ):
     """
-    Transcribe audio to text using Whisper.
+    Transcribe audio to text using Whisper with enhanced language detection.
     
     Accepts either:
     1. A file upload (multipart/form-data)
@@ -48,7 +85,7 @@ async def transcribe_audio(
         speech_service: Initialized speech service instance
         
     Returns:
-        dict: Contains transcription text and metadata
+        dict: Contains transcription text and enhanced language metadata
     """
     try:
         logger.info(f"Received transcription request: file={audio is not None}, audio_data={audio_data is not None}")
@@ -66,6 +103,19 @@ async def transcribe_audio(
                     audio.file,
                     language=language
                 )
+                
+                # Enhanced language detection post-processing
+                transcribed_text = result.get('text', '').strip()
+                if transcribed_text:
+                    # Get additional language detection from LanguageService
+                    enhanced_detection = language_service.detect_language(transcribed_text)
+                    result['enhanced_language_detection'] = enhanced_detection
+                    
+                    # Log enhanced detection
+                    logger.info(f"🌐 Enhanced language detection: primary={enhanced_detection['primary_language']} "
+                               f"({enhanced_detection['primary_confidence']:.2f}), "
+                               f"secondary={enhanced_detection.get('secondary_language', 'None')}")
+                
                 # Log STT provider used
                 stt_provider = result.get('provider', 'unknown')
                 fallback_used = result.get('fallback_used', False)
@@ -89,6 +139,19 @@ async def transcribe_audio(
                     audio_bytes,
                     language=audio_data.language or language
                 )
+                
+                # Enhanced language detection post-processing
+                transcribed_text = result.get('text', '').strip()
+                if transcribed_text:
+                    # Get additional language detection from LanguageService
+                    enhanced_detection = language_service.detect_language(transcribed_text)
+                    result['enhanced_language_detection'] = enhanced_detection
+                    
+                    # Log enhanced detection
+                    logger.info(f"🌐 Enhanced language detection: primary={enhanced_detection['primary_language']} "
+                               f"({enhanced_detection['primary_confidence']:.2f}), "
+                               f"secondary={enhanced_detection.get('secondary_language', 'None')}")
+                
                 # Log STT provider used
                 stt_provider = result.get('provider', 'unknown')
                 fallback_used = result.get('fallback_used', False)
@@ -365,7 +428,7 @@ async def handle_voice_message(
                 "timeline": getattr(lead_record, 'decision_timeline', None)
             }
         
-        # Create Simple Conversational Agent
+        # Create Simple Conversational Agent with multilingual support
         try:
             base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
             simple_agent = SimpleConversationalAgent(
@@ -376,11 +439,12 @@ async def handle_voice_message(
             # Initialize if needed
             await simple_agent.initialize()
             
-            # Generate response with error handling
+            # Generate response with language context
             response = await simple_agent.generate_response(
                 messages, 
                 customer_context=customer_context
             )
+            logger.info(f"Generated response for detected language: {primary_language}")
             
         except Exception as agent_error:
             logger.error(f"Agent error: {agent_error}")
@@ -405,7 +469,7 @@ async def handle_voice_message(
         tts_fallback_used = speech_result.get('fallback_used', False)
         logger.info(f"🔊 Voice synthesis using {tts_provider} {'(fallback)' if tts_fallback_used else '(primary)'}")
         
-        # Save assistant response
+        # Save assistant response with enhanced multilingual metadata
         response_metadata = {
             "model": response.model,
             "provider": response.provider,
@@ -413,7 +477,12 @@ async def handle_voice_message(
             "enhanced_sales_agent": True,
             "is_voice_message": True,
             "transcription_metadata": transcription_result,
-            "speech_metadata": speech_result
+            "speech_metadata": speech_result,
+            "detected_language": detected_language,
+            "response_language": primary_language,
+            "language_confidence": language_confidence,
+            "multilingual_support": True,
+            "language_detection_enabled": True
         }
         
         # Add product intelligence if available
@@ -423,6 +492,10 @@ async def handle_voice_message(
         # Add quote information if generated
         if response.metadata and 'quote' in response.metadata:
             response_metadata['quote'] = response.metadata['quote']
+        
+        # Add multilingual context if available
+        if response.metadata and 'multilingual_context' in response.metadata:
+            response_metadata['multilingual_context'] = response.metadata['multilingual_context']
         
         assistant_message = DBChatMessage(
             id=str(uuid.uuid4()),
@@ -469,6 +542,7 @@ async def text_to_speech(
 ):
     """
     Convert text to speech with ElevenLabs (primary) and gTTS (fallback)
+    Enhanced with automatic language detection if language not specified.
     
     Args:
         request: Text-to-speech request parameters
@@ -478,11 +552,40 @@ async def text_to_speech(
         dict: Contains base64 encoded audio data and metadata
     """
     try:
+        # Auto-detect language if not specified or if confidence is low
+        target_language = request.language
+        detected_language_info = None
+        
+        if not target_language or target_language == "auto":
+            # Auto-detect the language
+            detected_language_info = language_service.detect_language(request.text)
+            target_language = detected_language_info['primary_language']
+            logger.info(f"🌐 Auto-detected language: {target_language} "
+                       f"(confidence: {detected_language_info['primary_confidence']:.2f})")
+        elif target_language in ["en", "ja", "es", "fr", "de", "it", "pt", "ko", "zh"]:
+            # Validate the detected language matches the request if confidence is high
+            detected_language_info = language_service.detect_language(request.text)
+            if detected_language_info['primary_confidence'] > 0.8:
+                if detected_language_info['primary_language'] != target_language:
+                    logger.warning(f"⚠️ Language mismatch: requested={target_language}, "
+                                 f"detected={detected_language_info['primary_language']} "
+                                 f"(confidence: {detected_language_info['primary_confidence']:.2f})")
+                    # Use detected language if confidence is very high
+                    if detected_language_info['primary_confidence'] > 0.9:
+                        target_language = detected_language_info['primary_language']
+                        logger.info(f"🔄 Switching to detected language: {target_language}")
+        
         result = await speech_service.text_to_speech(
             text=request.text,
-            language=request.language
+            language=target_language
         )
-        logger.info(f"✅ Text-to-speech completed using {result.get('provider', 'unknown')} provider")
+        
+        # Add language detection metadata to result
+        if detected_language_info:
+            result['language_detection'] = detected_language_info
+            result['auto_detected_language'] = target_language != request.language
+        
+        logger.info(f"✅ Text-to-speech completed using {result.get('provider', 'unknown')} provider for language: {target_language}")
         return result
     except Exception as e:
         logger.error(f"Error in text-to-speech endpoint: {str(e)}")
@@ -571,4 +674,60 @@ async def configure_elevenlabs_voice(
         raise HTTPException(
             status_code=500,
             detail=f"Error configuring voice: {str(e)}"
+        ) 
+
+@router.get("/language-support")
+async def get_language_support():
+    """
+    Get information about supported languages across all speech services.
+    
+    Returns:
+        dict: Comprehensive language support information
+    """
+    try:
+        return {
+            "language_detection": {
+                "supported_languages": language_service.supported_languages,
+                "detection_method": "langdetect with polyglot fallback",
+                "multilingual_support": True,
+                "confidence_threshold": 0.8
+            },
+            "speech_to_text": {
+                "elevenlabs_supported": [
+                    "en", "ja", "zh", "de", "hi", "fr", "ko", "pt", "it", "es", 
+                    "id", "nl", "tr", "fi", "sv", "bg", "hr", "cs", "da", "et",
+                    "lv", "lt", "mt", "no", "pl", "ro", "sk", "sl", "uk", "ar"
+                ],
+                "whisper_supported": [
+                    "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo",
+                    "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es",
+                    "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw",
+                    "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja",
+                    "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo",
+                    "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt",
+                    "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt",
+                    "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq",
+                    "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl",
+                    "tr", "tt", "uk", "ur", "uz", "vi", "yi", "yo", "zh"
+                ]
+            },
+            "text_to_speech": {
+                "elevenlabs_supported": ["en", "ja", "zh", "de", "hi", "fr", "ko", "pt", "it", "es"],
+                "gtts_supported": [
+                    "af", "ar", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de",
+                    "el", "en", "es", "et", "fi", "fr", "gu", "hi", "hr", "hu",
+                    "id", "is", "it", "ja", "jw", "km", "kn", "ko", "la", "lv",
+                    "mk", "ml", "mr", "my", "ne", "nl", "no", "pl", "pt", "ro",
+                    "ru", "si", "sk", "sq", "sr", "su", "sv", "sw", "ta", "te",
+                    "th", "tl", "tr", "uk", "ur", "vi", "zh"
+                ]
+            },
+            "recommended_languages": ["en", "ja", "es", "fr", "de", "it", "pt", "ko", "zh"],
+            "auto_detection_enabled": True
+        }
+    except Exception as e:
+        logger.error(f"Error getting language support info: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving language support: {str(e)}"
         ) 

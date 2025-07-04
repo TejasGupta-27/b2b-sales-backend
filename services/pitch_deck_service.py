@@ -6,8 +6,6 @@ from pptx.util import Pt, Inches
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-from pptx.oxml.ns import qn
-from pptx.oxml import parse_xml
 from config import settings
 import logging
 
@@ -23,26 +21,18 @@ class PitchDeckService:
         self.deployment_name = settings.azure_openai_deployment_name
 
     def hide_placeholders(self, slide):
-        """Safely hide placeholders without corrupting the slide structure"""
         shapes_to_remove = []
-        
         for shape in slide.shapes:
-            # Check if it's a placeholder
             if hasattr(shape, 'placeholder_format') and shape.placeholder_format is not None:
                 shapes_to_remove.append(shape)
-            # Also remove text boxes that might be default placeholders
             elif hasattr(shape, 'text_frame') and shape.text_frame is not None:
-                # Check if it contains placeholder text
                 if shape.text_frame.text.strip() in ['Click to add title', 'Click to add subtitle', 'Click to add text']:
                     shapes_to_remove.append(shape)
-        
-        # Remove identified placeholders
         for shape in shapes_to_remove:
             try:
                 sp = shape._element
                 sp.getparent().remove(sp)
             except:
-                # If direct removal fails, try making it invisible
                 try:
                     shape.width = 0
                     shape.height = 0
@@ -50,37 +40,35 @@ class PitchDeckService:
                     pass
 
     def clear_slide_content_safely(self, slide):
-        """Safely clear slide content without corrupting the slide structure"""
-        # Only remove content shapes, not structural elements
         shapes_to_remove = []
-        
         for shape in slide.shapes:
-            # Only remove shapes that are not essential slide structure
-            if (hasattr(shape, 'shape_type') and 
-                shape.shape_type in [1, 17, 14]):  # Text box, auto shape, picture
+            if hasattr(shape, 'shape_type') and shape.shape_type in [1, 17, 14]:
                 shapes_to_remove.append(shape)
             elif hasattr(shape, 'text_frame') and shape.text_frame is not None:
-                # Clear text content but keep the shape structure
                 try:
                     shape.text_frame.clear()
                 except:
                     shapes_to_remove.append(shape)
-        
-        # Remove non-essential shapes
         for shape in shapes_to_remove:
             try:
                 sp = shape._element
                 sp.getparent().remove(sp)
             except:
-                # If removal fails, just hide it
                 try:
                     shape.width = 0
                     shape.height = 0
                 except:
                     pass
 
-    async def extract_ppt_structure(self, quotation: str) -> dict:
-        """Use Azure OpenAI to generate a detailed and persuasive sales pitch deck structure from the quotation."""
+    # ✅ UPDATED: added `language` param with fallback
+    async def extract_ppt_structure(self, quotation: str, language: str = "en") -> dict:
+        """Generate a structured and persuasive sales pitch deck in the desired language."""
+
+        # ✅ Add language condition
+        language_note = ""
+        if language == "ja":
+            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in Japanese."
+
         prompt = f"""
 You are a business assistant. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
 
@@ -136,9 +124,10 @@ Return your response as valid JSON:
   ]
 }}
 
-✅ Use ONLY the product and specifications mentioned in the quotation — do NOT make up new ones.  
-✅ Use slightly varied product names for realism.  
+✅ Use ONLY the product and specifications mentioned in the quotation — do NOT make up new ones.
 ✅ Return valid JSON ONLY — no commentary, no markdown.
+
+{language_note}
 """
 
         response = self.client.chat.completions.create(
@@ -162,7 +151,7 @@ Return your response as valid JSON:
             raise
 
     def add_comparison_table(self, slide, table_data):
-        rows = len(table_data["rows"]) + 1  # +1 for header
+        rows = len(table_data["rows"]) + 1
         cols = len(table_data["columns"])
         left = Inches(0.5)
         top = Inches(1.5)
@@ -171,40 +160,34 @@ Return your response as valid JSON:
 
         table_shape = slide.shapes.add_table(rows, cols, left, top, width, height).table
 
-        # Header row
         for col, header in enumerate(table_data["columns"]):
             cell = table_shape.cell(0, col)
             cell.text = header
             cell.text_frame.paragraphs[0].font.bold = True
             cell.text_frame.paragraphs[0].font.size = Pt(14)
 
-        # Data rows
         for i, row in enumerate(table_data["rows"], start=1):
             for j, value in enumerate(row):
                 cell = table_shape.cell(i, j)
-                cell.text = str(value)  # Ensure it's a string
+                cell.text = str(value)
                 cell.text_frame.paragraphs[0].font.size = Pt(12)
 
     async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx"):
-        """Generate a PowerPoint presentation from the structured data"""
-        # Load template if it exists, otherwise create new presentation
         if os.path.exists('template.pptx'):
             logger.info("Using template.pptx")
             prs = Presentation('template.pptx')
         else:
             logger.info("Creating new presentation (no template found)")
             prs = Presentation()
-        
+
         TITLE_FONT = "Segoe UI Semibold"
         BODY_FONT = "Segoe UI"
         TITLE_COLOR = RGBColor(44, 62, 80)
         ACCENT_COLOR = RGBColor(52, 152, 219)
 
-        # Create cover slide
         cover_slide = prs.slides.add_slide(prs.slide_layouts[0])
-        self.hide_placeholders(cover_slide)  # Hide template placeholders
-        
-        # Add cover slide content
+        self.hide_placeholders(cover_slide)
+
         title_box = cover_slide.shapes.add_textbox(Inches(1.5), Inches(1.5), Inches(7), Inches(2))
         tf = title_box.text_frame
         tf.text = "Sales Pitch Deck"
@@ -213,7 +196,7 @@ Return your response as valid JSON:
         tf.paragraphs[0].font.name = TITLE_FONT
         tf.paragraphs[0].font.color.rgb = TITLE_COLOR
         tf.paragraphs[0].alignment = PP_ALIGN.CENTER
-        
+
         subtitle = tf.add_paragraph()
         subtitle.text = "Generated from Quotation"
         subtitle.font.size = Pt(24)
@@ -221,12 +204,10 @@ Return your response as valid JSON:
         subtitle.font.color.rgb = ACCENT_COLOR
         subtitle.alignment = PP_ALIGN.CENTER
 
-        # Create content slides
         for slide_data in data.get("slides", []):
-            slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
-            self.hide_placeholders(slide)  # Hide template placeholders
-            
-            # Add title
+            slide = prs.slides.add_slide(prs.slide_layouts[1])
+            self.hide_placeholders(slide)
+
             title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8), Inches(1))
             tf = title_box.text_frame
             tf.text = slide_data["title"]
@@ -235,36 +216,30 @@ Return your response as valid JSON:
             tf.paragraphs[0].font.name = TITLE_FONT
             tf.paragraphs[0].font.color.rgb = TITLE_COLOR
 
-            # Add accent line
             line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.5), Inches(1.5), Inches(0.1), Inches(4))
             line.fill.solid()
             line.fill.fore_color.rgb = ACCENT_COLOR
             line.line.fill.background()
 
-            # Add content
             content_box = slide.shapes.add_textbox(Inches(0.8), Inches(1.5), Inches(8), Inches(5))
             tf = content_box.text_frame
             tf.word_wrap = True
 
             for i, line_text in enumerate(slide_data["content"]):
                 if i == 0:
-                    # First paragraph already exists
                     p = tf.paragraphs[0]
                 else:
                     p = tf.add_paragraph()
-                
                 p.text = f"• {line_text}"
                 p.font.size = Pt(20)
                 p.font.name = BODY_FONT
                 p.font.color.rgb = RGBColor(80, 80, 80)
                 p.space_after = Pt(12)
 
-        # Create table slides
         for table_data in data.get("tables", []):
-            slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
-            self.hide_placeholders(slide)  # Hide template placeholders
-            
-            # Add title
+            slide = prs.slides.add_slide(prs.slide_layouts[1])
+            self.hide_placeholders(slide)
+
             title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8), Inches(1))
             tf = title_box.text_frame
             tf.text = table_data["title"]
@@ -272,15 +247,13 @@ Return your response as valid JSON:
             tf.paragraphs[0].font.bold = True
             tf.paragraphs[0].font.name = TITLE_FONT
             tf.paragraphs[0].font.color.rgb = TITLE_COLOR
-            
-            # Add table
+
             self.add_comparison_table(slide, table_data)
 
-        # Save presentation
         try:
             prs.save(output_path)
             logger.info("Presentation saved successfully to: %s", output_path)
             return output_path
         except Exception as e:
             logger.error("Error saving presentation: %s", e)
-            raise 
+            raise

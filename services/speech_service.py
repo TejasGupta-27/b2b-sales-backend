@@ -478,7 +478,20 @@ class SpeechService:
                     # Check if we got meaningful transcription results
                     transcription_text = result.get('text', '').strip()
                     if transcription_text:  # Non-empty transcription
-                        logger.info("✅ ElevenLabs STT successful")
+                        # Detect primary and secondary language using LanguageService
+                        detected_language = self.language_service.detect_language(transcription_text)
+                        result.update({
+                            'detected_language_info': detected_language,
+                            'auto_detected_primary': detected_language['primary_language'],
+                            'language_confidence': detected_language['primary_confidence']
+                        })
+                        # Override language if confidence is high
+                        if detected_language['primary_confidence'] > 0.8:
+                            result['language'] = detected_language['primary_language']
+
+                        logger.info("✅ ElevenLabs STT successful "
+                                    f"(primary={detected_language['primary_language']}, "
+                                    f"secondary={detected_language.get('secondary_language')})")
                         return result
                     else:
                         logger.warning(f"ElevenLabs STT returned empty transcription (attempt {attempt + 1}/{max_retries})")
@@ -504,10 +517,23 @@ class SpeechService:
                     logger.info(f"Using Whisper STT fallback (attempt {attempt + 1}/{max_retries})")
                     result = await self._whisper_speech_to_text(audio_data, language)
                     
-                    # Check Whisper results too
+                    # Check Whisper results and add language detection
                     transcription_text = result.get('text', '').strip()
                     if transcription_text:  # Non-empty transcription
-                        logger.info("✅ Whisper STT fallback successful")
+                        # Detect primary and secondary language using LanguageService
+                        detected_language = self.language_service.detect_language(transcription_text)
+                        result.update({
+                            'detected_language_info': detected_language,
+                            'auto_detected_primary': detected_language['primary_language'],
+                            'language_confidence': detected_language['primary_confidence']
+                        })
+                        # Override language if confidence is high
+                        if detected_language['primary_confidence'] > 0.8:
+                            result['language'] = detected_language['primary_language']
+
+                        logger.info("✅ Whisper STT fallback successful "
+                                    f"(primary={detected_language['primary_language']}, "
+                                    f"secondary={detected_language.get('secondary_language')})")
                         result["fallback_used"] = True
                         return result
                     else:

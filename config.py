@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import List, Optional, ClassVar
 from pathlib import Path
 import os
 
@@ -7,6 +7,12 @@ class Settings(BaseSettings):
     # Disable .env file loading
     class Config:
         env_file = None
+    
+    # Multilingual Configuration
+    SUPPORTED_LANGUAGES: ClassVar[list[str]] = ["en", "ja", "es", "fr", "de", "it", "pt", "ko", "zh"]
+    DEFAULT_LANGUAGE: ClassVar[str] = "en"
+    LANGUAGE_DETECTION_CONFIDENCE_THRESHOLD: ClassVar[float] = 0.8
+    ENABLE_AUTO_LANGUAGE_DETECTION: ClassVar[bool] = True
     
     # API Configuration
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
