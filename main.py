@@ -323,6 +323,8 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
 
             # 📌 Capture language from request or fallback
             lang = getattr(request, "language", None)
+            if lang == "jp":
+                lang = "ja"
             if not lang:
                 logger.warning("⚠️ No language provided in request. Defaulting to English.")
                 lang = "en"

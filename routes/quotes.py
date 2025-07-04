@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 import os
@@ -54,7 +54,7 @@ async def generate_quote(quote_request: Dict[str, Any]):
         return {
             "quote": quote,
             "quote_id": quote_id,
-            "quote_link": f"/api/quotes/download-pdf/{quote_id}",
+            "quote_link": f"/api/quotes/download-pdf/{quote_id}?language={language}",
             "pitch_deck_id": deck_id,
             "pitch_deck_link": f"/api/quotes/download-pitch-deck/{deck_id}"
         }
@@ -115,23 +115,41 @@ async def generate_quote_with_pdf(quote_request: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/download-pdf/{quote_id}")
-async def download_quote_pdf(quote_id: str):
-    """Download PDF file for a quote"""
+async def download_quote_pdf(quote_id: str, language: str = "en"):
+    """Download PDF file for a quote with language support"""
     try:
-        file_path = Path(f"Data/quotes/quote_{quote_id}.pdf")
-        if not file_path.exists():
+        quotes_dir = Path("Data/quotes")
+        
+        # First try to find the language-specific file
+        language_file_path = quotes_dir / f"quote_{quote_id}_{language}.pdf"
+        
+        # If language-specific file doesn't exist, try common language files
+        if not language_file_path.exists():
+            # Try Japanese first if not already tried
+            if language != "ja":
+                ja_file_path = quotes_dir / f"quote_{quote_id}_ja.pdf"
+                if ja_file_path.exists():
+                    language_file_path = ja_file_path
+            
+            # Try English if still not found
+            if not language_file_path.exists() and language != "en":
+                en_file_path = quotes_dir / f"quote_{quote_id}_en.pdf"
+                if en_file_path.exists():
+                    language_file_path = en_file_path
+            
+            # Fall back to original naming convention
+            if not language_file_path.exists():
+                language_file_path = quotes_dir / f"quote_{quote_id}.pdf"
+        
+        if not language_file_path.exists():
             raise HTTPException(status_code=404, detail="PDF file not found")
 
-        def iter_file():
-            with open(file_path, 'rb') as file:
-                yield from file
-
-        # Add a custom header with the send email link
-        return StreamingResponse(
-            iter_file(),
-            media_type='application/pdf',
+        # Use FileResponse for efficient file serving and proper headers
+        return FileResponse(
+            path=language_file_path,
+            media_type="application/pdf",
+            filename=f"quote_{quote_id}.pdf",  # This sets Content-Disposition
             headers={
-                "Content-Disposition": f"attachment; filename=quote_{quote_id}.pdf",
                 "X-Send-Email-Link": f"/api/quotes/send-email/{quote_id}"
             }
         )

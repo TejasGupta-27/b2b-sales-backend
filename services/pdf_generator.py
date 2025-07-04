@@ -1,16 +1,21 @@
-from reportlab.lib.pagesizes import letter, A4
+from io import BytesIO
+import re
+import requests
+from pathlib import Path
+from typing import Any, Dict
+
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from io import BytesIO
-from datetime import datetime, timedelta
-from typing import Dict, Any
-import os
-from pathlib import Path
+from reportlab.platypus import (PageBreak, Paragraph, SimpleDocTemplate,
+                                  Spacer, Table, TableStyle)
+
+# If you use 'font_url', define it or import it as well:
+font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Regular.otf"
 
 class PDFGenerator:
     def __init__(self):
@@ -21,24 +26,10 @@ class PDFGenerator:
     
     def _register_japanese_fonts(self):
         """Register Japanese fonts for use in PDF"""
-        try:    
-            self._download_noto_font()
-        except Exception as e:
-            print(f"❌ Font registration error: {e}")
-    
-    def _download_noto_font(self):
-        """Download Noto Sans CJK font as fallback"""
         try:
-            import requests
-            
-            # Create fonts directory
             fonts_dir = Path("fonts")
             fonts_dir.mkdir(exist_ok=True)
-            
-            # Download Noto Sans CJK
-            font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Regular.otf"
             font_path = fonts_dir / "NotoSansJP-Regular.ttf"
-            
             if not font_path.exists():
                 print("📥 Downloading Noto Sans CJK font...")
                 response = requests.get(font_url, timeout=30)
@@ -54,8 +45,7 @@ class PDFGenerator:
             print("✅ Japanese font registered successfully")
             
         except Exception as e:
-            print(f"❌ Failed to download/register font: {e}")
-            print("💡 Please manually install a Japanese font or use alternative solution")
+            print(f"❌ Font registration error: {e}")
     
     def _setup_custom_styles(self):
         """Setup custom styles for the PDF"""
@@ -139,6 +129,65 @@ class PDFGenerator:
             alignment=TA_LEFT
         ))
     
+    def update_styles_for_language(self, language: str = "en"):
+        """Update PDF styles to use appropriate fonts for the given language"""
+        if language == "ja" and self.japanese_font_registered:
+            # Update all styles to use Japanese font
+            for style_name in ['CompanyHeader', 'QuoteTitle', 'SectionHeader', 'TableCell', 'SmallText', 'CompanyTagline', 'JapaneseText']:
+                if style_name in self.styles:
+                    self.styles[style_name].fontName = 'JapaneseFont'
+            
+            # Update Normal style as well
+            if 'Normal' in self.styles:
+                self.styles['Normal'].fontName = 'JapaneseFont'
+        
+        print(f"✅ Styles updated for language: {language}")
+    
+    def _format_japanese_text(self, text: str, max_width: int = 50) -> str:
+        """Format Japanese text with proper line breaks and spacing"""
+        if not text:
+            return text
+            
+        # Check if text contains Japanese characters
+        has_japanese = any(
+            0x3000 <= ord(char) <= 0x9FAF  # Japanese character ranges
+            for char in text
+        )
+        
+        if not has_japanese:
+            return text
+            
+        # For Japanese text, add soft breaks at logical points
+        # Add zero-width spaces after certain characters to allow line breaks
+        japanese_break_chars = ['、', '。', '！', '？', '：', '；', '）', '】', '』', '」']
+        
+        formatted_text = text
+        for char in japanese_break_chars:
+            # Add a zero-width space after punctuation to allow line breaks
+            formatted_text = formatted_text.replace(char, char + '\u200B')
+        
+        # Also add breaks after certain particles and conjunctions
+        particles = ['は', 'が', 'を', 'に', 'で', 'と', 'の', 'から', 'まで', 'より', 'など']
+        for particle in particles:
+            formatted_text = formatted_text.replace(particle, particle + '\u200B')
+        
+        # If text is still too long, add manual line breaks
+        if len(formatted_text) > max_width:
+            # Split into roughly equal parts
+            mid_point = len(formatted_text) // 2
+            # Find the nearest break point
+            for i in range(mid_point - 10, mid_point + 10):
+                if i < len(formatted_text) and formatted_text[i] in ['、', '。', ' ', '\u200B']:
+                    formatted_text = formatted_text[:i+1] + '\n' + formatted_text[i+1:]
+                    break
+        
+        return formatted_text
+    
+    def _create_table_paragraph(self, text: str, style_name: str = 'TableCell') -> Paragraph:
+        """Create a paragraph with proper Japanese text formatting"""
+        formatted_text = self._format_japanese_text(text, max_width=40)
+        return Paragraph(formatted_text, self.styles[style_name])
+    
     def generate_quote_pdf(self, quote_data: Dict[str, Any]) -> BytesIO:
         """Generate PDF from quote data with Japanese support"""
         buffer = BytesIO()
@@ -163,10 +212,11 @@ class PDFGenerator:
             story.append(Spacer(1, 12))
             
             # Quote information
+            labels = quote_data.get('labels', {})
             quote_info = [
-                ['Quote Number:', quote_data.get('quote_number', 'N/A')],
-                ['Date:', quote_data.get('created_at', '')[:10] if quote_data.get('created_at') else 'N/A'],
-                ['Valid Until:', quote_data.get('valid_until', '')[:10] if quote_data.get('valid_until') else 'N/A'],
+                [labels.get('quote_number', 'Quote Number:'), quote_data.get('quote_number', 'N/A')],
+                [labels.get('date', 'Date:'), quote_data.get('created_at', '')[:10] if quote_data.get('created_at') else 'N/A'],
+                [labels.get('valid_until', 'Valid Until:'), quote_data.get('valid_until', '')[:10] if quote_data.get('valid_until') else 'N/A'],
             ]
             
             quote_table = Table(quote_info, colWidths=[2*inch, 3*inch])
@@ -183,17 +233,17 @@ class PDFGenerator:
             # Customer information
             customer_info = quote_data.get('customer_info', {})
             if customer_info:
-                story.append(Paragraph('Customer Information', self.styles['Heading2']))
+                story.append(Paragraph(labels.get('customer_information', 'Customer Information'), self.styles['Heading2']))
                 
                 customer_data = []
-                if customer_info.get('company_name'):
-                    customer_data.append(['Company:', customer_info['company']])
-                if customer_info.get('contact_name'):
-                    customer_data.append(['Contact:', customer_info['contact']])
+                if customer_info.get('company'):
+                    customer_data.append([labels.get('company', 'Company:'), customer_info['company']])
+                if customer_info.get('contact'):
+                    customer_data.append([labels.get('contact', 'Contact:'), customer_info['contact']])
                 if customer_info.get('email'):
-                    customer_data.append(['Email:', customer_info['email']])
+                    customer_data.append([labels.get('email', 'Email:'), customer_info['email']])
                 if customer_info.get('phone'):
-                    customer_data.append(['Phone:', customer_info['phone']])
+                    customer_data.append([labels.get('phone', 'Phone:'), customer_info['phone']])
                 
                 if customer_data:
                     customer_table = Table(customer_data, colWidths=[2*inch, 3*inch])
@@ -208,28 +258,39 @@ class PDFGenerator:
                 story.append(Spacer(1, 20))
             
             # Line items with better text wrapping
-            story.append(Paragraph('Quote Details', self.styles['Heading2']))
+            labels = quote_data.get('labels', {})
+            story.append(Paragraph(labels.get('quote_details', 'Quote Details'), self.styles['Heading2']))
             
             line_items = quote_data.get('line_items', [])
             if line_items:
-                # Create table headers
-                table_data = [['Item', 'Description', 'Qty', 'Unit Price', 'Total']]
+                # Create table headers with localized labels
+                table_data = [[
+                    labels.get('item', 'Item'), 
+                    labels.get('description', 'Description'), 
+                    labels.get('qty', 'Qty'), 
+                    labels.get('unit_price', 'Unit Price'), 
+                    labels.get('total', 'Total')
+                ]]
                 
                 # Add line items with text wrapping
                 for item in line_items:
-                    # Wrap description text in Paragraph for better formatting
+                    # Use proper Japanese text formatting
+                    name = item.get('name', '')
                     description = item.get('description', '')
-                    if len(description) > 50:  # If description is long, use paragraph style
-                        desc_para = Paragraph(description, self.styles['TableCell'])
-                    else:
-                        desc_para = description
+                    
+                    # Create paragraphs with proper Japanese formatting
+                    name_para = self._create_table_paragraph(name)
+                    desc_para = self._create_table_paragraph(description)
+                    
+                    # Get currency symbol from quote data
+                    currency_symbol = quote_data.get('currency_symbol', '$')
                     
                     table_data.append([
-                        Paragraph(item.get('name', ''), self.styles['TableCell']),
+                        name_para,
                         desc_para,
                         str(item.get('quantity', 1)),
-                        f"${item.get('unit_price', 0):,.2f}",
-                        f"${item.get('total_price', 0):,.2f}"
+                        f"{currency_symbol}{item.get('unit_price', 0):,.2f}",
+                        f"{currency_symbol}{item.get('total_price', 0):,.2f}"
                     ])
                 
                 # Create table with adjusted column widths
@@ -268,15 +329,16 @@ class PDFGenerator:
                 story.append(Spacer(1, 20))
             
             # Pricing summary
-            financials = quote_data.get('financials', {})
-            currency = quote_data.get('currency') or financials.get('currency', 'USD')
-            subtotal = quote_data.get('subtotal')
-            tax_amount = financials.get('tax_amount', 0)
-            total = financials.get('total', 0)
+            currency = quote_data.get('currency', 'USD')
+            currency_symbol = quote_data.get('currency_symbol', '$')
+            subtotal = quote_data.get('subtotal', 0)
+            tax_amount = quote_data.get('tax_amount', 0)
+            total = quote_data.get('total', 0)
+            
             pricing_data = [
-                ['Subtotal:', f"${subtotal:,.2f} {currency}"],
-                ['Tax:', f"${tax_amount:,.2f} {currency}"],
-                ['Total:', f"${total:,.2f} {currency}"]
+                [labels.get('subtotal', 'Subtotal:'), f"{currency_symbol}{subtotal:,.2f}"],
+                [labels.get('tax', 'Tax:'), f"{currency_symbol}{tax_amount:,.2f}"],
+                [labels.get('total_amount', 'Total:'), f"{currency_symbol}{total:,.2f}"]
             ]
             
             pricing_table = Table(pricing_data, colWidths=[4*inch, 2*inch])
@@ -296,7 +358,7 @@ class PDFGenerator:
             # Terms and conditions
             terms = quote_data.get('terms_and_conditions', [])
             if terms:
-                story.append(Paragraph('Terms and Conditions', self.styles['Heading2']))
+                story.append(Paragraph(labels.get('terms_and_conditions', 'Terms and Conditions'), self.styles['Heading2']))
                 for term in terms:
                     story.append(Paragraph(f"• {term}", self.styles['JapaneseText']))
                 story.append(Spacer(1, 15))
@@ -304,7 +366,7 @@ class PDFGenerator:
             # Implementation notes
             implementation_notes = quote_data.get('implementation_notes', [])
             if implementation_notes:
-                story.append(Paragraph('Implementation Notes', self.styles['Heading2']))
+                story.append(Paragraph(labels.get('implementation_notes', 'Implementation Notes'), self.styles['Heading2']))
                 for note in implementation_notes:
                     story.append(Paragraph(f"• {note}", self.styles['JapaneseText']))
                 story.append(Spacer(1, 15))
@@ -312,7 +374,7 @@ class PDFGenerator:
             # Next steps
             next_steps = quote_data.get('next_steps', [])
             if next_steps:
-                story.append(Paragraph('Next Steps', self.styles['Heading2']))
+                story.append(Paragraph(labels.get('next_steps', 'Next Steps'), self.styles['Heading2']))
                 for step in next_steps:
                     story.append(Paragraph(f"• {step}", self.styles['JapaneseText']))
             
@@ -331,6 +393,10 @@ class PDFGenerator:
         if filename is None:
             quote_id = quote_data.get('quote_id', 'quote')
             filename = f"quote_{quote_id}.pdf"
+        
+        # Update styles based on quote language
+        language = quote_data.get('language', 'en')
+        self.update_styles_for_language(language)
         
         # Ensure the quotes directory exists
         quotes_dir = Path("Data/quotes")

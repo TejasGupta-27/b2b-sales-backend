@@ -140,7 +140,10 @@ class QuoteGenerationAgent(AIProvider):
                 conversation_text=conversation_text,
                 safe_context=safe_context
             )
-            print(f"🔍 Debug - Quote prompt length: {len(quote_prompt)}")
+            # Add explicit instruction for Japanese output if not already present
+            if self.language == "ja" and "日本語で回答してください" not in quote_prompt:
+                quote_prompt += "\n必ず日本語で回答してください。"
+            print(f"🔍 Debug - Quote prompt (truncated): {quote_prompt[:500]}")
             
             # Use Pydantic function calling to generate structured quote
             response = await self.base_provider.generate_structured_response(
@@ -189,10 +192,9 @@ class QuoteGenerationAgent(AIProvider):
             # Create filename
             filename = f"quote_{quote_id}_{language}.pdf"
             
-            # When calling the PDF generator, pass the lang or set font accordingly
+            # When calling the PDF generator, pass the language for proper font selection
             pdf_quote_data = self._convert_quote_for_pdf(quote_dict)
-            if language == "ja":
-                pdf_quote_data['font'] = "NotoSansCJKjp"
+            pdf_quote_data['language'] = language  # Ensure language is passed to PDF generator
             pdf_path = pdf_generator.save_pdf_to_file(pdf_quote_data, filename)
             
             # Check if file was actually created
@@ -203,7 +205,7 @@ class QuoteGenerationAgent(AIProvider):
                 quote_dict.update({
                     'pdf_generated': True,
                     'pdf_path': pdf_path,
-                    'pdf_url': f'/api/quotes/download-pdf/{quote_id}',
+                    'pdf_url': f'/api/quotes/download-pdf/{quote_id}?language={language}',
                     'file_size': file_size,
                 })
             else:
@@ -374,13 +376,19 @@ class QuoteGenerationAgent(AIProvider):
             if quote_dict.get('pdf_error'):
                 response_parts.append(t["pdf_error"])
         
+        # Add PPT link if available
+        if quote_dict.get('pitch_deck_generated') and quote_dict.get('pitch_deck_url'):
+            ppt_url = quote_dict.get('pitch_deck_url')
+            response_parts.append(t["ppt_ready"].format(url=ppt_url))
+        
         response_parts.extend([
             "",
             t["next_steps"]
         ])
         
-        # Add next steps list
-        next_steps = t["next_without_ppt"]
+        # Add next steps list - use appropriate list based on PPT availability
+        has_ppt = quote_dict.get('pitch_deck_generated', False) and quote_dict.get('pitch_deck_url')
+        next_steps = t["next_with_ppt"] if has_ppt else t["next_without_ppt"]
         for i, step in enumerate(next_steps, 1):
             response_parts.append(step)
         
@@ -390,14 +398,7 @@ class QuoteGenerationAgent(AIProvider):
         ])
         
         return "\n".join(response_parts)
-
-    def generate_bilingual_quote_response(self, quote_dict: Dict[str, Any]) -> Dict[str, str]:
-        """Generate quote responses in both English and Japanese"""
-        return {
-            "en": self.format_quote_response(quote_dict, "en"),
-            "ja": self.format_quote_response(quote_dict, "ja")
-        }
-
+    
     def _serialize_quote_for_storage(self, quote: Dict[str, Any]) -> Dict[str, Any]:
         """Serialize quote data for storage by removing circular references"""
         serialized = quote.copy()
