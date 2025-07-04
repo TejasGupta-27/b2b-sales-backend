@@ -346,6 +346,22 @@ async def handle_voice_message(
         # Get the transcribed text
         text_message = transcription_result['text'].strip()
         
+        # Enhanced language detection from transcribed text
+        transcribed_language_info = None
+        detected_language = language or "en"  # Default fallback
+        primary_language = language or "en"   # Default fallback
+        language_confidence = 1.0             # Default confidence
+        
+        if text_message:
+            # Detect language from transcribed text
+            transcribed_language_info = language_service.detect_language(text_message)
+            detected_language = transcribed_language_info['primary_language']
+            primary_language = detected_language
+            language_confidence = transcribed_language_info['primary_confidence']
+            
+            logger.info(f"🌐 Voice message language detection: {detected_language} "
+                       f"(confidence: {language_confidence:.2f})")
+        
         # Additional validation for very short transcriptions that might be noise
         if len(text_message) < 2:
             logger.warning(f"Very short transcription detected: '{text_message}' - might be noise")

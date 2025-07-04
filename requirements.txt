@@ -32,8 +32,6 @@ ragas
 
 # Language detection and multilingual support
 langdetect
-polyglot
-PyICU
 
 # Speech recognition
 ffmpeg-python
