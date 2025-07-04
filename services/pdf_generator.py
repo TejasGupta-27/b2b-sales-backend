@@ -49,13 +49,13 @@ class PDFGenerator:
     
     def _setup_custom_styles(self):
         """Setup custom styles for the PDF"""
-        # Determine font to use
-        font_name = 'JapaneseFont' if self.japanese_font_registered else 'Helvetica'
+        # Use standard font initially - will be updated per language
+        font_name = 'Helvetica'
         
         # Company header style
         self.styles.add(ParagraphStyle(
             name='CompanyHeader',
-            parent=self.styles['Heading1'],
+            parent=self.styles['Normal'],  # Changed from Heading1 to Normal
             fontName=font_name,
             fontSize=24,
             textColor=colors.HexColor('#2E4057'),
@@ -66,7 +66,7 @@ class PDFGenerator:
         # Quote title style
         self.styles.add(ParagraphStyle(
             name='QuoteTitle',
-            parent=self.styles['Heading1'],
+            parent=self.styles['Normal'],  # Changed from Heading1 to Normal
             fontName=font_name,
             fontSize=16,
             spaceAfter=12,
@@ -77,7 +77,7 @@ class PDFGenerator:
         # Section header style
         self.styles.add(ParagraphStyle(
             name='SectionHeader',
-            parent=self.styles['Heading3'],
+            parent=self.styles['Normal'],  # Changed from Heading3 to Normal
             fontName=font_name,
             fontSize=14,
             textColor=colors.HexColor('#2E4057'),
@@ -222,8 +222,8 @@ class PDFGenerator:
             quote_table = Table(quote_info, colWidths=[2*inch, 3*inch])
             quote_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica-Bold'),
-                ('FONTNAME', (1, 0), (1, -1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica'),
+                ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
                 ('FONTSIZE', (0, 0), (-1, -1), 10),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ]))
@@ -233,7 +233,7 @@ class PDFGenerator:
             # Customer information
             customer_info = quote_data.get('customer_info', {})
             if customer_info:
-                story.append(Paragraph(labels.get('customer_information', 'Customer Information'), self.styles['Heading2']))
+                story.append(Paragraph(labels.get('customer_information', 'Customer Information'), self.styles['SectionHeader']))
                 
                 customer_data = []
                 if customer_info.get('company'):
@@ -249,8 +249,8 @@ class PDFGenerator:
                     customer_table = Table(customer_data, colWidths=[2*inch, 3*inch])
                     customer_table.setStyle(TableStyle([
                         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                        ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica-Bold'),
-                        ('FONTNAME', (1, 0), (1, -1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica'),
+                        ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
+                        ('FONTNAME', (1, 0), (1, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
                         ('FONTSIZE', (0, 0), (-1, -1), 10),
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
                     ]))
@@ -259,7 +259,7 @@ class PDFGenerator:
             
             # Line items with better text wrapping
             labels = quote_data.get('labels', {})
-            story.append(Paragraph(labels.get('quote_details', 'Quote Details'), self.styles['Heading2']))
+            story.append(Paragraph(labels.get('quote_details', 'Quote Details'), self.styles['SectionHeader']))
             
             line_items = quote_data.get('line_items', [])
             if line_items:
@@ -300,11 +300,11 @@ class PDFGenerator:
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
                     ('FONTSIZE', (0, 0), (-1, 0), 10),
                     
                     # Data styling
-                    ('FONTNAME', (0, 1), (-1, -1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
                     ('FONTSIZE', (0, 1), (-1, -1), 9),
                     ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),  # Right align numbers
                     ('ALIGN', (0, 1), (1, -1), 'LEFT'),    # Left align text
@@ -344,9 +344,9 @@ class PDFGenerator:
             pricing_table = Table(pricing_data, colWidths=[4*inch, 2*inch])
             pricing_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-                ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica-Bold'),
-                ('FONTNAME', (1, 0), (1, 1), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica'),
-                ('FONTNAME', (1, 2), (1, 2), 'JapaneseFont' if self.japanese_font_registered else 'Helvetica-Bold'),
+                ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, 1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
+                ('FONTNAME', (1, 2), (1, 2), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 11),
                 ('FONTSIZE', (1, 2), (1, 2), 12),  # Larger total
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
@@ -358,7 +358,7 @@ class PDFGenerator:
             # Terms and conditions
             terms = quote_data.get('terms_and_conditions', [])
             if terms:
-                story.append(Paragraph(labels.get('terms_and_conditions', 'Terms and Conditions'), self.styles['Heading2']))
+                story.append(Paragraph(labels.get('terms_and_conditions', 'Terms and Conditions'), self.styles['SectionHeader']))
                 for term in terms:
                     story.append(Paragraph(f"• {term}", self.styles['JapaneseText']))
                 story.append(Spacer(1, 15))
@@ -366,7 +366,7 @@ class PDFGenerator:
             # Implementation notes
             implementation_notes = quote_data.get('implementation_notes', [])
             if implementation_notes:
-                story.append(Paragraph(labels.get('implementation_notes', 'Implementation Notes'), self.styles['Heading2']))
+                story.append(Paragraph(labels.get('implementation_notes', 'Implementation Notes'), self.styles['SectionHeader']))
                 for note in implementation_notes:
                     story.append(Paragraph(f"• {note}", self.styles['JapaneseText']))
                 story.append(Spacer(1, 15))
@@ -374,7 +374,7 @@ class PDFGenerator:
             # Next steps
             next_steps = quote_data.get('next_steps', [])
             if next_steps:
-                story.append(Paragraph(labels.get('next_steps', 'Next Steps'), self.styles['Heading2']))
+                story.append(Paragraph(labels.get('next_steps', 'Next Steps'), self.styles['SectionHeader']))
                 for step in next_steps:
                     story.append(Paragraph(f"• {step}", self.styles['JapaneseText']))
             
