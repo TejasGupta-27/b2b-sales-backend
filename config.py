@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.6"))
     final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "10"))
     
+    # Testing and Debug Configuration
+    enable_startup_test_searches: bool = os.getenv("ENABLE_STARTUP_TEST_SEARCHES", "False").lower() == "true"
+    enable_debug_vector_endpoints: bool = os.getenv("ENABLE_DEBUG_VECTOR_ENDPOINTS", "False").lower() == "true"
+    disable_automatic_category_defaults: bool = os.getenv("DISABLE_AUTOMATIC_CATEGORY_DEFAULTS", "False").lower() == "true"
+    
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert comma-separated CORS origins to list"""

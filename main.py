@@ -1130,6 +1130,12 @@ async def populate_vector_limited(max_per_file: int = 50):
 async def get_vector_status():
     """Get detailed Elasticsearch Vector Service status and perform test search"""
     try:
+        if not settings.enable_debug_vector_endpoints:
+            return {
+                "status": "disabled",
+                "message": "Debug vector endpoints are disabled (ENABLE_DEBUG_VECTOR_ENDPOINTS=false)"
+            }
+            
         if not vector_service:
             return {
                 "status": "not_initialized",
@@ -1140,7 +1146,7 @@ async def get_vector_status():
         # Get collection stats
         stats = await vector_service.get_collection_stats()
         
-        # Perform test searches if data exists
+        # Perform test searches if data exists and testing is enabled
         test_results = {}
         if stats["products_count"] > 0:
             try:

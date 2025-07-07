@@ -57,18 +57,21 @@ async def main():
         else:
             print("✅ Vector indices already contain data")
         
-        # Perform test search
-        print("🔍 Testing vector search...")
-        try:
-            test_products = await vector_service.vector_search_products(
-                query="laptop computer workstation",
-                size=3
-            )
-            print(f"   Found {len(test_products)} products in test search")
-            for i, product in enumerate(test_products, 1):
-                print(f"     {i}. {product.get('name', 'Unknown')} (Score: {product.get('_score', 0):.3f})")
-        except Exception as e:
-            print(f"⚠️ Test search failed: {e}")
+        # Perform test search only if enabled
+        if settings.enable_startup_test_searches:
+            print("🔍 Testing vector search...")
+            try:
+                test_products = await vector_service.vector_search_products(
+                    query="laptop computer workstation",
+                    size=3
+                )
+                print(f"   Found {len(test_products)} products in test search")
+                for i, product in enumerate(test_products, 1):
+                    print(f"     {i}. {product.get('name', 'Unknown')} (Score: {product.get('_score', 0):.3f})")
+            except Exception as e:
+                print(f"⚠️ Test search failed: {e}")
+        else:
+            print("ℹ️ Startup test searches disabled (ENABLE_STARTUP_TEST_SEARCHES=false)")
         
         print("✅ Elasticsearch Vector Search initialization completed!")
         
