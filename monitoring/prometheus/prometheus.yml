@@ -20,6 +20,14 @@ scrape_configs:
     scrape_interval: 30s
     scrape_timeout: 10s
 
+  # Custom B2B Metrics Exporter
+  - job_name: 'b2b-metrics-exporter'
+    static_configs:
+      - targets: ['b2b-metrics-exporter:9188']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
   # Node Exporter for system metrics
   - job_name: 'node-exporter'
     static_configs:

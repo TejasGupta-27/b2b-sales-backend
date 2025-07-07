@@ -16,6 +16,19 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - b2b-sales-network
 
@@ -37,6 +50,19 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - b2b-sales-network
 
@@ -56,6 +82,14 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     networks:
       - b2b-sales-network
 
@@ -68,6 +102,19 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/b2b_sales?sslmode=disable"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - b2b-sales-network
 
@@ -85,6 +132,53 @@ services:
       - '--es.shards'
       - '--es.snapshots'
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9114/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - b2b-sales-network
+
+  # Custom Metrics Exporter for B2B Sales Backend
+  b2b-metrics-exporter:
+    image: python:3.11-slim
+    container_name: b2b-sales-metrics-exporter
+    ports:
+      - "9188:9188"
+    volumes:
+      - ./monitoring/metrics-exporter:/app
+    working_dir: /app
+    command:
+      - python
+      - metrics_exporter.py
+    environment:
+      - B2B_APP_URL=http://b2b-sales-backend:3001
+      - METRICS_PORT=9188
+    restart: unless-stopped
+    depends_on:
+      - b2b-sales-backend
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9188/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - b2b-sales-network
 
