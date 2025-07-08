@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     speech_fallback_enabled: bool = os.getenv("SPEECH_FALLBACK_ENABLED", "True").lower() == "true"
     speech_tts_primary_retries: int = int(os.getenv("SPEECH_TTS_PRIMARY_RETRIES", "1"))
     
+    # Performance optimization - disable speech for high CPU usage
+    disable_speech_service: bool = os.getenv("DISABLE_SPEECH_SERVICE", "False").lower() == "true"
+    disable_speech_on_high_cpu: bool = os.getenv("DISABLE_SPEECH_ON_HIGH_CPU", "True").lower() == "true"
+    cpu_threshold_for_speech_disable: float = float(os.getenv("CPU_THRESHOLD_FOR_SPEECH_DISABLE", "80.0"))
+    
     # Data loading configuration
     force_reload_data: bool = os.getenv("FORCE_RELOAD_DATA", "False").lower() == "true"
     skip_data_loading: bool = os.getenv("SKIP_DATA_LOADING", "False").lower() == "true"

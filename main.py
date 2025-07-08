@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text, func, and_
 import asyncio
 import time
+import psutil
 
 # Import database components
 from db.database import get_db, engine, create_tables, test_connection, reset_database, cleanup_conflicting_data
@@ -91,9 +92,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global speech service instance
-speech_service = None
-
 # Include routers
 app.include_router(leads_router)
 app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
@@ -162,6 +160,13 @@ class ChatSearchRequest(BaseModel):
 # Add Elasticsearch Vector service initialization
 vector_service = None
 
+# Global service instances for caching
+speech_service = None
+ai_provider = None
+conversational_agent = None
+quote_agent = None
+elasticsearch_service = None
+
 # Add simple context helper function
 def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Dict[str, Any]]) -> List[AIMessage]:
     """Add simple context without complex analysis"""
@@ -178,10 +183,70 @@ def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Di
     
     return messages
 
+def get_cached_ai_provider():
+    """Get cached AI provider instance"""
+    global ai_provider
+    if ai_provider is None:
+        ai_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+    return ai_provider
+
+def get_cached_conversational_agent():
+    """Get cached conversational agent instance"""
+    global conversational_agent
+    if conversational_agent is None:
+        base_provider = get_cached_ai_provider()
+        conversational_agent = SimpleConversationalAgent(base_provider)
+    return conversational_agent
+
+def get_cached_quote_agent():
+    """Get cached quote generation agent instance"""
+    global quote_agent
+    if quote_agent is None:
+        base_provider = get_cached_ai_provider()
+        quote_agent = QuoteGenerationAgent(base_provider)
+    return quote_agent
+
+def get_cached_speech_service():
+    """Get cached speech service instance"""
+    global speech_service
+    return speech_service
+
+def get_cached_elasticsearch_service():
+    """Get cached elasticsearch service instance"""
+    global elasticsearch_service
+    if elasticsearch_service is None:
+        elasticsearch_service = get_elasticsearch_service()
+    return elasticsearch_service
+
+def get_cached_vector_service():
+    """Get cached vector service instance"""
+    global vector_service
+    return vector_service
+
+def get_cpu_usage():
+    """Get current CPU usage percentage"""
+    try:
+        return psutil.cpu_percent(interval=1)
+    except Exception:
+        return 0.0
+
+def should_disable_speech_service():
+    """Check if speech service should be disabled based on CPU usage"""
+    if settings.disable_speech_service:
+        return True
+    
+    if settings.disable_speech_on_high_cpu:
+        cpu_usage = get_cpu_usage()
+        if cpu_usage > settings.cpu_threshold_for_speech_disable:
+            logger.warning(f"CPU usage is {cpu_usage:.1f}% - disabling speech service for performance")
+            return True
+    
+    return False
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global vector_service, speech_service
+    global vector_service, speech_service, conversational_agent, quote_agent, elasticsearch_service
     
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
@@ -219,14 +284,32 @@ async def startup_event():
             logger.error(f"❌ Elasticsearch initialization failed: {es_error}")
             logger.warning("⚠️ Continuing without Elasticsearch - some features may be limited")
         
-        # Initialize speech service
+        # Initialize speech service only if not disabled
+        if not should_disable_speech_service():
+            try:
+                speech_service = SpeechService()
+                await speech_service.initialize()
+                logger.info("✅ Speech service initialized")
+            except Exception as speech_error:
+                logger.error(f"❌ Speech service initialization failed: {speech_error}")
+                logger.warning("⚠️ Continuing without speech service - text-to-speech will be disabled")
+        else:
+            logger.info("ℹ️ Speech service disabled for performance optimization")
+        
+        # Pre-initialize AI agents for better performance
         try:
-            speech_service = SpeechService()
-            await speech_service.initialize()
-            logger.info("✅ Speech service initialized")
-        except Exception as speech_error:
-            logger.error(f"❌ Speech service initialization failed: {speech_error}")
-            logger.warning("⚠️ Continuing without speech service - text-to-speech will be disabled")
+            # Initialize conversational agent
+            conversational_agent = get_cached_conversational_agent()
+            await conversational_agent.initialize()
+            logger.info("✅ Conversational agent pre-initialized")
+            
+            # Initialize quote agent
+            quote_agent = get_cached_quote_agent()
+            logger.info("✅ Quote generation agent pre-initialized")
+            
+        except Exception as ai_error:
+            logger.error(f"❌ AI agent initialization failed: {ai_error}")
+            logger.warning("⚠️ AI agents will be initialized on first request")
         
         # Start periodic metrics update task
         asyncio.create_task(periodic_metrics_update())
@@ -289,8 +372,8 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
     start_time = time.time()
     
     try:
-        # Get speech service
-        global speech_service
+        # Get cached speech service
+        speech_service = get_cached_speech_service()
         
         try:
             # Handle lead management
@@ -364,12 +447,13 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 # Record cache miss
                 metrics_service.record_cache_miss()
                 
-                # Create simple conversational agent for natural responses
-                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-                conversational_agent = SimpleConversationalAgent(base_provider)
+                # Use cached conversational agent
+                conversational_agent = get_cached_conversational_agent()
                 
-                # Initialize the agent (this will initialize hybrid retriever if configured)
-                await conversational_agent.initialize()
+                # Initialize the agent if needed (should be pre-initialized)
+                if not hasattr(conversational_agent, '_initialized'):
+                    await conversational_agent.initialize()
+                    conversational_agent._initialized = True
                 
                 # Let the conversational agent handle all types of requests naturally
                 # No hardcoded phrase detection - let the AI determine the best response
@@ -398,17 +482,23 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 # Cache the response for 2 minutes
                 await cache_service.set(cache_key, response_content, ttl=120)
             
-            # Generate speech in parallel (non-blocking)
-            speech_task = asyncio.create_task(
-                speech_service.text_to_speech(text=response_content, language="en")
-            )
-            
-            # Wait for speech generation first
-            speech_result = await speech_task
-            logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
-            
-            # Update metadata with speech data
-            response_metadata['speech_data'] = speech_result
+            # Generate speech in parallel (non-blocking) only if speech service is available
+            speech_result = None
+            if speech_service:
+                try:
+                    speech_task = asyncio.create_task(
+                        speech_service.text_to_speech(text=response_content, language="en")
+                    )
+                    
+                    # Wait for speech generation first
+                    speech_result = await speech_task
+                    logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
+                    
+                    # Update metadata with speech data
+                    response_metadata['speech_data'] = speech_result
+                except Exception as speech_error:
+                    logger.warning(f"Speech generation failed: {speech_error}")
+                    response_metadata['speech_error'] = str(speech_error)
             
             # Save assistant response with speech data included
             assistant_message = DBChatMessage(
@@ -476,9 +566,8 @@ async def generate_quote(quote_request: Dict[str, Any]):
     start_time = time.time()
     
     try:
-        # Create and initialize the quote generation agent
-        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-        quote_agent = QuoteGenerationAgent(base_provider)
+        # Use cached quote generation agent
+        quote_agent = get_cached_quote_agent()
         
         # Extract conversation messages from the request
         conversation_messages = quote_request.get('conversation_messages', [])
@@ -559,8 +648,8 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
     metrics_service = get_metrics_service()
     
     try:
-        # Get speech service
-        global speech_service
+        # Get cached speech service
+        speech_service = get_cached_speech_service()
         
         try:
             # Handle lead management
@@ -605,8 +694,8 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
             
-            # Get AI response
-            ai_provider = AIServiceFactory.create_provider()
+            # Get AI response using cached provider
+            ai_provider = get_cached_ai_provider()
             ai_start_time = time.time()
             response = await ai_provider.generate_response(messages)
             ai_duration = time.time() - ai_start_time
@@ -618,11 +707,16 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                 model=response.model
             )
             
-            # Generate speech for the response
-            speech_result = await speech_service.text_to_speech(
-                text=response.content,
-                language="en"  # Default to English for now
-            )
+            # Generate speech for the response only if speech service is available
+            speech_result = None
+            if speech_service:
+                try:
+                    speech_result = await speech_service.text_to_speech(
+                        text=response.content,
+                        language="en"  # Default to English for now
+                    )
+                except Exception as speech_error:
+                    logger.warning(f"Speech generation failed: {speech_error}")
             
             # Save assistant response to database
             assistant_message = DBChatMessage(
@@ -1361,9 +1455,8 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
                 "timeline": getattr(lead_record, 'decision_timeline', None)
             }
         
-        # Create and initialize the quote generation agent
-        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-        quote_agent = QuoteGenerationAgent(base_provider)
+        # Use cached quote generation agent
+        quote_agent = get_cached_quote_agent()
         
         # Generate the quote using the QuoteGenerationAgent
         quote = await quote_agent.generate_quote_from_conversation(
@@ -1418,6 +1511,51 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         logger.error(f"Quote generation from conversation failed: {e}")
         metrics_service.record_quote_generation(status="error")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/system-performance")
+async def get_system_performance():
+    """Get system performance metrics including CPU usage"""
+    try:
+        cpu_usage = get_cpu_usage()
+        memory = psutil.virtual_memory()
+        
+        # Get database connection pool stats
+        db_pool_stats = {
+            "pool_size": engine.pool.size(),
+            "checked_in": engine.pool.checkedin(),
+            "checked_out": engine.pool.checkedout(),
+            "overflow": engine.pool.overflow(),
+            "invalid": engine.pool.invalid()
+        }
+        
+        # Check if speech service should be disabled
+        speech_disabled = should_disable_speech_service()
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "system": {
+                "cpu_usage_percent": cpu_usage,
+                "memory_usage_percent": memory.percent,
+                "memory_available_gb": memory.available / (1024**3),
+                "memory_total_gb": memory.total / (1024**3)
+            },
+            "database": {
+                "connection_pool": db_pool_stats,
+                "pool_utilization": f"{(db_pool_stats['checked_out'] / max(db_pool_stats['pool_size'], 1)) * 100:.1f}%"
+            },
+            "services": {
+                "speech_service_enabled": speech_service is not None and not speech_disabled,
+                "speech_service_disabled_reason": "CPU threshold exceeded" if speech_disabled and cpu_usage > settings.cpu_threshold_for_speech_disable else None,
+                "conversational_agent_initialized": conversational_agent is not None,
+                "quote_agent_initialized": quote_agent is not None,
+                "elasticsearch_initialized": elasticsearch_service is not None
+            },
+            "performance_recommendations": []
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting system performance: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
