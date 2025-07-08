@@ -239,27 +239,21 @@ async def preview_quote_pdf(quote_id: str):
 
 @router.post("/generate-pitch-deck")
 async def generate_pitch_deck(quote_request: Dict[str, Any]):
-    """Generate a sales pitch deck from a quotation with language support"""
+    """Generate a sales pitch deck from a quotation"""
     metrics_service = get_metrics_service()
     
     try:
-        # Get language from request
-        language = quote_request.get("language", "en")
-        
         # Generate the quote first
         base_provider = AIServiceFactory.create_provider("azure_openai")
-        sales_agent = SimpleConversationalAgent(base_provider, language=language)
+        sales_agent = SimpleConversationalAgent(base_provider)
         
         quote = await sales_agent.generate_quote(quote_request)
         
         # Initialize pitch deck service
         pitch_deck_service = PitchDeckService()
         
-        # Generate the pitch deck structure with language support
-        deck_structure = await pitch_deck_service.extract_ppt_structure(
-            quotation=str(quote),
-            language=language
-        )
+        # Generate the pitch deck structure
+        deck_structure = await pitch_deck_service.extract_ppt_structure(str(quote))
         
         # Generate unique IDs for both quote and pitch deck
         quote_id = str(uuid.uuid4())
@@ -279,7 +273,7 @@ async def generate_pitch_deck(quote_request: Dict[str, Any]):
         deck_path = f"Data/pitch_decks/pitch_deck_{deck_id}.pptx"
         os.makedirs(os.path.dirname(deck_path), exist_ok=True)
         
-        # Generate the PowerPoint file with language support
+        # Generate the PowerPoint file
         file_path = await pitch_deck_service.generate_ppt(deck_structure, deck_path)
         
         # Record successful quote generation
@@ -296,11 +290,9 @@ async def generate_pitch_deck(quote_request: Dict[str, Any]):
             headers={
                 "Content-Disposition": f"attachment; filename=pitch_deck_{deck_id}.pptx",
                 "X-Quote-ID": quote_id,
-                "X-Quote-Link": f"/api/quotes/download-pdf/{quote_id}?language={language}",
+                "X-Quote-Link": f"/api/quotes/download-pdf/{quote_id}",
                 "X-Deck-ID": deck_id,
-                "X-Deck-Link": f"/api/quotes/download-pitch-deck/{deck_id}",
-                "X-Language": language,
-                "X-Resolved-Language": deck_structure.get('resolved_language', language)
+                "X-Deck-Link": f"/api/quotes/download-pitch-deck/{deck_id}"
             }
         )
     except Exception as e:

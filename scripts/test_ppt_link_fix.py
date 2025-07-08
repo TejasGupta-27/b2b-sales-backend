@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ai_services.quote_generation_agent import QuoteGenerationAgent
-from services.localisation import get_quote_translations
+from services.localisation import get_translation
 
 async def test_ppt_link_in_japanese_response():
     """Test that PPT download link is included in Japanese quote responses"""
@@ -158,39 +158,18 @@ async def test_ppt_link_in_english_response():
         return False
 
 async def test_translations():
-    """Test that translations are properly loaded"""
-    
-    try:
-        print("\n🔧 Testing translation loading...")
-        
-        # Test Japanese translations
-        ja_translations = get_quote_translations("ja")
-        print(f"Japanese PPT ready text: {ja_translations.get('ppt_ready', 'MISSING')}")
-        
-        # Test English translations
-        en_translations = get_quote_translations("en")
-        print(f"English PPT ready text: {en_translations.get('ppt_ready', 'MISSING')}")
-        
-        # Check if both have PPT ready text
-        ja_has_ppt = 'ppt_ready' in ja_translations
-        en_has_ppt = 'ppt_ready' in en_translations
-        
-        print(f"\n✅ Translation analysis:")
-        print(f"   Japanese has ppt_ready: {ja_has_ppt}")
-        print(f"   English has ppt_ready: {en_has_ppt}")
-        
-        if ja_has_ppt and en_has_ppt:
-            print("\n✅ Translations loaded correctly!")
-            return True
-        else:
-            print("\n❌ Translation loading failed")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
-        import traceback
-        print(traceback.format_exc())
-        return False
+    """Test that translations are properly loaded."""
+    print("\n🔧 Testing translation loading...")
+
+    # Test Japanese translations
+    ja_translations = get_translation("quote_prompt", "ja")
+    print(f"Japanese PPT ready text: {ja_translations.get('ppt_ready', 'MISSING')}")
+
+    # Test English translations
+    en_translations = get_translation("quote_prompt", "en")
+    print(f"English PPT ready text: {en_translations.get('ppt_ready', 'MISSING')}")
+
+    return 'ppt_ready' in ja_translations and 'ppt_ready' in en_translations
 
 async def main():
     print("🔧 Testing PPT download link fix...")

@@ -212,3 +212,10 @@ def detect_language_from_content(content: str) -> str:
     
     # Default to English
     return 'en'
+
+def get_translation(key: str, language: str, fallback: bool = True) -> str:
+    """Retrieve a specific translation key for the given language."""
+    translations = quote_translations.get(language, {})
+    if not translations and fallback:
+        translations = quote_translations.get('en', {})
+    return translations.get(key, f"[Missing translation for {key}]")

@@ -138,18 +138,10 @@ class PDFGenerator:
         ))
     
     def update_styles_for_language(self, language: str = "en"):
-        """Update PDF styles to use appropriate fonts for the given language"""
-        if language == "ja" and self.japanese_font_registered:
-            # Update all styles to use Japanese font
-            for style_name in ['CompanyHeader', 'QuoteTitle', 'SectionHeader', 'TableCell', 'SmallText', 'CompanyTagline', 'JapaneseText']:
-                if style_name in self.styles:
-                    self.styles[style_name].fontName = 'JapaneseFont'
-            
-            # Update Normal style as well
-            if 'Normal' in self.styles:
-                self.styles['Normal'].fontName = 'JapaneseFont'
-        
-        print(f"✅ Styles updated for language: {language}")
+        """Update styles dynamically based on the language."""
+        if language == "ja" and not self.japanese_font_registered:
+            self._register_japanese_fonts()
+        self._setup_localized_labels(language)
     
     def _format_japanese_text(self, text: str, max_width: int = 50) -> str:
         """Format Japanese text with proper line breaks and spacing"""
@@ -196,7 +188,7 @@ class PDFGenerator:
         formatted_text = self._format_japanese_text(text, max_width=40)
         return Paragraph(formatted_text, self.styles[style_name])
     
-    def _setup_localized_labels(self):
+    def _setup_localized_labels(self, language: str = "en"):
         """Setup localized labels for different languages"""
         self.labels = {
             'en': {
@@ -759,106 +751,78 @@ class PDFGenerator:
                 "pt": "BRL (R$)"
             }
         } 
-    test_data = {
-    "quote_number": "Q-20240627-001",
-    "title": "Quote for DDR4 16GB (8GBx2) Laptop Memory Modules",
-    "company_tagline": "Reliable and Cost-Effective Memory Solutions for Your Laptop",
-    "customer_info": {
-        "company_name": "Unknown",
-        "contact_name": "Unknown",
-        "email": "unknown@example.com",
-        "phone": None,
-        "address": None
-    },
-    "business_context": "The customer requires reliable and cost-effective DDR4 laptop memory modules with 16GB total capacity (8GBx2) for programming and light video editing tasks. Stability and performance are prioritized, with a budget range of 7,000 to 10,000 JPY. The customer prefers trusted brands with good cost performance and requests a quick quote within 1-2 days.",
-    "line_items": [
-        {
-        "name": "Crucial 16GB Kit (8GBx2) DDR4 3200MHz Laptop Memory",
-        "description": "Reliable DDR4 3200MHz memory kit suitable for programming and video editing, offering stable performance and excellent cost efficiency.",
-        "quantity": 1,
-        "unit_price": 4800.0,
-        "total_price": 4800.0,
-        "category": "Hardware"
-        },
-        {
-        "name": "Kingston 16GB Kit (8GBx2) DDR4 2666MHz Laptop Memory",
-        "description": "Trusted Kingston DDR4 memory kit with 2666MHz speed, optimized for stability and cost performance, ideal for everyday programming and multimedia tasks.",
-        "quantity": 1,
-        "unit_price": 5200.0,
-        "total_price": 5200.0,
-        "category": "Hardware"
-        }
-    ],
-    "financials": {
-        "subtotal": 10000.0,
-        "tax_rate": 0.08,
-        "tax_amount": 800.0,
-        "total": 10800.0,
-        "currency": "JPY"
-    },
-    "terms_and_conditions": [
-        "Prices are valid for 30 days from the quote date.",
-        "Payment terms: 30 days net from invoice date.",
-        "Warranty: Standard manufacturer warranty applies to all products.",
-        "Delivery: Estimated delivery within 5 business days after order confirmation.",
-        "Returns: Returns accepted within 14 days of delivery if products are unopened and in original packaging."
-    ],
-    "implementation_notes": [
-        "Confirm compatibility of memory modules with the customer's laptop model before purchase.",
-        "Installation can be performed by the customer or a professional technician.",
-        "Ensure BIOS is updated to support the new memory modules for optimal performance."
-    ],
-    "next_steps": [
-        "Review the proposed memory options and select preferred product.",
-        "Confirm order details and provide shipping information.",
-        "Process payment to initiate order fulfillment.",
-        "Schedule delivery and installation as needed."
-    ],
-    "valid_until": "2024-07-27",
-    "created_at": "2024-06-27",
-    "language": "en",
-    "quote_id": "001",
-    "generation_method": "pydantic_structured_internationalized",
-    "data_source": "conversation_only",
-    "pdf_generated": True,
-    "pdf_path": "Data/quotes/quote_001_en.pdf",
-    "pdf_url": "/api/quotes/download-pdf/001",
-    "file_size": 13458,
-    }
     
-    generator = PDFGenerator()
-    pdf_path = generator.save_pdf_to_file(test_data, 'japanese_test.pdf')
-    print(f"✅ Japanese test PDF saved to: {pdf_path}")
-
 if __name__ == "__main__":
-    test_japanese_fonts()
-=======
-        logger.info(f"📄 PDF saved to: {file_path}")
-        return str(file_path)
-
-    def get_supported_languages(self) -> list:
-        """Get list of supported languages for PDF generation"""
-        return list(self.labels.keys())
-
-    def get_language_info(self) -> Dict[str, Any]:
-        """Get comprehensive language support information"""
-        return {
-            "supported_languages": self.get_supported_languages(),
-            "auto_detection_enabled": True,
-            "language_service": "LanguageService with langdetect",
-            "default_language": "en",
-            "localized_elements": [
-                "headers", "labels", "currency_formatting", 
-                "date_formatting", "section_titles"
+    # Define a test function for Japanese fonts
+    def test_japanese_fonts():
+        test_data = {
+            "quote_number": "Q-20240627-001",
+            "title": "Quote for DDR4 16GB (8GBx2) Laptop Memory Modules",
+            "company_tagline": "Reliable and Cost-Effective Memory Solutions for Your Laptop",
+            "customer_info": {
+                "company_name": "Unknown",
+                "contact_name": "Unknown",
+                "email": "unknown@example.com",
+                "phone": None,
+                "address": None
+            },
+            "line_items": [
+                {
+                    "name": "Crucial 16GB Kit (8GBx2) DDR4 3200MHz Laptop Memory",
+                    "description": "Reliable DDR4 3200MHz memory kit suitable for programming and video editing, offering stable performance and excellent cost efficiency.",
+                    "quantity": 1,
+                    "unit_price": 4800.0,
+                    "total_price": 4800.0,
+                    "category": "Hardware"
+                },
+                {
+                    "name": "Kingston 16GB Kit (8GBx2) DDR4 2666MHz Laptop Memory",
+                    "description": "Trusted Kingston DDR4 memory kit with 2666MHz speed, optimized for stability and cost performance, ideal for everyday programming and multimedia tasks.",
+                    "quantity": 1,
+                    "unit_price": 5200.0,
+                    "total_price": 5200.0,
+                    "category": "Hardware"
+                }
             ],
-            "currency_support": {
-                "en": "USD ($)",
-                "ja": "JPY (¥)",
-                "es": "USD ($)",
-                "fr": "EUR (€)",
-                "de": "EUR (€)",
-                "it": "EUR (€)",
-                "pt": "BRL (R$)"
-            }
-        } 
->>>>>>> 76756e64cf6aae5fc409c305c75140d75a58391b
+            "financials": {
+                "subtotal": 10000.0,
+                "tax_rate": 0.08,
+                "tax_amount": 800.0,
+                "total": 10800.0,
+                "currency": "JPY"
+            },
+            "terms_and_conditions": [
+                "Prices are valid for 30 days from the quote date.",
+                "Payment terms: 30 days net from invoice date.",
+                "Warranty: Standard manufacturer warranty applies to all products.",
+                "Delivery: Estimated delivery within 5 business days after order confirmation.",
+                "Returns: Returns accepted within 14 days of delivery if products are unopened and in original packaging."
+            ],
+            "implementation_notes": [
+                "Confirm compatibility of memory modules with the customer's laptop model before purchase.",
+                "Installation can be performed by the customer or a professional technician.",
+                "Ensure BIOS is updated to support the new memory modules for optimal performance."
+            ],
+            "next_steps": [
+                "Review the proposed memory options and select preferred product.",
+                "Confirm order details and provide shipping information.",
+                "Process payment to initiate order fulfillment.",
+                "Schedule delivery and installation as needed."
+            ],
+            "valid_until": "2024-07-27",
+            "created_at": "2024-06-27",
+            "language": "en",
+            "quote_id": "001",
+            "generation_method": "pydantic_structured_internationalized",
+            "data_source": "conversation_only",
+            "pdf_generated": True,
+            "pdf_path": "Data/quotes/quote_001_en.pdf",
+            "pdf_url": "/api/quotes/download-pdf/001",
+            "file_size": 13458,
+        }
+
+        generator = PDFGenerator()
+        pdf_path = generator.save_pdf_to_file(test_data, 'japanese_test.pdf')
+        print(f"✅ Japanese test PDF saved to: {pdf_path}")
+
+    test_japanese_fonts()

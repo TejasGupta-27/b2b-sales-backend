@@ -29,81 +29,30 @@ class LanguageService:
         logger.info(f"🌐 LanguageService initialized with {len(self.supported_languages)} supported languages")
 
     def detect_language(self, text: str) -> Dict:
-        """
-        Detect primary and secondary language from text with enhanced confidence handling
-        Returns: {
-            'primary_language': 'en',
-            'primary_confidence': 0.95,
-            'secondary_language': 'ja', 
-            'secondary_confidence': 0.05,
-            'is_multilingual': False,
-            'all_detected': [...],
-            'detection_method': 'langdetect'
-        }
-        """
+        """Detect primary and secondary language from text with enhanced confidence handling."""
         if not self.auto_detection_enabled:
             return self._default_language_response("Auto-detection disabled")
-            
-        if not text or not text.strip():
+
+        if not text.strip():
             return self._default_language_response("Empty text")
-            
+
         try:
-            # Detect all languages with probabilities
-            detected = detect_langs(text)
-            
-            # Filter for supported languages only
-            supported_detected = [
-                lang for lang in detected 
-                if lang.lang in self.supported_languages
-            ]
-            
-            if not supported_detected:
-                logger.warning(f"⚠️ No supported languages detected in text, using default: {self.default_language}")
-                return self._default_language_response("No supported languages detected")
-                
-            primary = supported_detected[0]
-            secondary = supported_detected[1] if len(supported_detected) > 1 else None
-            
-            # Check if primary language meets confidence threshold
-            primary_lang = primary.lang if primary.prob >= self.confidence_threshold else self.default_language
-            primary_confidence = primary.prob if primary.lang == primary_lang else 1.0
-            
-            # Determine if text is multilingual (multiple languages with decent confidence)
-            is_multilingual = (
-                len(supported_detected) > 1 and 
-                secondary and 
-                secondary.prob > 0.3
-            )
-            
-            result = {
-                'primary_language': primary_lang,
-                'primary_confidence': primary_confidence,
+            detected_languages = detect_langs(text)
+            primary = detected_languages[0]
+            secondary = detected_languages[1] if len(detected_languages) > 1 else None
+
+            return {
+                'primary_language': primary.lang,
+                'primary_confidence': primary.prob,
                 'secondary_language': secondary.lang if secondary else None,
                 'secondary_confidence': secondary.prob if secondary else 0.0,
-                'is_multilingual': is_multilingual,
-                'all_detected': [
-                    {
-                        'language': lang.lang, 
-                        'confidence': lang.prob,
-                        'name': self.supported_languages.get(lang.lang, {}).get('name', lang.lang)
-                    } 
-                    for lang in supported_detected
-                ],
-                'detection_method': 'langdetect',
-                'confidence_threshold': self.confidence_threshold,
-                'text_length': len(text.strip())
+                'is_multilingual': len(detected_languages) > 1,
+                'all_detected': detected_languages,
+                'detection_method': 'langdetect'
             }
-            
-            logger.debug(f"🌐 Language detection: {primary_lang} ({primary_confidence:.2f}) | "
-                        f"Secondary: {secondary.lang if secondary else 'None'} "
-                        f"({secondary.prob if secondary else 0:.2f}) | "
-                        f"Multilingual: {is_multilingual}")
-            
-            return result
-            
         except Exception as e:
-            logger.error(f"❌ Language detection failed: {e}")
-            return self._default_language_response(f"Detection error: {str(e)}")
+            logger.error(f"Language detection failed: {e}")
+            return self._default_language_response("Detection error")
     
     def _default_language_response(self, reason: str = "Default fallback"):
         """Return default language response with metadata"""

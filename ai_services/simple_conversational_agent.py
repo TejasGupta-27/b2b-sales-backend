@@ -83,6 +83,36 @@ class SimpleConversationalAgent(AIProvider):
         except Exception as e:
             print(f"⚠️ SimpleConversationalAgent initialization warning: {e}")
     
+    async def detect_and_switch_language(self, messages: List[AIMessage]) -> None:
+        """Detect the language of the latest user message and switch response language dynamically."""
+        try:
+            # Extract the latest user message
+            latest_message = next((msg.content for msg in reversed(messages) if msg.role == "user"), None)
+            if not latest_message:
+                return
+
+            # Use centralized language_service for detection
+            from services.language_service import LanguageService
+            language_service = LanguageService()
+            detection_result = language_service.detect_language(latest_message)
+
+            # Determine the detected language
+            detected_language = detection_result.get("primary_language", self.language)
+            if not detected_language or detected_language == self.language:
+                return  # No change needed
+
+            # Log language switching
+            print(f"🌐 Switching language from {self.language} to {detected_language}")
+            self.language = detected_language
+
+            # Update dependent components efficiently
+            for component in [self.quote_agent, self.hybrid_retriever]:
+                if component:
+                    component.language = detected_language
+
+        except Exception as e:
+            print(f"⚠️ Language detection failed: {e}")
+
     async def generate_response(
         self, 
         messages: List[AIMessage], 
@@ -90,20 +120,23 @@ class SimpleConversationalAgent(AIProvider):
         **kwargs
     ) -> AIResponse:
         """Generate intelligent responses with product retrieval and quote generation capabilities"""
-        
+
         print("🤖 SimpleConversationalAgent: Analyzing conversation intent...")
-        
-        # Step 1: Analyze conversation intent using Pydantic function calling
+
+        # Step 1: Detect and switch language dynamically
+        await self.detect_and_switch_language(messages)
+
+        # Step 2: Analyze conversation intent using Pydantic function calling
         intent_analysis = await self._analyze_conversation_intent(messages, customer_context)
-        
+
         print(f"🎯 Intent Analysis:")
         print(f"   Intent: {intent_analysis.intent_type}")
         print(f"   Retrieve Products: {intent_analysis.should_retrieve_products}")
         print(f"   Generate Quote: {intent_analysis.should_generate_quote}")
         print(f"   Confidence: {intent_analysis.confidence:.1%}")
         print(f"   Reasoning: {intent_analysis.reasoning}")
-        
-        # Step 2: Retrieve products if needed
+
+        # Step 3: Retrieve products if needed
         product_data = None
         similar_products = []
         if intent_analysis.should_retrieve_products and self.hybrid_retriever:
@@ -117,7 +150,7 @@ class SimpleConversationalAgent(AIProvider):
                 if product_data and 'requirements' in product_data:
                     similar_products = product_data['requirements'].get('similar_products', [])
                 similar_products = similar_products[:5]
-                
+
                 # Add fallback similar products if none found
                 if not similar_products:
                     print("⚠️  No similar products found, using fallback products...")
@@ -170,7 +203,7 @@ class SimpleConversationalAgent(AIProvider):
                             }
                         ]
                     print(f"✅ Added {len(similar_products)} fallback similar products")
-                
+
             except Exception as e:
                 print(f"❌ Product retrieval failed: {e}")
                 # Even on failure, provide some fallback products
@@ -213,7 +246,7 @@ class SimpleConversationalAgent(AIProvider):
                 print(f"⚠️ Product retrieval failed: {e}")
                 product_data = {'products': [], 'solutions': [], 'error': str(e)}
         
-        # Step 3: Generate appropriate response based on intent
+        # Step 4: Generate appropriate response based on intent
         if intent_analysis.should_generate_quote:
             response = await self._generate_quote_response(messages, customer_context, product_data, intent_analysis)
         elif intent_analysis.should_retrieve_products and product_data:
@@ -221,7 +254,7 @@ class SimpleConversationalAgent(AIProvider):
         else:
             response = await self._generate_general_response(messages, customer_context, intent_analysis)
         
-        # Step 4: Add metadata
+        # Step 5: Add metadata
         if not hasattr(response, 'metadata') or response.metadata is None:
             response.metadata = {}
         
@@ -443,23 +476,25 @@ Note: You might want to learn more about their needs as the conversation progres
         return response
     
     def _enhance_response_with_quote_info(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
-        """Enhance response with quote information including PDF and pitch deck - using hybrid language detection"""
-        
-        # Check if the response already contains conversational content about the quote
+        """Enhance response with quote information including PDF and pitch deck - using hybrid language detection."""
         original_content = response.content.strip()
-        
-        # Get language from quote metadata (hybrid detection result)
         quote_language = quote.get('language', self.language)
-        language_detection = quote.get('language_detection', {})
-        detection_method = language_detection.get('method', 'explicit')
-        
-        logger.info(f"🌐 Quote Response Language: {quote_language} (method: {detection_method})")
-        
-        # Use the quote agent's format_quote_response method for proper language support
+
         if hasattr(self, 'quote_agent') and self.quote_agent:
-            # Update quote agent language to match resolved language
             if self.quote_agent.language != quote_language:
-                logger.info(f"🔄 Updating quote agent language from {self.quote_agent.language} to {quote_language}")
+                self.quote_agent.language = quote_language
+
+            quote_formatted_response = self.quote_agent.format_quote_response(quote, quote_language)
+            if any(keyword in original_content.lower() for keyword in ['quote', 'price', 'cost', 'total', 'pricing', '見積', '価格', '金額']):
+                response.content += f"\n\n{quote_formatted_response}"
+            else:
+                intro_text = {
+                    'ja': "完璧です！ディスカッションに基づいて詳細な見積もりを作成いたしました。",
+                    'en': "Perfect! I've put together a detailed quote based on our discussion.",
+                    'es': "¡Perfecto! He preparado una cotización detallada basada en nuestra discusión.",
+                    'fr': "Parfait! J'ai préparé un devis détaillé basé sur notre discussion.",
+                    'de': "Perfekt! Ich habe ein detailliertes Angebot basierend auf unserer Diskussion erstellt."
+                }.get(quote_language, "Perfect! I've put together a detailed quote based on our discussion.")
                 self.quote_agent.language = quote_language
             
             quote_formatted_response = self.quote_agent.format_quote_response(quote, quote_language)
@@ -487,8 +522,8 @@ Note: You might want to learn more about their needs as the conversation progres
             logger.warning("⚠️ Quote agent not available for formatting, using fallback with hybrid language support")
             
             # Use localized labels based on resolved language
-            from services.localisation import get_quote_translations
-            t = get_quote_translations(quote_language)
+            from services.localisation import get_translation
+            t = get_translation("quote_prompt", quote_language)
             labels = t["pdf_labels"]
             
             # Build response in resolved language

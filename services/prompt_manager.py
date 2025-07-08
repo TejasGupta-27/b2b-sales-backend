@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from services.localisation import get_quote_translations  # Use for quote-related translations
+from services.localisation import get_translation  # Use for quote-related translations
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class PromptManager:
             },
 
             "quote_generation": {
-                "main_system_prompt": get_quote_translations("ja")["quote_prompt"]
+                "main_system_prompt": get_translation("quote_prompt", "ja")
             },
 
             "conversation_flow": {
@@ -283,7 +283,7 @@ class PromptManager:
 
 会話はプロフェッショナルかつ親しみやすく、業界用語も適宜使い分けてください。""",
 
-            "quote_generation": get_quote_translations("ja")["quote_prompt"],
+            "quote_generation": get_translation("quote_prompt", "ja"),
 
             "conversation_flow": """あなたは営業会話のフロー分析の専門家です。会話内容から以下を判断してください。
 
@@ -342,7 +342,7 @@ Communication style:
 
 Remember: Your goal is to help the prospect make the best decision for their business, which often means recommending our solutions when there's a good fit.""",
 
-            "quote_generation": get_quote_translations("en")["quote_prompt"],
+            "quote_generation": get_translation("quote_prompt", "en"),
 
             "conversation_flow": """You are a conversation flow analyst. Analyze sales conversations to determine:
 

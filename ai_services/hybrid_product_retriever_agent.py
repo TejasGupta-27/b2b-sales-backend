@@ -4,13 +4,9 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from .base import AIProvider, AIMessage, AIResponse
-<<<<<<< HEAD
 from services.elasticsearch_service import get_elasticsearch_service
 from services.chroma_service import ChromaDBService
-from services.realtime_ingestor import get_products # Adjust if path differs
-=======
-from services.elasticsearch_vector_service import get_elasticsearch_service
->>>>>>> 1f7e5058447f1e0f2a7c00babf2371fb2debc13a
+from services.realtime_ingestor import get_products
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from .function_models import RequirementExtraction, ProductAnalysis
 from config import settings
