@@ -47,13 +47,12 @@
             "storage"
           ],
           "search_terms": [
-            "AMD Ryzen 9 7950X 16-core processor",
-            "Intel Core i9-13900K workstation CPU",
-            "32GB DDR5-6000 RAM memory",
-            "64GB DDR5 workstation memory",
-            "NVIDIA RTX 4080 16GB graphics card",
-            "NVIDIA RTX 4070 Ti 12GB GPU",
-            "AMD Radeon RX 7900 XTX graphics",
+            "Intel Core i7-14700K processor",
+            "AMD Ryzen 7 7700X workstation CPU",
+            "Corsair Vengeance 32 GB DDR5 memory",
+            "TEAMGROUP T-Create Expert 32 GB RAM",
+            "Asus ROG STRIX GAMING OC RTX 4090",
+            "Asus TUF GAMING RTX 4080 SUPER",
             "Samsung 990 Pro 2TB NVMe SSD",
             "WD Black SN850X 2TB NVMe storage",
             "Seagate FireCuda 530 2TB SSD",
@@ -72,24 +71,24 @@
         "llm_generated_product_names": [
           {
             "category": "cpu",
-            "product_name": "AMD Ryzen 9 7950X",
+            "product_name": "Intel Core i7-14700K",
             "reasoning": "High core count and performance for video editing and rendering workloads"
           },
           {
             "category": "memory", 
-            "product_name": "32GB DDR5 RAM",
+            "product_name": "Corsair Vengeance 32 GB",
             "reasoning": "Meets minimum RAM requirement for video editing"
           },
           {
             "category": "video_card",
-            "product_name": "NVIDIA RTX 4080",
+            "product_name": "Asus ROG STRIX GAMING OC",
             "reasoning": "Excellent GPU for 3D rendering and video acceleration"
           }
         ],
         "expected_semantic_matches": {
-          "cpu_matches": ["AMD Ryzen 9", "Intel i9", "high core count", "video editing capable"],
-          "memory_matches": ["32GB", "DDR5", "high speed", "large capacity"],
-          "gpu_matches": ["RTX 4080", "RTX 4070", "high VRAM", "rendering capable"]
+          "cpu_matches": ["Intel Core i7-14700K", "AMD Ryzen 7 7700X", "high core count", "video editing capable"],
+          "memory_matches": ["Corsair Vengeance 32 GB", "TEAMGROUP T-Create Expert 32 GB", "DDR5", "large capacity"],
+          "gpu_matches": ["Asus ROG STRIX GAMING OC", "Asus TUF GAMING", "high VRAM", "rendering capable"]
         }
       },
       {
@@ -208,20 +207,23 @@
             "cpu",
             "video_card",
             "memory",
-            "storage"
+            "storage",
+            "monitor",
+            "power_supply"
           ],
           "search_terms": [
-            "NVIDIA RTX 4070 Ti 12GB gaming GPU",
-            "NVIDIA RTX 4060 Ti 8GB graphics card",
-            "AMD Radeon RX 7700 XT 12GB",
-            "AMD Ryzen 7 7700X 8-core CPU",
-            "Intel Core i7-13700K processor",
-            "AMD Ryzen 5 7600X gaming CPU",
-            "32GB DDR5-6000 gaming memory",
-            "16GB DDR5-5600 RAM",
+            "Asus TUF GAMING RTX 4080 SUPER",
+            "Asus ROG STRIX GAMING OC RTX 4090",
+            "Intel Core i7-14700K processor",
+            "AMD Ryzen 7 7700X gaming CPU",
+            "Corsair Vengeance 32 GB DDR5 memory",
+            "TEAMGROUP T-Create Expert 32 GB RAM",
+            "Asus ROG Swift OLED PG27AQDM monitor",
+            "Acer VG271U M3bmiipx 1440p monitor",
+            "Asus ROG THOR 1600T Gaming PSU",
+            "Corsair RM1000x (2021) power supply",
             "Samsung 970 EVO Plus 1TB SSD",
             "WD Black SN770 1TB NVMe",
-            "Crucial P5 Plus 1TB SSD",
             "1440p gaming performance",
             "ray tracing capable GPU",
             "Cyberpunk 2077 gaming PC",
@@ -236,18 +238,36 @@
         "llm_generated_product_names": [
           {
             "category": "video_card",
-            "product_name": "NVIDIA RTX 4070 Ti",
+            "product_name": "Asus TUF GAMING",
             "reasoning": "Excellent 1440p performance with ray tracing support"
           },
           {
             "category": "cpu",
             "product_name": "AMD Ryzen 7 7700X",
             "reasoning": "Great gaming performance and value"
+          },
+          {
+            "category": "memory",
+            "product_name": "Corsair Vengeance 32 GB",
+            "reasoning": "Adequate RAM for modern gaming"
+          },
+          {
+            "category": "monitor",
+            "product_name": "Asus ROG Swift OLED PG27AQDM",
+            "reasoning": "Premium 1440p OLED gaming monitor with high refresh rate"
+          },
+          {
+            "category": "power_supply",
+            "product_name": "Corsair RM1000x (2021)",
+            "reasoning": "Reliable power supply for high-end gaming system"
           }
         ],
         "expected_semantic_matches": {
-          "gpu_matches": ["RTX 4070", "RTX 4060", "NVIDIA", "ray tracing", "1440p capable"],
-          "cpu_matches": ["Ryzen 7", "gaming", "high performance", "good value"]
+          "gpu_matches": ["Asus TUF GAMING", "Asus ROG STRIX GAMING OC", "NVIDIA RTX", "ray tracing", "1440p capable"],
+          "cpu_matches": ["AMD Ryzen 7 7700X", "Intel Core i7-14700K", "gaming", "high performance"],
+          "memory_matches": ["Corsair Vengeance 32 GB", "TEAMGROUP T-Create Expert 32 GB", "DDR5", "gaming memory"],
+          "monitor_matches": ["Asus ROG Swift OLED PG27AQDM", "Acer VG271U M3bmiipx", "1440p", "high refresh"],
+          "psu_matches": ["Corsair RM1000x (2021)", "Asus ROG THOR 1600T Gaming", "reliable", "modular"]
         }
       },
       {
@@ -291,15 +311,14 @@
             "memory"
           ],
           "search_terms": [
-            "NVIDIA RTX 4090 24GB AI training GPU",
+            "Asus ROG STRIX GAMING OC RTX 4090 24GB",
             "NVIDIA RTX 4080 16GB deep learning",
             "NVIDIA RTX 3090 24GB machine learning",
-            "AMD Radeon RX 7900 XTX 24GB",
-            "Intel Core i9-13900K server CPU",
-            "AMD Ryzen 9 7950X workstation",
+            "Intel Core i7-14700K server CPU",
+            "AMD Ryzen 7 7700X workstation",
             "Intel Xeon W-3400 series processor",
-            "128GB DDR5 ECC server memory",
-            "64GB DDR5 workstation RAM",
+            "Corsair Vengeance 32 GB DDR5 memory",
+            "TEAMGROUP T-Create Expert 32 GB RAM",
             "Samsung 990 Pro 2TB NVMe SSD",
             "WD Black SN850X 4TB NVMe",
             "Sabrent Rocket 4 Plus 2TB",
@@ -316,18 +335,24 @@
         "llm_generated_product_names": [
           {
             "category": "video_card",
-            "product_name": "NVIDIA RTX 4090",
+            "product_name": "Asus ROG STRIX GAMING OC",
             "reasoning": "24GB VRAM perfect for large model training"
           },
           {
-            "category": "storage",
-            "product_name": "Samsung 990 Pro 2TB NVMe",
-            "reasoning": "Fast NVMe storage for dataset access"
+            "category": "cpu",
+            "product_name": "Intel Core i7-14700K",
+            "reasoning": "High-performance CPU for AI workloads"
+          },
+          {
+            "category": "memory",
+            "product_name": "Corsair Vengeance 32 GB",
+            "reasoning": "Large memory capacity for model training"
           }
         ],
         "expected_semantic_matches": {
-          "gpu_matches": ["RTX 4090", "RTX 4080", "24GB VRAM", "AI training", "deep learning"],
-          "storage_matches": ["Samsung 990", "NVMe", "fast", "high capacity", "dataset storage"]
+          "gpu_matches": ["Asus ROG STRIX GAMING OC", "Asus TUF GAMING", "24GB VRAM", "AI training", "deep learning"],
+          "cpu_matches": ["Intel Core i7-14700K", "AMD Ryzen 7 7700X", "high performance", "AI capable"],
+          "memory_matches": ["Corsair Vengeance 32 GB", "TEAMGROUP T-Create Expert 32 GB", "large capacity", "workstation"]
         }
       },
       {
@@ -370,17 +395,18 @@
             "workstation"
           ],
           "search_terms": [
-            "LG 27UL850-W 27-inch 4K monitor",
+            "Asus ROG Swift OLED PG27AQDM monitor",
+            "Acer VG271U M3bmiipx 27-inch display",
             "Dell UltraSharp U2723QE 27-inch",
             "ASUS ProArt PA279CV 27-inch",
             "BenQ PD2700U 27-inch 4K",
             "Samsung U28R550UQNX 28-inch 4K",
-            "NVIDIA RTX 4060 8GB multi-monitor",
+            "Asus TUF GAMING RTX 4080 SUPER",
             "AMD Radeon RX 7600 8GB graphics",
             "Intel Arc A750 8GB GPU",
             "AMD Ryzen 7 7700X productivity CPU",
-            "Intel Core i7-13700K workstation",
-            "32GB DDR5-6000 workstation memory",
+            "Intel Core i7-14700K workstation",
+            "Corsair Vengeance 32 GB workstation memory",
             "Samsung 970 EVO Plus 1TB SSD",
             "WD Black SN770 1TB NVMe",
             "multiple monitor setup",
@@ -395,18 +421,24 @@
         "llm_generated_product_names": [
           {
             "category": "monitor",
-            "product_name": "LG 27UL850-W",
-            "reasoning": "27-inch 4K monitor with excellent color accuracy"
+            "product_name": "Asus ROG Swift OLED PG27AQDM",
+            "reasoning": "27-inch premium monitor with excellent color accuracy"
           },
           {
             "category": "video_card",
-            "product_name": "NVIDIA RTX 4060",
+            "product_name": "Asus TUF GAMING",
             "reasoning": "Good multi-monitor support for productivity"
+          },
+          {
+            "category": "cpu",
+            "product_name": "AMD Ryzen 7 7700X",
+            "reasoning": "Excellent performance for web development tasks"
           }
         ],
         "expected_semantic_matches": {
-          "monitor_matches": ["LG 27", "4K", "color accurate", "27-inch", "design suitable"],
-          "gpu_matches": ["RTX 4060", "multiple outputs", "productivity", "multi-monitor"]
+          "monitor_matches": ["Asus ROG Swift OLED PG27AQDM", "Acer VG271U M3bmiipx", "color accurate", "27-inch", "design suitable"],
+          "gpu_matches": ["Asus TUF GAMING", "multiple outputs", "productivity", "multi-monitor"],
+          "cpu_matches": ["AMD Ryzen 7 7700X", "Intel Core i7-14700K", "development", "productivity"]
         }
       }
     ],

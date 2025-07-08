@@ -7,6 +7,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
+from config import settings
 import logging
 from typing import List, Dict, Any
 
@@ -125,26 +126,18 @@ class PitchDeckService:
         return paragraph
 
     def hide_placeholders(self, slide):
-        """Safely hide placeholders without corrupting the slide structure"""
         shapes_to_remove = []
-        
         for shape in slide.shapes:
-            # Check if it's a placeholder
             if hasattr(shape, 'placeholder_format') and shape.placeholder_format is not None:
                 shapes_to_remove.append(shape)
-            # Also remove text boxes that might be default placeholders
             elif hasattr(shape, 'text_frame') and shape.text_frame is not None:
-                # Check if it contains placeholder text
                 if shape.text_frame.text.strip() in ['Click to add title', 'Click to add subtitle', 'Click to add text']:
                     shapes_to_remove.append(shape)
-        
-        # Remove identified placeholders
         for shape in shapes_to_remove:
             try:
                 sp = shape._element
                 sp.getparent().remove(sp)
             except:
-                # If direct removal fails, try making it invisible
                 try:
                     shape.width = 0
                     shape.height = 0
@@ -152,50 +145,78 @@ class PitchDeckService:
                     pass
 
     def clear_slide_content_safely(self, slide):
-        """Safely clear slide content without corrupting the slide structure"""
-        # Only remove content shapes, not structural elements
         shapes_to_remove = []
-        
         for shape in slide.shapes:
-            # Only remove shapes that are not essential slide structure
-            if (hasattr(shape, 'shape_type') and 
-                shape.shape_type in [1, 17, 14]):  # Text box, auto shape, picture
+            if hasattr(shape, 'shape_type') and shape.shape_type in [1, 17, 14]:
                 shapes_to_remove.append(shape)
             elif hasattr(shape, 'text_frame') and shape.text_frame is not None:
-                # Clear text content but keep the shape structure
                 try:
                     shape.text_frame.clear()
                 except:
                     shapes_to_remove.append(shape)
-        
-        # Remove non-essential shapes
         for shape in shapes_to_remove:
             try:
                 sp = shape._element
                 sp.getparent().remove(sp)
             except:
-                # If removal fails, just hide it
                 try:
                     shape.width = 0
                     shape.height = 0
                 except:
                     pass
 
-    async def extract_ppt_structure(self, quotation: str, include_comparison_table: bool = False) -> dict:
-        """Use Azure OpenAI to generate a detailed and persuasive sales pitch deck structure from the quotation."""
+    # ✅ UPDATED: added `language` param with fallback and hybrid detection
+    async def extract_ppt_structure(self, quotation: str, language: str = "en", include_comparison_table: bool = False) -> dict:
+        """Generate a structured and persuasive sales pitch deck with hybrid language detection."""
         
         if not self.client_configured:
             logger.warning("Azure OpenAI client not configured, using fallback structure")
-            return self._get_fallback_structure()
+            return self._get_fallback_structure(language)
         
-        # Base prompt without comparison table
-        base_prompt = f"""
+        # Hybrid language detection approach
+        from services.language_service import LanguageService
+        language_service = LanguageService()
+        
+        # Resolve language using hybrid approach
+        language_resolution = language_service.resolve_language(
+            explicit_language=language,      # From frontend/initialization
+            text_content=quotation,         # Auto-detection from quote content
+            context=None                    # No additional context for quotes
+        )
+        
+        # Update language based on resolution
+        resolved_language = language_resolution['language']
+        detection_method = language_resolution['method']
+        confidence = language_resolution['confidence']
+        
+        logger.info(f"🌐 Pitch Deck Language Resolution:")
+        logger.info(f"   Input Language: {language}")
+        logger.info(f"   Resolved Language: {resolved_language}")
+        logger.info(f"   Detection Method: {detection_method}")
+        logger.info(f"   Confidence: {confidence:.2f}")
+
+        # Add language condition based on resolved language
+        language_note = ""
+        if resolved_language == "ja":
+            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in Japanese."
+        elif resolved_language == "es":
+            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in Spanish."
+        elif resolved_language == "fr":
+            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in French."
+        elif resolved_language == "de":
+            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in German."
+        elif resolved_language != "en":
+            language_service_info = language_service.supported_languages.get(resolved_language, {})
+            language_name = language_service_info.get('name', resolved_language)
+            language_note = f"\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in {language_name}."
+
+        prompt = f"""
 You are a business assistant. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
 
 ### QUOTATION
-\"\"\"
+\"""
 {quotation}
-\"\"\"
+\"""
 
 ### TASKS
 1. Analyze the quotation to identify:
@@ -227,8 +248,10 @@ Return your response as valid JSON:
   ]
 }}
 
-✅ Use ONLY the product and specifications mentioned in the quotation — do NOT make up new ones.  
+✅ Use ONLY the product and specifications mentioned in the quotation — do NOT make up new ones.
 ✅ Return valid JSON ONLY — no commentary, no markdown.
+
+{language_note}
 """
         
         # If comparison table is requested, add it to the prompt
@@ -252,9 +275,7 @@ Add this to your JSON response:
 Note: The comparison table will be populated with real competitor data separately.
 """
             # Insert the comparison section before the JSON format
-            base_prompt = base_prompt.replace("### JSON OUTPUT FORMAT", comparison_section + "\n### JSON OUTPUT FORMAT")
-        
-        prompt = base_prompt
+            prompt = prompt.replace("### JSON OUTPUT FORMAT", comparison_section + "\n### JSON OUTPUT FORMAT")
 
         try:
             response = self.client.chat.completions.create(
@@ -268,94 +289,193 @@ Note: The comparison table will be populated with real competitor data separatel
             try:
                 parsed = json.loads(raw_output)
                 if isinstance(parsed, list):
-                    return {"slides": parsed}
+                    result = {"slides": parsed}
                 elif isinstance(parsed, dict) and "slides" in parsed:
-                    return parsed
+                    result = parsed
                 else:
                     raise ValueError("Parsed JSON is missing expected 'slides' structure.")
+                
+                # Add language metadata to result
+                result['language_resolution'] = language_resolution
+                result['resolved_language'] = resolved_language
+                
+                return result
+                
             except json.JSONDecodeError:
                 logger.error("GPT response was not valid JSON. Response was:\n%s", raw_output)
-                return self._get_fallback_structure()
+                return self._get_fallback_structure(resolved_language)
+                
         except Exception as e:
             logger.error(f"Error in extract_ppt_structure: {e}")
-            return self._get_fallback_structure()
+            return self._get_fallback_structure(resolved_language)
     
-    def _get_fallback_structure(self) -> dict:
-        """Provide a fallback structure when OpenAI is not available"""
-        return {
-            "slides": [
-                {
-                    "title": "Customer Needs Analysis",
-                    "content": [
-                        "Understanding your business requirements",
-                        "Identifying technology gaps and opportunities",
-                        "Assessing current infrastructure limitations",
-                        "Determining scalability and growth needs",
-                        "Evaluating budget and timeline constraints"
-                    ]
+    def _get_fallback_structure(self, language: str = "en") -> dict:
+        """Provide a fallback structure when OpenAI is not available with language support"""
+        
+        # Get localized fallback content
+        if language == "ja":
+            return {
+                "slides": [
+                    {
+                        "title": "お客様のニーズ分析",
+                        "content": [
+                            "ビジネス要件の理解",
+                            "技術的な課題と機会の特定",
+                            "現在のインフラの制約評価",
+                            "スケーラビリティと成長ニーズの決定",
+                            "予算とタイムラインの制約評価"
+                        ]
+                    },
+                    {
+                        "title": "包括的なソリューション",
+                        "content": [
+                            "お客様のビジネスに合わせたテクノロジーソリューション",
+                            "業界をリードする製品とサービス",
+                            "既存システムとのシームレスな統合",
+                            "包括的なサポートとメンテナンス",
+                            "将来に対応したスケーラブルなアーキテクチャ"
+                        ]
+                    },
+                    {
+                        "title": "製品概要と仕様",
+                        "content": [
+                            "高性能ハードウェアコンポーネント",
+                            "エンタープライズグレードソフトウェアソリューション",
+                            "高度なセキュリティ機能とプロトコル",
+                            "信頼性の高いパフォーマンスと稼働時間保証",
+                            "エネルギー効率的で持続可能な設計"
+                        ]
+                    },
+                    {
+                        "title": "投資と価格の内訳",
+                        "content": [
+                            "プレミアムソリューションの競争力のある価格",
+                            "隠れた料金のない透明なコスト構造",
+                            "柔軟な支払いオプションと融資",
+                            "大量購入の場合のボリュームディスカウント",
+                            "費用対効果の高い総所有コストモデル"
+                        ]
+                    },
+                    {
+                        "title": "保証とサポートサービス",
+                        "content": [
+                            "包括的な保証カバレッジ",
+                            "24時間365日の技術サポート体制",
+                            "オンサイトサービスとメンテナンス",
+                            "リモート監視と診断",
+                            "定期的なアップデートとシステム最適化"
+                        ]
+                    },
+                    {
+                        "title": "配送スケジュールと実装",
+                        "content": [
+                            "効率的なプロジェクト計画と実行",
+                            "日常業務への最小限の影響",
+                            "段階的な実装アプローチ",
+                            "スタッフトレーニングと知識移転",
+                            "実装後のサポートと最適化"
+                        ]
+                    },
+                    {
+                        "title": "次のステップとお取引",
+                        "content": [
+                            "詳細な技術コンサルテーションのスケジューリング",
+                            "ソリューション仕様の確認と最終化",
+                            "プロジェクトタイムラインとマイルストーンの確認",
+                            "契約書に署名し、実装を開始",
+                            "技術エクセレンスへの旅を始めましょう"
+                        ]
+                    }
+                ],
+                "language_resolution": {
+                    "language": language,
+                    "method": "fallback",
+                    "confidence": 1.0
                 },
-                {
-                    "title": "Our Comprehensive Solution",
-                    "content": [
-                        "Tailored technology solutions for your business",
-                        "Industry-leading products and services",
-                        "Seamless integration with existing systems",
-                        "Comprehensive support and maintenance",
-                        "Future-ready scalable architecture"
-                    ]
+                "resolved_language": language
+            }
+        else:
+            # English fallback (existing structure)
+            return {
+                "slides": [
+                    {
+                        "title": "Customer Needs Analysis",
+                        "content": [
+                            "Understanding your business requirements",
+                            "Identifying technology gaps and opportunities",
+                            "Assessing current infrastructure limitations",
+                            "Determining scalability and growth needs",
+                            "Evaluating budget and timeline constraints"
+                        ]
+                    },
+                    {
+                        "title": "Our Comprehensive Solution",
+                        "content": [
+                            "Tailored technology solutions for your business",
+                            "Industry-leading products and services",
+                            "Seamless integration with existing systems",
+                            "Comprehensive support and maintenance",
+                            "Future-ready scalable architecture"
+                        ]
+                    },
+                    {
+                        "title": "Product Overview & Specifications",
+                        "content": [
+                            "High-performance hardware components",
+                            "Enterprise-grade software solutions",
+                            "Advanced security features and protocols",
+                            "Reliable performance and uptime guarantees",
+                            "Energy-efficient and sustainable design"
+                        ]
+                    },
+                    {
+                        "title": "Investment & Pricing Breakdown",
+                        "content": [
+                            "Competitive pricing for premium solutions",
+                            "Transparent cost structure with no hidden fees",
+                            "Flexible payment options and financing",
+                            "Volume discounts for bulk purchases",
+                            "Cost-effective total ownership model"
+                        ]
+                    },
+                    {
+                        "title": "Warranty & Support Services",
+                        "content": [
+                            "Comprehensive warranty coverage",
+                            "24/7 technical support availability",
+                            "On-site service and maintenance",
+                            "Remote monitoring and diagnostics",
+                            "Regular updates and system optimization"
+                        ]
+                    },
+                    {
+                        "title": "Delivery Timeline & Implementation",
+                        "content": [
+                            "Efficient project planning and execution",
+                            "Minimal disruption to daily operations",
+                            "Phased implementation approach",
+                            "Staff training and knowledge transfer",
+                            "Post-implementation support and optimization"
+                        ]
+                    },
+                    {
+                        "title": "Next Steps & Call to Action",
+                        "content": [
+                            "Schedule a detailed technical consultation",
+                            "Review and finalize solution specifications",
+                            "Confirm project timeline and milestones",
+                            "Sign agreement and initiate implementation",
+                            "Begin your journey to technology excellence"
+                        ]
+                    }
+                ],
+                "language_resolution": {
+                    "language": language,
+                    "method": "fallback",
+                    "confidence": 1.0
                 },
-                {
-                    "title": "Product Overview & Specifications",
-                    "content": [
-                        "High-performance hardware components",
-                        "Enterprise-grade software solutions",
-                        "Advanced security features and protocols",
-                        "Reliable performance and uptime guarantees",
-                        "Energy-efficient and sustainable design"
-                    ]
-                },
-                {
-                    "title": "Investment & Pricing Breakdown",
-                    "content": [
-                        "Competitive pricing for premium solutions",
-                        "Transparent cost structure with no hidden fees",
-                        "Flexible payment options and financing",
-                        "Volume discounts for bulk purchases",
-                        "Cost-effective total ownership model"
-                    ]
-                },
-                {
-                    "title": "Warranty & Support Services",
-                    "content": [
-                        "Comprehensive warranty coverage",
-                        "24/7 technical support availability",
-                        "On-site service and maintenance",
-                        "Remote monitoring and diagnostics",
-                        "Regular updates and system optimization"
-                    ]
-                },
-                {
-                    "title": "Delivery Timeline & Implementation",
-                    "content": [
-                        "Efficient project planning and execution",
-                        "Minimal disruption to daily operations",
-                        "Phased implementation approach",
-                        "Staff training and knowledge transfer",
-                        "Post-implementation support and optimization"
-                    ]
-                },
-                {
-                    "title": "Next Steps & Call to Action",
-                    "content": [
-                        "Schedule a detailed technical consultation",
-                        "Review and finalize solution specifications",
-                        "Confirm project timeline and milestones",
-                        "Sign agreement and initiate implementation",
-                        "Begin your journey to technology excellence"
-                    ]
-                }
-            ]
-        }
+                "resolved_language": language
+            }
 
     def add_comparison_table(self, slide, table_data):
         """Add comparison table with improved styling and Japanese font support"""
@@ -491,7 +611,17 @@ Note: The comparison table will be populated with real competitor data separatel
         return comparison_table
 
     async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx", similar_products: List[Dict[str, Any]] = None):
-        """Generate a PowerPoint presentation from the structured data with Japanese support and optional similar products"""
+        """Generate a PowerPoint presentation from the structured data with hybrid language support and optional similar products"""
+        
+        # Get resolved language from data
+        resolved_language = data.get('resolved_language', 'en')
+        language_resolution = data.get('language_resolution', {})
+        
+        logger.info(f"🌐 Generating presentation in resolved language: {resolved_language}")
+        if language_resolution:
+            logger.info(f"   Detection method: {language_resolution.get('method', 'unknown')}")
+            logger.info(f"   Confidence: {language_resolution.get('confidence', 0):.2f}")
+        
         # Always resolve template path relative to project root
         base_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(base_dir, "..", "Data", "assets", "template.pptx")
@@ -522,9 +652,19 @@ Note: The comparison table will be populated with real competitor data separatel
         tf.margin_top = Inches(0.2)
         tf.margin_bottom = Inches(0.2)
         
-        # Main title with improved styling
+        # Main title with language support
         title_p = tf.paragraphs[0]
-        main_title = "Sales Pitch Deck"
+        if resolved_language == "ja":
+            main_title = "営業プレゼンテーション"
+        elif resolved_language == "es":
+            main_title = "Presentación de Ventas"
+        elif resolved_language == "fr":
+            main_title = "Présentation de Vente"
+        elif resolved_language == "de":
+            main_title = "Verkaufspräsentation"
+        else:
+            main_title = "Sales Pitch Deck"
+            
         self._apply_font_to_paragraph(title_p, main_title, is_title=True)
         title_p.font.size = Pt(48)
         title_p.font.bold = True
@@ -550,7 +690,7 @@ Note: The comparison table will be populated with real competitor data separatel
         bottom_line.fill.fore_color.rgb = ACCENT_COLOR
         bottom_line.line.fill.background()
         
-        # Subtitle with improved styling
+        # Subtitle with improved styling and language support
         subtitle_box = cover_slide.shapes.add_textbox(Inches(1), Inches(4.5), Inches(8), Inches(1))
         tf_sub = subtitle_box.text_frame
         tf_sub.clear()
@@ -560,13 +700,23 @@ Note: The comparison table will be populated with real competitor data separatel
         tf_sub.margin_bottom = Inches(0.1)
         
         subtitle_p = tf_sub.paragraphs[0]
-        subtitle_text = "Generated from Quotation Analysis"
+        if resolved_language == "ja":
+            subtitle_text = "見積もり分析から生成"
+        elif resolved_language == "es":
+            subtitle_text = "Generado desde Análisis de Cotización"
+        elif resolved_language == "fr":
+            subtitle_text = "Généré depuis l'Analyse de Devis"
+        elif resolved_language == "de":
+            subtitle_text = "Erstellt aus Angebotsanalyse"
+        else:
+            subtitle_text = "Generated from Quotation Analysis"
+            
         self._apply_font_to_paragraph(subtitle_p, subtitle_text, is_title=False)
         subtitle_p.font.size = Pt(24)
         subtitle_p.font.color.rgb = ACCENT_COLOR
         subtitle_p.alignment = PP_ALIGN.CENTER
         
-        # Add company info box
+        # Add company info box with language support
         company_box = cover_slide.shapes.add_textbox(Inches(1), Inches(6), Inches(8), Inches(1))
         tf_company = company_box.text_frame
         tf_company.clear()
@@ -576,7 +726,17 @@ Note: The comparison table will be populated with real competitor data separatel
         tf_company.margin_bottom = Inches(0.1)
         
         company_p = tf_company.paragraphs[0]
-        company_text = "Professional Technology Solutions"
+        if resolved_language == "ja":
+            company_text = "プロフェッショナルテクノロジーソリューション"
+        elif resolved_language == "es":
+            company_text = "Soluciones Tecnológicas Profesionales"
+        elif resolved_language == "fr":
+            company_text = "Solutions Technologiques Professionnelles"
+        elif resolved_language == "de":
+            company_text = "Professionelle Technologielösungen"
+        else:
+            company_text = "Professional Technology Solutions"
+            
         self._apply_font_to_paragraph(company_p, company_text, is_title=False)
         company_p.font.size = Pt(18)
         company_p.font.color.rgb = RGBColor(100, 100, 100)
@@ -659,7 +819,18 @@ Note: The comparison table will be populated with real competitor data separatel
         
         # If we have similar products, create a comparison table
         if similar_products:
-            comparison_table = self.create_comparison_table_from_products(similar_products, "Product Comparison")
+            if resolved_language == "ja":
+                comparison_title = "製品比較"
+            elif resolved_language == "es":
+                comparison_title = "Comparación de Productos"
+            elif resolved_language == "fr":
+                comparison_title = "Comparaison de Produits"
+            elif resolved_language == "de":
+                comparison_title = "Produktvergleich"
+            else:
+                comparison_title = "Product Comparison"
+                
+            comparison_table = self.create_comparison_table_from_products(similar_products, comparison_title)
             
             # Replace any existing comparison table or add new one
             comparison_found = False
@@ -708,10 +879,10 @@ Note: The comparison table will be populated with real competitor data separatel
             # Add table with improved positioning
             self.add_comparison_table(slide, table_data)
 
-        # Save presentation
         try:
             prs.save(output_path)
             logger.info("Presentation saved successfully to: %s", output_path)
+            logger.info(f"🌐 Presentation generated in {resolved_language} using {language_resolution.get('method', 'unknown')} detection")
             return output_path
         except Exception as e:
             logger.error("Error saving presentation: %s", e)

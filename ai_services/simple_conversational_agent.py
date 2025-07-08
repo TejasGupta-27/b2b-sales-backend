@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from io import BytesIO
 import logging
+import langdetect
 from pydantic import BaseModel, Field
 
 from .base import AIProvider, AIMessage, AIResponse
@@ -442,175 +443,78 @@ Note: You might want to learn more about their needs as the conversation progres
         return response
     
     def _enhance_response_with_quote_info(self, response: AIResponse, quote: Dict[str, Any]) -> AIResponse:
-        """Enhance response with quote information including PDF and pitch deck - with proper language support"""
+        """Enhance response with quote information including PDF and pitch deck - using hybrid language detection"""
         
         # Check if the response already contains conversational content about the quote
         original_content = response.content.strip()
         
+        # Get language from quote metadata (hybrid detection result)
+        quote_language = quote.get('language', self.language)
+        language_detection = quote.get('language_detection', {})
+        detection_method = language_detection.get('method', 'explicit')
+        
+        logger.info(f"🌐 Quote Response Language: {quote_language} (method: {detection_method})")
+        
         # Use the quote agent's format_quote_response method for proper language support
         if hasattr(self, 'quote_agent') and self.quote_agent:
-            quote_formatted_response = self.quote_agent.format_quote_response(quote, self.language)
+            # Update quote agent language to match resolved language
+            if self.quote_agent.language != quote_language:
+                logger.info(f"🔄 Updating quote agent language from {self.quote_agent.language} to {quote_language}")
+                self.quote_agent.language = quote_language
+            
+            quote_formatted_response = self.quote_agent.format_quote_response(quote, quote_language)
             
             # If the response is already conversational and mentions the quote, enhance it naturally
-            if any(keyword in original_content.lower() for keyword in ['quote', 'price', 'cost', 'total', 'pricing', '見積', '価格', '金額']):
+            quote_keywords = ['quote', 'price', 'cost', 'total', 'pricing'] + (['見積', '価格', '金額'] if quote_language == 'ja' else [])
+            
+            if any(keyword in original_content.lower() for keyword in quote_keywords):
                 # The LLM already handled the quote conversation naturally, just add the technical details
                 response.content += "\n\n" + quote_formatted_response
             else:
                 # The LLM didn't mention the quote, so provide a more conversational introduction
-                if self.language == "ja":
-                    response.content += f"\n\n完璧です！ディスカッションに基づいて詳細な見積もりを作成いたしました。"
-                else:
-                    response.content += f"\n\nPerfect! I've put together a detailed quote based on our discussion."
+                intro_text = {
+                    'ja': "完璧です！ディスカッションに基づいて詳細な見積もりを作成いたしました。",
+                    'en': "Perfect! I've put together a detailed quote based on our discussion.",
+                    'es': "¡Perfecto! He preparado una cotización detallada basada en nuestra discusión.",
+                    'fr': "Parfait! J'ai préparé un devis détaillé basé sur notre discussion.",
+                    'de': "Perfekt! Ich habe ein detailliertes Angebot basierend auf unserer Diskussion erstellt."
+                }.get(quote_language, "Perfect! I've put together a detailed quote based on our discussion.")
                 
+                response.content += f"\n\n{intro_text}"
                 response.content += "\n\n" + quote_formatted_response
         else:
             # Fallback logic with proper language support
-            print("⚠️ Quote agent not available for formatting, using fallback with language support")
+            logger.warning("⚠️ Quote agent not available for formatting, using fallback with hybrid language support")
             
-            # If the response is already conversational and mentions the quote, enhance it naturally
+            # Use localized labels based on resolved language
+            from services.localisation import get_quote_translations
+            t = get_quote_translations(quote_language)
+            labels = t["pdf_labels"]
+            
+            # Build response in resolved language
             if any(keyword in original_content.lower() for keyword in ['quote', 'price', 'cost', 'total', 'pricing', '見積', '価格', '金額']):
-                # The LLM already handled the quote conversation naturally, just add the technical details
-                if self.language == "ja":
-                    response.content += f"\n\n📋 **見積もり詳細：**"
-                    response.content += f"\n• 見積もり番号：{quote.get('quote_number', 'N/A')}"
-                else:
-                    response.content += f"\n\n📋 **Quote Details:**"
-                    response.content += f"\n• Quote Number: {quote.get('quote_number', 'N/A')}"
+                response.content += f"\n\n📋 **{labels['quote_details']}**"
+                response.content += f"\n• {labels['quote_number']}: {quote.get('quote_number', 'N/A')}"
                 
-                # Add pricing summary
+                # Add pricing summary with proper currency handling
                 if 'financials' in quote:
                     financials = quote['financials']
-                    if self.language == "ja":
-                        response.content += f"\n• 小計：¥{int(financials['subtotal'] * 150):,}"  # Convert to JPY
-                        response.content += f"\n• 税金：¥{int(financials['tax_amount'] * 150):,}"
-                        response.content += f"\n• **合計：¥{int(financials['total'] * 150):,}**"
-                    else:
-                        response.content += f"\n• Subtotal: ${financials['subtotal']:,.2f}"
-                        response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
-                        response.content += f"\n• **Total: ${financials['total']:,.2f}**"
-                elif 'pricing' in quote:
-                    pricing = quote['pricing']
-                    if self.language == "ja":
-                        response.content += f"\n• 小計：¥{int(pricing['subtotal'] * 150):,}"
-                        response.content += f"\n• 税金：¥{int(pricing['tax_amount'] * 150):,}"
-                        response.content += f"\n• **合計：¥{int(pricing['total'] * 150):,}**"
-                    else:
-                        response.content += f"\n• Subtotal: ${pricing['subtotal']:,.2f}"
-                        response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
-                        response.content += f"\n• **Total: ${pricing['total']:,.2f}**"
+                    currency_symbol = "¥" if quote_language == "ja" else "$"
+                    response.content += f"\n• {labels['subtotal']}: {currency_symbol}{financials['subtotal']:,.2f}"
+                    response.content += f"\n• {labels['tax']}: {currency_symbol}{financials['tax_amount']:,.2f}"
+                    response.content += f"\n• **{labels['total_amount']}: {currency_symbol}{financials['total']:,.2f}**"
                 
-                if quote.get('valid_until'):
-                    try:
-                        if self.language == "ja":
-                            response.content += f"\n• 有効期限：{datetime.fromisoformat(quote['valid_until']).strftime('%Y年%m月%d日')}"
-                        else:
-                            response.content += f"\n• Valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
-                    except:
-                        if self.language == "ja":
-                            response.content += f"\n• 有効期限：{quote['valid_until']}"
-                        else:
-                            response.content += f"\n• Valid until: {quote['valid_until']}"
-                
-                # Add download links
+                # Add download links with localized text
                 if quote.get('pdf_generated', False) and quote.get('pdf_url'):
-                    if self.language == "ja":
-                        response.content += f"\n\n📄 **[見積もりPDFをダウンロード]({quote['pdf_url']})**"
-                    else:
-                        response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
-                
-                if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
-                    if self.language == "ja":
-                        response.content += f"\n\n📊 **[プレゼンテーション資料をダウンロード]({quote['pitch_deck_url']})**"
-                    else:
-                        response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
-                
-                # Add natural next steps
-                if self.language == "ja":
-                    response.content += f"\n\n**次のステップ：**"
-                    response.content += f"\n• 詳細な見積もりをご確認いただき、ご質問がございましたらお知らせください"
-                    if quote.get('pitch_deck_generated', False):
-                        response.content += f"\n• 視覚的な概要についてはプレゼンテーション資料をご覧ください"
-                    response.content += f"\n• 明確化や調整が必要でしたら、喜んでお手伝いいたします"
-                else:
-                    response.content += f"\n\n**What's next?**"
-                    response.content += f"\n• Review the detailed quote and let me know if you have any questions"
-                    if quote.get('pitch_deck_generated', False):
-                        response.content += f"\n• Check out the pitch deck for a visual overview"
-                    response.content += f"\n• I'm here to help with any clarifications or adjustments"
-                
-            else:
-                # The LLM didn't mention the quote, so provide a more conversational introduction
-                if self.language == "ja":
-                    response.content += f"\n\n完璧です！ディスカッションに基づいて詳細な見積もりを作成いたしました。"
-                    response.content += f"\n\n📋 **見積もり #{quote.get('quote_number', 'N/A')}**"
-                else:
-                    response.content += f"\n\nPerfect! I've put together a detailed quote based on our discussion."
-                    response.content += f"\n\n📋 **Quote #{quote.get('quote_number', 'N/A')}**"
-                
-                # Add pricing summary
-                if 'financials' in quote:
-                    financials = quote['financials']
-                    if self.language == "ja":
-                        response.content += f"\n\n💰 **内訳：**"
-                        response.content += f"\n• 小計：¥{int(financials['subtotal'] * 150):,}"
-                        response.content += f"\n• 税金：¥{int(financials['tax_amount'] * 150):,}"
-                        response.content += f"\n• **合計：¥{int(financials['total'] * 150):,}**"
-                    else:
-                        response.content += f"\n\n💰 **Here's the breakdown:**"
-                        response.content += f"\n• Subtotal: ${financials['subtotal']:,.2f}"
-                        response.content += f"\n• Tax: ${financials['tax_amount']:,.2f}"
-                        response.content += f"\n• **Total: ${financials['total']:,.2f}**"
-                elif 'pricing' in quote:
-                    pricing = quote['pricing']
-                    if self.language == "ja":
-                        response.content += f"\n\n💰 **内訳：**"
-                        response.content += f"\n• 小計：¥{int(pricing['subtotal'] * 150):,}"
-                        response.content += f"\n• 税金：¥{int(pricing['tax_amount'] * 150):,}"
-                        response.content += f"\n• **合計：¥{int(pricing['total'] * 150):,}**"
-                    else:
-                        response.content += f"\n\n💰 **Here's the breakdown:**"
-                        response.content += f"\n• Subtotal: ${pricing['subtotal']:,.2f}"
-                        response.content += f"\n• Tax: ${pricing['tax_amount']:,.2f}"
-                        response.content += f"\n• **Total: ${pricing['total']:,.2f}**"
-                
-                if quote.get('valid_until'):
-                    try:
-                        if self.language == "ja":
-                            response.content += f"\n• 有効期限：{datetime.fromisoformat(quote['valid_until']).strftime('%Y年%m月%d日')}"
-                        else:
-                            response.content += f"\n• Valid until: {datetime.fromisoformat(quote['valid_until']).strftime('%B %d, %Y')}"
-                    except:
-                        if self.language == "ja":
-                            response.content += f"\n• 有効期限：{quote['valid_until']}"
-                        else:
-                            response.content += f"\n• Valid until: {quote['valid_until']}"
-                
-                # Add download links
-                if quote.get('pdf_generated', False) and quote.get('pdf_url'):
-                    if self.language == "ja":
-                        response.content += f"\n\n📄 **[見積もりPDFをダウンロード]({quote['pdf_url']})**"
-                    else:
-                        response.content += f"\n\n📄 **[Download Complete Quote PDF]({quote['pdf_url']})**"
-                
-                if quote.get('pitch_deck_generated', False) and quote.get('pitch_deck_url'):
-                    if self.language == "ja":
-                        response.content += f"\n\n📊 **[プレゼンテーション資料をダウンロード]({quote['pitch_deck_url']})**"
-                    else:
-                        response.content += f"\n\n📊 **[Download Pitch Deck]({quote['pitch_deck_url']})**"
-                
-                # Add natural next steps
-                if self.language == "ja":
-                    response.content += f"\n\n**次のステップ：**"
-                    response.content += f"\n• 詳細な見積もりをご確認いただき、ご質問がございましたらお知らせください"
-                    if quote.get('pitch_deck_generated', False):
-                        response.content += f"\n• 視覚的な概要についてはプレゼンテーション資料をご覧ください"
-                    response.content += f"\n• 明確化や調整が必要でしたら、喜んでお手伝いいたします"
-                else:
-                    response.content += f"\n\n**What's next?**"
-                    response.content += f"\n• Review the detailed quote and let me know if you have any questions"
-                    if quote.get('pitch_deck_generated', False):
-                        response.content += f"\n• Check out the pitch deck for a visual overview"
-                    response.content += f"\n• I'm here to help with any clarifications or adjustments"
+                    pdf_text = {
+                        'ja': "📄 **[見積もりPDFをダウンロード]({url})**",
+                        'en': "📄 **[Download Complete Quote PDF]({url})**",
+                        'es': "📄 **[Descargar PDF de Cotización Completa]({url})**",
+                        'fr': "📄 **[Télécharger le PDF du Devis Complet]({url})**",
+                        'de': "📄 **[Vollständiges Angebot PDF herunterladen]({url})**"
+                    }.get(quote_language, "📄 **[Download Complete Quote PDF]({url})**")
+                    
+                    response.content += f"\n\n{pdf_text.format(url=quote['pdf_url'])}"
         
         return response
     

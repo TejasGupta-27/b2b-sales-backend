@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 from services.prompt_manager import get_prompt_manager
 from services.metrics_service import get_metrics_service
+from services.language_service import LanguageService
 import os
 
 logger = logging.getLogger(__name__)
@@ -103,25 +104,22 @@ class QuoteGenerationAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
-        """Generate quote using simplified workflow with conversation messages directly"""
+        """Generate quote using hybrid language detection approach"""
 
-        logger.info(f"🔍 Quote Agent: Starting quote generation for language: {self.language}")
+        logger.info(f"🔍 Quote Agent: Starting quote generation with hybrid language detection")
 
         try:
-            # Get translations for the specified language
+            # Get translations for the specified language (may be updated after detection)
             t = get_quote_translations(self.language)
             
             if not conversation_messages:
                 logger.error("❌ No conversation messages provided")
-                print("❌ Debug - conversation_messages is empty!")
                 self.metrics_service.record_quote_generation(status="failed")
                 raise ValueError("No conversation messages available for quote generation")
             
-            logger.info(f"✅ Found {len(conversation_messages)} conversation messages")
-            
-            # Prepare conversation text for AI analysis
+            # Prepare conversation text for analysis
             conversation_parts = []
-            for i, msg in enumerate(conversation_messages):
+            for msg in conversation_messages:
                 if hasattr(msg, 'role') and hasattr(msg, 'content'):
                     if msg.content:
                         conversation_parts.append(f"{msg.role}: {msg.content}")
@@ -137,9 +135,34 @@ class QuoteGenerationAgent(AIProvider):
             
             if not conversation_text.strip():
                 logger.error("❌ No valid conversation content found")
-                print("❌ Debug - conversation_text is empty after processing!")
                 self.metrics_service.record_quote_generation(status="failed")
                 raise ValueError("No valid conversation content available")
+
+            # HYBRID LANGUAGE DETECTION
+            language_service = LanguageService()
+            
+            # Resolve language using hybrid approach
+            language_resolution = language_service.resolve_language(
+                explicit_language=self.language,  # From frontend/initialization
+                text_content=conversation_text,   # Auto-detection
+                context=customer_context          # Fallback context
+            )
+            
+            # Update language based on resolution
+            resolved_language = language_resolution['language']
+            detection_method = language_resolution['method']
+            confidence = language_resolution['confidence']
+            
+            logger.info(f"🌐 Language Resolution:")
+            logger.info(f"   Resolved Language: {resolved_language}")
+            logger.info(f"   Detection Method: {detection_method}")
+            logger.info(f"   Confidence: {confidence:.2f}")
+            
+            # Update translations if language changed
+            if resolved_language != self.language:
+                logger.info(f"🔄 Language changed from {self.language} to {resolved_language}")
+                self.language = resolved_language
+                t = get_quote_translations(resolved_language)
 
             # Prepare safe context for AI
             safe_context = self._safe_serialize_context(customer_context)
@@ -149,10 +172,13 @@ class QuoteGenerationAgent(AIProvider):
                 conversation_text=conversation_text,
                 safe_context=safe_context
             )
-            # Add explicit instruction for Japanese output if not already present
-            if self.language == "ja" and "日本語で回答してください" not in quote_prompt:
-                quote_prompt += "\n必ず日本語で回答してください。"
-            print(f"🔍 Debug - Quote prompt (truncated): {quote_prompt[:500]}")
+            
+            # Add explicit language instruction for consistency
+            if resolved_language == "ja":
+                quote_prompt += "\n必ず日本語で回答してください。すべての内容を日本語で記載してください。"
+            elif resolved_language != "en":
+                language_name = language_service.supported_languages.get(resolved_language, {}).get('name', resolved_language)
+                quote_prompt += f"\nPlease respond in {language_name}. All content should be in {language_name}."
             
             # Use Pydantic function calling to generate structured quote
             response = await self.base_provider.generate_structured_response(
@@ -162,7 +188,8 @@ class QuoteGenerationAgent(AIProvider):
             
             # Convert to dictionary and add metadata
             quote_dict = response.model_dump()
-            quote_dict['language'] = self.language  # Ensure language is set
+            quote_dict['language'] = resolved_language  # Use resolved language
+            quote_dict['language_detection'] = language_resolution  # Add detection metadata
             
             quote_id = quote_dict['quote_number'].split('-')[-1] if '-' in quote_dict['quote_number'] else str(uuid.uuid4())[:8]
             
@@ -172,46 +199,17 @@ class QuoteGenerationAgent(AIProvider):
                 'data_source': 'conversation_only'
             })
             
-            print("🔍 Debug - Starting PDF generation...")
-            
-            # Generate PDF
-            quote_dict = await self._generate_quote_pdf(quote_dict, language=self.language)
-            print(f"🔍 Debug - PDF generation completed")
-            print(f"🔍 Debug - Final quote_dict keys: {list(quote_dict.keys())}")
-            
             logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']} (Language: {self.language})")
-            logger.info(f"🔍 Quote dict after PDF generation: {json.dumps(quote_dict, indent=2, default=str)}")
-            # Extract quote value for metrics
-            quote_value = None
-            currency = "USD"
-            try:
-                financials = quote_dict.get('financials', {})
-                if financials and isinstance(financials, dict):
-                    quote_value = financials.get('total', 0)
-                    currency = financials.get('currency', 'USD')
-                    print(f"🔍 Debug - Extracted quote value: {quote_value} {currency}")
-            except Exception as e:
-                print(f"⚠️ Debug - Failed to extract quote value: {e}")
+            logger.info(f"🔍 Quote dict after initial generation: {json.dumps(quote_dict, indent=2, default=str)}")
             
-            # Record successful quote generation with value
-            self.metrics_service.record_quote_generation(
-                status="success", 
-                quote_value=quote_value, 
-                currency=currency
-            )
+            # Generate PDF with correct language
+            quote_dict = await self._generate_quote_pdf(quote_dict, language=resolved_language)
             
-            logger.info(f"✅ Quote generated successfully: {quote_dict['quote_number']}")
+            logger.info(f"✅ Quote generated in {resolved_language} using {detection_method} method")
             return quote_dict
             
         except Exception as e:
             logger.error(f"❌ Quote generation failed: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
-            print(f"❌ Debug - Full exception details:")
-            print(f"   Exception type: {type(e)}")
-            print(f"   Exception message: {str(e)}")
-            print(f"   Full traceback: {traceback.format_exc()}")
-            
             # Record failed quote generation
             self.metrics_service.record_quote_generation(status="failed")
             return None
@@ -318,6 +316,7 @@ class QuoteGenerationAgent(AIProvider):
             # Convert to the format expected by PDF generator with translations
             pdf_quote_data = {
                 'quote_number': quote_dict.get('quote_number', 'N/A'),
+                'language': quote_dict.get('language', 'en'),
                 'quote_id': quote_dict.get('quote_id', 'unknown'),
                 'created_at': quote_dict.get('created_at', ''),
                 'valid_until': quote_dict.get('valid_until', ''),

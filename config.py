@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import List, Optional, ClassVar
 from pathlib import Path
 import os
 
@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra='ignore'
+    
+    # Multilingual Configuration
+    SUPPORTED_LANGUAGES: ClassVar[list[str]] = ["en", "ja", "es", "fr", "de", "it", "pt", "ko", "zh"]
+    DEFAULT_LANGUAGE: ClassVar[str] = "en"
+    LANGUAGE_DETECTION_CONFIDENCE_THRESHOLD: ClassVar[float] = 0.8
+    ENABLE_AUTO_LANGUAGE_DETECTION: ClassVar[bool] = True
     
     # API Configuration
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
@@ -94,6 +100,11 @@ class Settings(BaseSettings):
     rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.4"))
     rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.6"))
     final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "10"))
+    
+    # Testing and Debug Configuration
+    enable_startup_test_searches: bool = os.getenv("ENABLE_STARTUP_TEST_SEARCHES", "False").lower() == "true"
+    enable_debug_vector_endpoints: bool = os.getenv("ENABLE_DEBUG_VECTOR_ENDPOINTS", "False").lower() == "true"
+    disable_automatic_category_defaults: bool = os.getenv("DISABLE_AUTOMATIC_CATEGORY_DEFAULTS", "False").lower() == "true"
     
     @property
     def cors_origins_list(self) -> List[str]:

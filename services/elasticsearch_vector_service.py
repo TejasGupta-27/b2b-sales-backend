@@ -1095,7 +1095,7 @@ class ElasticsearchVectorService:
             categories = await self._extract_categories_fallback(requirements)
         
         # If still no categories, default to core categories based on common use cases
-        if not categories:
+        if not categories and not settings.disable_automatic_category_defaults:
             # Check if this looks like a workstation/professional use case
             text_content = []
             for key in ['semantic_query', 'technical_requirements', 'business_requirements']:
@@ -1124,6 +1124,9 @@ class ElasticsearchVectorService:
                 # Default to most common categories
                 categories = ['cpu', 'memory', 'internal-hard-drive']
                 logger.info("🎯 Applied general default categories")
+        elif not categories and settings.disable_automatic_category_defaults:
+            logger.info("ℹ️ Automatic category defaults disabled (DISABLE_AUTOMATIC_CATEGORY_DEFAULTS=true)")
+            return None  # No categories to return
         
         logger.info(f"🎯 Final categories selected: {categories}")
         return categories

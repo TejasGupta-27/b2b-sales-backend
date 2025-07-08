@@ -1,6 +1,6 @@
 """
 Localization service for quote generation
-Provides translations for different languages
+Provides translations for different languages with hybrid detection support
 """
 
 # Translation dictionary for quote generation
@@ -151,23 +151,64 @@ Make sure all prices are realistic and the quote looks professional. If specific
     }
 }
 
-def get_quote_translations(language: str = "en") -> dict:
+def get_quote_translations(language: str, fallback: bool = True) -> dict:
     """
-    Get quote translations for specified language
+    Get quote translations for specified language with fallback support
     
     Args:
-        language: Language code ("en" or "ja")
-        
-    Returns:
-        Dictionary of translations for the specified language
-    """
-    return quote_translations.get(language, quote_translations["en"])
-
-def get_supported_languages() -> list:
-    """
-    Get list of supported language codes
+        language: Target language code
+        fallback: Whether to fallback to English if language not found
     
     Returns:
-        List of supported language codes
+        Dictionary containing translations for the language
     """
+    # Direct lookup
+    if language in quote_translations:
+        return quote_translations[language]
+    
+    # Fallback to English if enabled
+    if fallback and language != 'en':
+        logger.warning(f"⚠️ Language '{language}' not found, falling back to English")
+        return quote_translations.get('en', {})
+    
+    # Return empty dict if no fallback
+    logger.error(f"❌ Language '{language}' not found and no fallback enabled")
+    return {}
+
+def get_supported_languages() -> list:
+    """Get list of supported language codes"""
     return list(quote_translations.keys())
+
+def detect_language_from_content(content: str) -> str:
+    """
+    Simple content-based language detection fallback
+    
+    Args:
+        content: Text content to analyze
+        
+    Returns:
+        Detected language code
+    """
+    if not content:
+        return 'en'
+    
+    # Simple heuristic-based detection for common languages
+    content_lower = content.lower()
+    
+    # Japanese detection
+    japanese_chars = set('あいうえおかきくけこがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽまみむめもやゆよらりるれろわをん')
+    if any(char in japanese_chars for char in content_lower):
+        return 'ja'
+    
+    # Spanish detection
+    spanish_indicators = ['señor', 'señora', 'precio', 'cotización', 'empresa', 'producto']
+    if any(indicator in content_lower for indicator in spanish_indicators):
+        return 'es'
+    
+    # French detection
+    french_indicators = ['monsieur', 'madame', 'prix', 'devis', 'entreprise', 'produit']
+    if any(indicator in content_lower for indicator in french_indicators):
+        return 'fr'
+    
+    # Default to English
+    return 'en'
