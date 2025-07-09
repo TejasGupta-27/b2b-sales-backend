@@ -394,25 +394,71 @@ class RRFHybridFusion:
         max_results: int = None
     ) -> List[Dict]:
         """
-        Apply RRF fusion within each category and return equal number of products per category.
+        Apply RRF fusion within each category and return balanced results.
+        Modified to be less restrictive and allow more products per category.
         """
         max_results = max_results or settings.final_result_limit
         num_categories = len(categories)
         if num_categories == 0:
             return []
-        per_category = max_results // num_categories
+        
+        # Calculate minimum products per category, but allow more if available
+        min_per_category = max(1, max_results // num_categories)
         remainder = max_results % num_categories
+        
+        print(f"🎯 Per-category fusion: {num_categories} categories, {max_results} total results")
+        print(f"   Min per category: {min_per_category}, remainder: {remainder}")
+        
         final_products = []
         used_ids = set()
+        
         for i, category in enumerate(categories):
-            n = per_category + (1 if i < remainder else 0)
+            # Calculate target for this category (minimum + extra if available)
+            target_per_category = min_per_category + (1 if i < remainder else 0)
+            
+            # Get products for this category
             es_cat = [p for p in elasticsearch_products if p.get('category') == category]
             vec_cat = [p for p in vector_products if p.get('category') == category]
-            fused = self.fuse_rankings(es_cat, vec_cat, max_results=n)
-            for prod in fused:
-                if prod.get('id') not in used_ids:
-                    final_products.append(prod)
-                    used_ids.add(prod.get('id'))
+            
+            print(f"   📦 Category '{category}': {len(es_cat)} ES, {len(vec_cat)} vector products")
+            
+            # If we have products for this category, fuse them
+            if es_cat or vec_cat:
+                # Allow more products per category if we have them (up to 2x the minimum)
+                category_max = min(target_per_category * 2, max_results // max(1, num_categories // 2))
+                fused = self.fuse_rankings(es_cat, vec_cat, max_results=category_max)
+                
+                # Add unique products from this category
+                for prod in fused:
+                    if prod.get('id') not in used_ids:
+                        final_products.append(prod)
+                        used_ids.add(prod.get('id'))
+                        print(f"     ✅ Added: {prod.get('name', 'Unknown')} (RRF: {prod.get('rrf_score', 0):.4f})")
+                        
+                        # Stop if we've reached the overall limit
+                        if len(final_products) >= max_results:
+                            break
+            else:
+                print(f"     ⚠️ No products found for category '{category}'")
+        
+        # If we haven't filled the quota, add remaining high-scoring products from any category
+        if len(final_products) < max_results:
+            print(f"📊 Adding additional products to reach {max_results} total...")
+            
+            # Get all unselected products
+            all_products = elasticsearch_products + vector_products
+            unselected_products = [p for p in all_products if p.get('id') not in used_ids]
+            
+            # Sort by score and add remaining products
+            unselected_products.sort(key=lambda x: max(x.get('_score', 0), x.get('_similarity_score', 0)), reverse=True)
+            
+            for product in unselected_products:
+                if len(final_products) >= max_results:
+                    break
+                final_products.append(product)
+                print(f"     ✅ Added additional: {product.get('name', 'Unknown')} (Score: {max(product.get('_score', 0), product.get('_similarity_score', 0)):.3f})")
+        
+        print(f"🎯 Per-category fusion complete: {len(final_products)} total products")
         return final_products
 
 class HybridProductRetrieverAgent(AIProvider):
@@ -970,10 +1016,10 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         if use_case:
             query_parts.append(use_case)
         
-        # Add technical requirements with more detail
+        # Add technical requirements with more detail - preserve exact terms
         tech_reqs = requirements.get('technical_requirements', [])
         if tech_reqs:
-            # Convert to string and add context
+            # Convert to string and add context, but preserve exact terms like "i5"
             tech_text = ' '.join([str(req) for req in tech_reqs if str(req)])
             if tech_text:
                 query_parts.append(f"Technical requirements: {tech_text}")
@@ -985,7 +1031,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             if business_text:
                 query_parts.append(f"Business needs: {business_text}")
         
-        # Add search terms as additional context (not as filters)
+        # Add search terms as additional context (not as filters) - preserve exact terms
         search_terms = requirements.get('search_terms', [])
         if search_terms:
             search_text = ' '.join([str(term) for term in search_terms if str(term)])
@@ -1388,6 +1434,10 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 "query": {
                     "bool": {
                         "should": [
+                            {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in query_terms
+                        ] + [
+                            {"match_phrase": {"description": {"query": term, "boost": 2.0}}} for term in query_terms
+                        ] + [
                             {"match": {"name": {"query": term, "boost": 2.0}}} for term in query_terms
                         ] + [
                             {"match": {"description": {"query": term, "boost": 1.0}}} for term in query_terms

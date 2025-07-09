@@ -618,24 +618,24 @@ class ElasticsearchVectorService:
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
             
-            # If categories are specified, search each category separately for balanced results
-            if categories and len(categories) > 1:
-                logger.info(f"🎯 Performing balanced search across {len(categories)} categories")
-                return await self._balanced_category_search(query_vector, query, categories, size, filters, hybrid_weight)
-            elif categories and len(categories) == 1:
-                logger.info(f"🎯 Single category search for: {categories[0]}")
-            else:
-                logger.info(f"🔍 No categories or insufficient categories for balanced search - using standard search")
-            
-            # Determine which indices to search
-            if categories:
-                # Search only in specified category indices
+            # Determine which indices to search - be less restrictive
+            if categories and len(categories) > 0:
+                # Search in specified category indices, but also include some general search
                 index_names = []
                 for category in categories:
                     index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
                     index_names.append(index_name)
                 # Remove duplicates
                 index_names = list(set(index_names))
+                
+                # Also include a few other major categories for diversity
+                major_categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive', 'monitor']
+                for cat in major_categories:
+                    if cat not in categories:
+                        index_name = CATEGORY_INDEX_MAP.get(cat, DEFAULT_PRODUCTS_INDEX)
+                        if index_name not in index_names:
+                            index_names.append(index_name)
+                
                 logger.info(f"🎯 Searching in category-specific indices: {index_names}")
             else:
                 # Search in all category indices
@@ -644,7 +644,7 @@ class ElasticsearchVectorService:
             
             # Build the search query
             search_query = {
-                "size": size,
+                "size": size * 2,  # Get more results to allow for better filtering
                 "query": {
                     "bool": {
                         "should": []
@@ -683,10 +683,22 @@ class ElasticsearchVectorService:
                 }
             }
             
+            # Add a more precise query for exact term matching
+            exact_query = {
+                "bool": {
+                    "should": [
+                        {"match_phrase": {"name": {"query": query, "boost": 5.0}}},
+                        {"match_phrase": {"description": {"query": query, "boost": 3.0}}},
+                        {"match_phrase": {"searchable_content": {"query": query, "boost": 2.0}}}
+                    ]
+                }
+            }
+            
             if hybrid_weight > 0:
-                # Hybrid search
+                # Hybrid search with both exact and fuzzy matching
                 search_query["query"]["bool"]["should"].extend([
                     {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
+                    {"constant_score": {"filter": exact_query, "boost": hybrid_weight * 2}},  # Higher boost for exact matches
                     {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
                 ])
             else:
@@ -713,6 +725,54 @@ class ElasticsearchVectorService:
                 product["_similarity_score"] = hit["_score"]  # For compatibility
                 product["_index"] = hit["_index"]  # Track which index this came from
                 products.append(product)
+            
+            # Apply post-search filtering if categories are specified
+            if categories and len(categories) > 0:
+                # Prioritize products from specified categories but don't exclude others completely
+                prioritized_products = []
+                other_products = []
+                
+                for product in products:
+                    product_category = product.get('category', '').lower()
+                    if product_category in [cat.lower() for cat in categories]:
+                        prioritized_products.append(product)
+                    else:
+                        other_products.append(product)
+                
+                # Combine prioritized products first, then others
+                final_products = prioritized_products + other_products
+                products = final_products[:size]  # Limit to requested size
+                
+                logger.info(f"🎯 Category filtering: {len(prioritized_products)} prioritized, {len(other_products)} others")
+            else:
+                # No category filtering, just limit to requested size
+                products = products[:size]
+            
+            # Apply exact term filtering to prioritize products containing the query
+            if query and len(query.strip()) > 0:
+                exact_match_products = []
+                partial_match_products = []
+                other_products = []
+                
+                query_lower = query.lower()
+                for product in products:
+                    product_name = product.get('name', '').lower()
+                    product_desc = product.get('description', '').lower()
+                    product_content = product.get('searchable_content', '').lower()
+                    
+                    # Check if the exact query term appears in the product
+                    if query_lower in product_name or query_lower in product_desc or query_lower in product_content:
+                        exact_match_products.append(product)
+                    elif any(word in product_name or word in product_desc for word in query_lower.split()):
+                        partial_match_products.append(product)
+                    else:
+                        other_products.append(product)
+                
+                # Reorder products: exact matches first, then partial matches, then others
+                products = exact_match_products + partial_match_products + other_products
+                products = products[:size]  # Limit to requested size
+                
+                logger.info(f"🎯 Query filtering: {len(exact_match_products)} exact matches, {len(partial_match_products)} partial matches, {len(other_products)} others")
             
             logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
             logger.info(f"   Searched indices: {index_names}")
@@ -915,10 +975,22 @@ class ElasticsearchVectorService:
                 }
             }
             
+            # Add a more precise query for exact term matching
+            exact_query = {
+                "bool": {
+                    "should": [
+                        {"match_phrase": {"name": {"query": query, "boost": 5.0}}},
+                        {"match_phrase": {"description": {"query": query, "boost": 3.0}}},
+                        {"match_phrase": {"searchable_content": {"query": query, "boost": 2.0}}}
+                    ]
+                }
+            }
+            
             if hybrid_weight > 0:
-                # Hybrid search
+                # Hybrid search with both exact and fuzzy matching
                 search_query["query"]["bool"]["should"].extend([
                     {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
+                    {"constant_score": {"filter": exact_query, "boost": hybrid_weight * 2}},  # Higher boost for exact matches
                     {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
                 ])
             else:
@@ -1634,25 +1706,39 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
     ) -> DynamicQueryGeneration:
         """Fallback query generation when AI is not available"""
         
-        # Build semantic query
+        # Build semantic query - preserve exact terms from requirements
         semantic_query = requirements.get('semantic_query', '')
         if not semantic_query:
-            use_case = requirements.get('use_case', 'business solution')
-            semantic_query = f"{use_case} technology solution"
+            # Use technical requirements if available
+            tech_reqs = requirements.get('technical_requirements', [])
+            if tech_reqs:
+                semantic_query = ' '.join([str(req) for req in tech_reqs])
+            else:
+                use_case = requirements.get('use_case', 'business solution')
+                semantic_query = f"{use_case} technology solution"
         
-        # Build keyword query with proper structure
+        # Build keyword query with proper structure - preserve exact terms
         search_terms = requirements.get('search_terms', [])
         if not search_terms:
-            search_terms = ['business', 'solution']
+            # Use technical requirements as search terms
+            tech_reqs = requirements.get('technical_requirements', [])
+            if tech_reqs:
+                search_terms = [str(req) for req in tech_reqs]
+            else:
+                search_terms = ['business', 'solution']
         
-        # Create a complete Elasticsearch query structure
+        # Create a complete Elasticsearch query structure with exact matching
         keyword_query = {
             "query": {
                 "bool": {
                     "should": [
-                        {"match": {"name": {"query": term, "boost": 4.0}}} for term in search_terms
+                        {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in search_terms
                     ] + [
-                        {"match": {"description": {"query": term, "boost": 3.0}}} for term in search_terms
+                        {"match_phrase": {"description": {"query": term, "boost": 3.0}}} for term in search_terms
+                    ] + [
+                        {"match": {"name": {"query": term, "boost": 2.0}}} for term in search_terms
+                    ] + [
+                        {"match": {"description": {"query": term, "boost": 1.5}}} for term in search_terms
                     ] + [
                         {"match": {"features": {"query": term, "boost": 2.0}}} for term in search_terms
                     ] + [
