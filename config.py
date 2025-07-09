@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.6"))
     final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "10"))
     
+    # AI-Enhanced Search Configuration
+    enable_ai_enhanced_search: bool = os.getenv("ENABLE_AI_ENHANCED_SEARCH", "True").lower() == "true"
+    ai_query_generation_confidence_threshold: float = float(os.getenv("AI_QUERY_GENERATION_CONFIDENCE_THRESHOLD", "0.7"))
+    ai_enhanced_search_fallback_enabled: bool = os.getenv("AI_ENHANCED_SEARCH_FALLBACK_ENABLED", "True").lower() == "true"
+    
     # Testing and Debug Configuration
     enable_startup_test_searches: bool = os.getenv("ENABLE_STARTUP_TEST_SEARCHES", "False").lower() == "true"
     enable_debug_vector_endpoints: bool = os.getenv("ENABLE_DEBUG_VECTOR_ENDPOINTS", "False").lower() == "true"

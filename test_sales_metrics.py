@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:3001"
 
 def test_sales_metrics():
     """Test the new sales metrics functionality"""

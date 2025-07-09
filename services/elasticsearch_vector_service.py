@@ -102,6 +102,56 @@ class CategoryAnalysis(BaseModel):
         default_factory=list
     )
 
+class DynamicQueryGeneration(BaseModel):
+    """AI-powered dynamic query generation based on data structure and categories"""
+    semantic_query: str = Field(
+        description="Optimized semantic search query for vector search"
+    )
+    keyword_query: Dict[str, Any] = Field(
+        description="Structured keyword query for Elasticsearch with field boosting"
+    )
+    category_filters: List[str] = Field(
+        description="Relevant product categories to search in",
+        default_factory=list
+    )
+    field_priorities: Dict[str, float] = Field(
+        description="Field-specific boost values for keyword search",
+        default_factory=dict
+    )
+    search_strategy: str = Field(
+        description="Search strategy: 'hybrid', 'vector_only', 'keyword_only', 'category_specific'"
+    )
+    confidence: float = Field(
+        description="Confidence in query generation (0.0 to 1.0)",
+        ge=0.0,
+        le=1.0
+    )
+    reasoning: str = Field(
+        description="Explanation of why this query structure was chosen"
+    )
+    suggested_filters: Dict[str, Any] = Field(
+        description="Suggested filters based on requirements",
+        default_factory=dict
+    )
+
+class DataStructureInfo(BaseModel):
+    """Information about our data structure for AI query generation"""
+    available_categories: List[str] = Field(
+        description="All available product categories"
+    )
+    category_fields: Dict[str, List[str]] = Field(
+        description="Fields available for each category"
+    )
+    searchable_fields: List[str] = Field(
+        description="All searchable fields across categories"
+    )
+    field_importance: Dict[str, float] = Field(
+        description="Default importance/boost values for fields"
+    )
+    index_mapping: Dict[str, str] = Field(
+        description="Category to index mapping"
+    )
+
 class ElasticsearchVectorService:
     """Enhanced Elasticsearch service with vector search capabilities"""
     
@@ -1414,6 +1464,294 @@ class ElasticsearchVectorService:
         """Set the LLM provider for intelligent category detection"""
         self.llm_provider = llm_provider
         logger.info("✅ LLM provider set for intelligent category detection")
+
+    def _get_data_structure_info(self) -> DataStructureInfo:
+        """Get comprehensive data structure information for AI query generation"""
+        return DataStructureInfo(
+            available_categories=list(FIELD_MAP.keys()),
+            category_fields=FIELD_MAP,
+            searchable_fields=[
+                "name", "description", "category", "features", "use_cases", 
+                "tags", "specifications", "compatibility", "warranty"
+            ],
+            field_importance={
+                "name": 4.0,
+                "description": 3.0,
+                "features": 2.0,
+                "use_cases": 2.0,
+                "tags": 2.0,
+                "category": 1.5,
+                "searchable_content": 1.5
+            },
+            index_mapping=CATEGORY_INDEX_MAP
+        )
+
+    async def generate_dynamic_query(
+        self, 
+        requirements: Dict[str, Any],
+        search_type: str = "hybrid"
+    ) -> DynamicQueryGeneration:
+        """Generate dynamic queries using AI based on data structure and requirements"""
+        
+        if not self.llm_provider:
+            logger.warning("No LLM provider available for dynamic query generation")
+            return self._fallback_query_generation(requirements, search_type)
+        
+        try:
+            # Get data structure information
+            data_structure = self._get_data_structure_info()
+            
+            # Build context for AI query generation
+            context_parts = []
+            
+            # Add requirements context
+            if requirements.get('semantic_query'):
+                context_parts.append(f"Semantic Query: {requirements['semantic_query']}")
+            
+            if requirements.get('use_case'):
+                context_parts.append(f"Use Case: {requirements['use_case']}")
+            
+            if requirements.get('technical_requirements'):
+                tech_reqs = requirements['technical_requirements']
+                if isinstance(tech_reqs, list):
+                    context_parts.append(f"Technical Requirements: {', '.join(str(req) for req in tech_reqs)}")
+                else:
+                    context_parts.append(f"Technical Requirements: {tech_reqs}")
+            
+            if requirements.get('business_requirements'):
+                business_reqs = requirements['business_requirements']
+                if isinstance(business_reqs, list):
+                    context_parts.append(f"Business Requirements: {', '.join(str(req) for req in business_reqs)}")
+                else:
+                    context_parts.append(f"Business Requirements: {business_reqs}")
+            
+            if requirements.get('search_terms'):
+                search_terms = requirements['search_terms']
+                if isinstance(search_terms, list):
+                    context_parts.append(f"Search Terms: {', '.join(str(term) for term in search_terms)}")
+                else:
+                    context_parts.append(f"Search Terms: {search_terms}")
+            
+            requirements_text = "\n".join(context_parts)
+            
+            # Create AI prompt for dynamic query generation
+            query_generation_prompt = f"""You are an expert search query optimizer for a B2B technology product database. Generate optimized search queries based on the customer requirements and our data structure.
+
+CUSTOMER REQUIREMENTS:
+{requirements_text}
+
+DATA STRUCTURE INFORMATION:
+Available Categories: {', '.join(data_structure.available_categories)}
+Category Fields: {json.dumps(data_structure.category_fields, indent=2)}
+Searchable Fields: {', '.join(data_structure.searchable_fields)}
+Field Importance: {json.dumps(data_structure.field_importance, indent=2)}
+Index Mapping: {json.dumps(data_structure.index_mapping, indent=2)}
+
+SEARCH STRATEGY: {search_type}
+
+TASK:
+1. Generate an optimized semantic query for vector search
+2. Create a structured keyword query for Elasticsearch with appropriate field boosting
+3. Identify relevant product categories to search in
+4. Determine field-specific priorities based on the requirements
+5. Choose the best search strategy
+6. Suggest any relevant filters
+
+GUIDELINES:
+- For semantic queries: Focus on natural language that captures the intent
+- For keyword queries: Use field-specific boosting based on importance
+- Consider category-specific fields when relevant
+- Balance precision and recall
+- Use hybrid approach when both semantic and keyword search would be beneficial
+- Consider filters for price, performance, or other specific requirements
+
+EXAMPLES:
+- Gaming focus: Boost GPU, CPU, memory fields
+- Workstation focus: Boost CPU, memory, storage fields  
+- Storage focus: Boost capacity, speed, interface fields
+- Budget focus: Consider price filters
+- Performance focus: Consider performance-related filters
+
+Generate a comprehensive query strategy that maximizes search effectiveness."""
+
+            try:
+                # Use Pydantic function calling for structured response
+                logger.info("🧠 Using AI for dynamic query generation...")
+                dynamic_query = await self.llm_provider.generate_structured_response(
+                    [AIMessage(role="user", content=query_generation_prompt)],
+                    DynamicQueryGeneration
+                )
+                
+                logger.info(f"🧠 AI Query Generation:")
+                logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+                logger.info(f"   Categories: {dynamic_query.category_filters}")
+                logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+                logger.info(f"   Reasoning: {dynamic_query.reasoning}")
+                
+                return dynamic_query
+                    
+            except Exception as e:
+                logger.warning(f"AI query generation failed: {e}")
+                return self._fallback_query_generation(requirements, search_type)
+                
+        except Exception as e:
+            logger.error(f"Dynamic query generation failed: {e}")
+            return self._fallback_query_generation(requirements, search_type)
+
+    def _fallback_query_generation(
+        self, 
+        requirements: Dict[str, Any], 
+        search_type: str
+    ) -> DynamicQueryGeneration:
+        """Fallback query generation when AI is not available"""
+        
+        # Build semantic query
+        semantic_query = requirements.get('semantic_query', '')
+        if not semantic_query:
+            use_case = requirements.get('use_case', 'business solution')
+            semantic_query = f"{use_case} technology solution"
+        
+        # Build keyword query
+        search_terms = requirements.get('search_terms', [])
+        if not search_terms:
+            search_terms = ['business', 'solution']
+        
+        keyword_query = {
+            "query": {
+                "bool": {
+                    "should": [
+                        {"match": {"name": {"query": term, "boost": 4.0}}} for term in search_terms
+                    ] + [
+                        {"match": {"description": {"query": term, "boost": 3.0}}} for term in search_terms
+                    ] + [
+                        {"match": {"features": {"query": term, "boost": 2.0}}} for term in search_terms
+                    ] + [
+                        {"match": {"category": {"query": term, "boost": 1.5}}} for term in search_terms
+                    ]
+                }
+            },
+            "size": 20
+        }
+        
+        # Get categories from requirements
+        categories = requirements.get('recommended_categories', [])
+        if not categories:
+            categories = requirements.get('product_categories', [])
+        
+        return DynamicQueryGeneration(
+            semantic_query=semantic_query,
+            keyword_query=keyword_query,
+            category_filters=categories,
+            field_priorities={
+                "name": 4.0,
+                "description": 3.0,
+                "features": 2.0,
+                "category": 1.5
+            },
+            search_strategy=search_type,
+            confidence=0.5,
+            reasoning="Fallback query generation - using standard field boosting",
+            suggested_filters={}
+        )
+
+    async def vector_search_products_with_ai_query(
+        self, 
+        requirements: Dict[str, Any],
+        size: int = 10,
+        search_type: str = "hybrid"
+    ) -> List[Dict[str, Any]]:
+        """Perform vector search using AI-generated dynamic queries"""
+        
+        try:
+            # Generate dynamic query using AI
+            dynamic_query = await self.generate_dynamic_query(requirements, search_type)
+            
+            logger.info(f"🧠 AI-Generated Query:")
+            logger.info(f"   Semantic Query: {dynamic_query.semantic_query}")
+            logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+            logger.info(f"   Categories: {dynamic_query.category_filters}")
+            logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+            
+            # Use the AI-generated semantic query
+            query = dynamic_query.semantic_query
+            categories = dynamic_query.category_filters if dynamic_query.category_filters else None
+            
+            # Perform vector search with AI-generated query
+            return await self.vector_search_products(
+                query=query,
+                size=size,
+                categories=categories,
+                hybrid_weight=0.2  # Default hybrid weight
+            )
+            
+        except Exception as e:
+            logger.error(f"AI-powered vector search failed: {e}")
+            # Fallback to standard search
+            return await self.vector_search_products(
+                query=requirements.get('semantic_query', 'business solution'),
+                size=size
+            )
+
+    async def elasticsearch_search_with_ai_query(
+        self, 
+        requirements: Dict[str, Any],
+        size: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Perform Elasticsearch search using AI-generated dynamic queries"""
+        
+        try:
+            # Generate dynamic query using AI
+            dynamic_query = await self.generate_dynamic_query(requirements, "keyword_only")
+            
+            logger.info(f"🔍 AI-Generated Elasticsearch Query:")
+            logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+            logger.info(f"   Field Priorities: {dynamic_query.field_priorities}")
+            logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+            
+            # Use the AI-generated keyword query
+            query = dynamic_query.keyword_query
+            query["size"] = size
+            
+            # Add filters if suggested by AI
+            if dynamic_query.suggested_filters:
+                if "query" not in query:
+                    query["query"] = {}
+                if "bool" not in query["query"]:
+                    query["query"]["bool"] = {}
+                if "filter" not in query["query"]["bool"]:
+                    query["query"]["bool"]["filter"] = []
+                
+                for field, value in dynamic_query.suggested_filters.items():
+                    if isinstance(value, list):
+                        query["query"]["bool"]["filter"].append({"terms": {field: value}})
+                    else:
+                        query["query"]["bool"]["filter"].append({"term": {field: value}})
+            
+            # Perform search using the standard search method
+            results = await self.search_products(query)
+            
+            # Add AI query metadata
+            for product in results:
+                product['ai_query_generated'] = True
+                product['ai_confidence'] = dynamic_query.confidence
+                product['ai_search_strategy'] = dynamic_query.search_strategy
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"AI-powered Elasticsearch search failed: {e}")
+            # Fallback to standard search
+            return await self.search_products({
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"name": {"query": "business solution", "boost": 2.0}}},
+                            {"match": {"description": {"query": "business solution", "boost": 1.0}}}
+                        ]
+                    }
+                },
+                "size": size
+            })
 
     async def _extract_categories_with_llm(self, requirements: Dict[str, Any]) -> List[str]:
         """Use LLM with Pydantic function calling to intelligently extract relevant product categories"""

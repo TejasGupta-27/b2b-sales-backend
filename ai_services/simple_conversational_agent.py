@@ -110,6 +110,14 @@ class SimpleConversationalAgent(AIProvider):
                 print(f"✅ Retrieved {len(product_data.get('products', []))} products, {len(product_data.get('solutions', []))} solutions")
                 print(f"   LLM Context: {product_data.get('requirements', {}).get('llm_context', {}).get('primary_need', 'Unknown')}")
                 print(f"   Similar Products Analysis: {product_data.get('similar_products_analysis', False)}")
+                
+                # Log AI enhancement status if available
+                if product_data.get('ai_enhanced'):
+                    print(f"   🧠 AI-Enhanced Search: Enabled")
+                    print(f"   Search Methods: {product_data.get('search_methods', {}).get('methods', [])}")
+                else:
+                    print(f"   🔄 Standard Search: No AI enhancement")
+                    
             except Exception as e:
                 print(f"⚠️ Product retrieval failed: {e}")
                 product_data = {'products': [], 'solutions': [], 'error': str(e)}
