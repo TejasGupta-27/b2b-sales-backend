@@ -755,11 +755,16 @@ class ElasticsearchVectorService:
                     else:
                         other_products.append(product)
                 
-                # Reorder products: exact matches first, then partial matches, then others
-                products = exact_match_products + partial_match_products + other_products
-                products = products[:size]  # Limit to requested size
-                
-                logger.info(f"🎯 Query filtering: {len(exact_match_products)} exact matches, {len(partial_match_products)} partial matches, {len(other_products)} others")
+                # If we have exact or partial matches, use them; otherwise keep all products
+                if exact_match_products or partial_match_products:
+                    # Reorder products: exact matches first, then partial matches, then others
+                    products = exact_match_products + partial_match_products + other_products
+                    products = products[:size]  # Limit to requested size
+                    logger.info(f"🎯 Query filtering: {len(exact_match_products)} exact matches, {len(partial_match_products)} partial matches, {len(other_products)} others")
+                else:
+                    # No matches found, keep all products but limit size
+                    products = products[:size]
+                    logger.info(f"🎯 No query matches found, keeping all {len(products)} products")
             
             logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
             logger.info(f"   Searched indices: {index_names}")
