@@ -1563,41 +1563,43 @@ CUSTOMER REQUIREMENTS:
 
 DATA STRUCTURE INFORMATION:
 Available Categories: {', '.join(data_structure.available_categories)}
-Category Fields: {json.dumps(data_structure.category_fields, indent=2)}
 Searchable Fields: {', '.join(data_structure.searchable_fields)}
-Field Importance: {json.dumps(data_structure.field_importance, indent=2)}
-Index Mapping: {json.dumps(data_structure.index_mapping, indent=2)}
 
 SEARCH STRATEGY: {search_type}
 
 TASK:
-Generate a comprehensive search query strategy with ALL of the following components:
+Generate a search query strategy with these components:
 
-1. SEMANTIC_QUERY: Natural language query optimized for vector search
-2. KEYWORD_QUERY: Complete Elasticsearch query structure with field boosting
-3. CATEGORY_FILTERS: List of relevant product categories to search
-4. FIELD_PRIORITIES: Field-specific boost values for keyword search
-5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only', 'category_specific'
-6. CONFIDENCE: Confidence score (0.0 to 1.0)
-7. REASONING: Explanation of query strategy
-8. SUGGESTED_FILTERS: Any relevant filters (price, performance, etc.)
+1. SEMANTIC_QUERY: Natural language query for vector search (keep simple and clear)
+2. KEYWORD_QUERY: Basic Elasticsearch query structure (use simple field matching)
+3. CATEGORY_FILTERS: List of 3-5 most relevant product categories
+4. FIELD_PRIORITIES: Basic field boost values (name: 4.0, description: 3.0, etc.)
+5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only'
+6. CONFIDENCE: Confidence score between 0.0 and 1.0
+7. REASONING: Brief explanation of strategy
+8. SUGGESTED_FILTERS: Empty object {{}} (no complex filters)
 
-CRITICAL REQUIREMENTS:
-- You MUST generate ALL fields, especially the keyword_query field
-- The keyword_query must be a complete Elasticsearch query structure
-- Use field boosting based on the requirements (gaming, workstation, storage, etc.)
-- Consider category-specific fields when relevant
-- Balance precision and recall
-- Use hybrid approach when both semantic and keyword search would be beneficial
+CRITICAL JSON FORMATTING REQUIREMENTS:
+- Use ONLY simple string values, no special characters
+- Ensure all strings are properly quoted with double quotes
+- Use simple field names: name, description, features, category
+- Avoid complex nested structures in keyword_query
+- Keep all JSON properly formatted and valid
 
-EXAMPLES:
-For gaming focus: Boost GPU, CPU, memory fields
-For workstation focus: Boost CPU, memory, storage fields  
-For storage focus: Boost capacity, speed, interface fields
-For budget focus: Consider price filters
-For performance focus: Consider performance-related filters
+EXAMPLE KEYWORD_QUERY STRUCTURE:
+{{
+  "query": {{
+    "bool": {{
+      "should": [
+        {{"match": {{"name": {{"query": "gaming", "boost": 4.0}}}}}},
+        {{"match": {{"description": {{"query": "gaming", "boost": 3.0}}}}}}
+      ]
+    }}
+  }},
+  "size": 20
+}}
 
-Generate a complete query strategy that maximizes search effectiveness. ALL fields must be included."""
+IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces. Use simple, clean strings without special characters."""
 
             try:
                 # Use Pydantic function calling for structured response
@@ -1617,10 +1619,12 @@ Generate a complete query strategy that maximizes search effectiveness. ALL fiel
                     
             except Exception as e:
                 logger.warning(f"AI query generation failed: {e}")
+                logger.info("🔄 Falling back to standard query generation...")
                 return self._fallback_query_generation(requirements, search_type)
                 
         except Exception as e:
             logger.error(f"Dynamic query generation failed: {e}")
+            logger.info("🔄 Using fallback query generation...")
             return self._fallback_query_generation(requirements, search_type)
 
     def _fallback_query_generation(
@@ -1659,10 +1663,21 @@ Generate a complete query strategy that maximizes search effectiveness. ALL fiel
             "size": 20
         }
         
-        # Get categories from requirements
+        # Get categories from requirements or use defaults
         categories = requirements.get('recommended_categories', [])
         if not categories:
             categories = requirements.get('product_categories', [])
+        if not categories:
+            # Use default categories based on use case
+            use_case = requirements.get('use_case', '').lower()
+            if 'gaming' in use_case:
+                categories = ['video-card', 'cpu', 'memory']
+            elif 'workstation' in use_case:
+                categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
+            elif 'storage' in use_case:
+                categories = ['internal-hard-drive', 'external-hard-drive']
+            else:
+                categories = ['cpu', 'memory', 'internal-hard-drive']
         
         # Determine field priorities based on use case
         field_priorities = {
