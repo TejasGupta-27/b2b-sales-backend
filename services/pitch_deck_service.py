@@ -7,24 +7,54 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
-from config import settings
 import logging
 from typing import List, Dict, Any
+from services.localisation import get_category_translation
 
 logger = logging.getLogger(__name__)
+
+# --- DESIGN CONSTANTS ---
+COVER_TITLE_FONT_SIZE = Pt(54)
+COVER_TITLE_BOX = (Inches(1), Inches(1.2), Inches(8), Inches(1.5))
+COVER_TITLE_MARGIN = (Inches(0.3), Inches(0.3), Inches(0.2), Inches(0.2))
+COVER_TOP_LINE = (Inches(1.5), Inches(1.0), Inches(7), Inches(0.12))
+COVER_BOTTOM_LINE = (Inches(1.5), Inches(2.5), Inches(7), Inches(0.12))
+COVER_SUBTITLE_BOX = (Inches(1), Inches(3.2), Inches(8), Inches(1))
+COVER_SUBTITLE_MARGIN = (Inches(0.3), Inches(0.3), Inches(0.1), Inches(0.1))
+COVER_SUBTITLE_FONT_SIZE = Pt(28)
+COVER_LOGO_BOTTOM_LEFT = (Inches(0.2), Inches(6.5), Inches(1.0))
+COVER_LOGO_TOP_LEFT = (Inches(0.2), Inches(0.2), Inches(1.0))
+COVER_IMAGE_COVER = (Inches(2.5), Inches(4.5), Inches(4.0))
+COVER_IMAGE_NORMAL = (Inches(7.2), Inches(5.7), Inches(2.0))
+
+CONTENT_TITLE_BOX = (Inches(0.5), Inches(0.3), Inches(9), Inches(1.2))
+CONTENT_TITLE_MARGIN = (Inches(0.2), Inches(0.2), Inches(0.1), Inches(0.1))
+CONTENT_TITLE_FONT_SIZE = Pt(38)
+CONTENT_UNDERLINE = (Inches(2), Inches(1.3), Inches(6), Inches(0.07))
+CONTENT_BOX = (Inches(0.8), Inches(1.8), Inches(8.4), Inches(5.5))
+CONTENT_MARGIN = (Inches(0.3), Inches(0.3), Inches(0.2), Inches(0.2))
+CONTENT_FONT_SIZE = Pt(20)
+CONTENT_SLIDE_NUMBER_BOX = (Inches(8.5), Inches(7.2), Inches(1), Inches(0.5))
+CONTENT_SLIDE_NUMBER_FONT_SIZE = Pt(12)
+
+TABLE_BOX = (Inches(0.5), Inches(1.8), Inches(9), Inches(4.5))
+TABLE_HEADER_FONT_SIZE = Pt(16)
+TABLE_HEADER_MARGIN = (Inches(0.1), Inches(0.1), Inches(0.1), Inches(0.1))
+TABLE_ROW_FONT_SIZE = Pt(14)
+TABLE_ROW_MARGIN = (Inches(0.1), Inches(0.1), Inches(0.1), Inches(0.1))
 
 class PitchDeckService:
     def __init__(self):
         # Initialize Azure OpenAI client
         try:
-            from config import settings
+            '''from config import settings
             self.client = AzureOpenAI(
                 api_key=settings.azure_openai_api_key,
                 api_version=settings.azure_openai_api_version,
                 azure_endpoint=settings.azure_openai_endpoint
             )
             self.deployment_name = settings.azure_openai_deployment_name
-            self.client_configured = True
+            self.client_configured = True'''
         except Exception as e:
             logger.warning(f"Azure OpenAI client not configured: {e}")
             self.client = None
@@ -232,7 +262,6 @@ You are a business assistant. Based on the product quotation below, generate a s
    4. Pricing Breakdown
    5. Warranty & Support
    6. Delivery Timeline
-   7. Call to Action
 
 Each slide must contain a **title** and 5–6 persuasive bullet points.
 
@@ -457,16 +486,6 @@ Note: The comparison table will be populated with real competitor data separatel
                             "Staff training and knowledge transfer",
                             "Post-implementation support and optimization"
                         ]
-                    },
-                    {
-                        "title": "Next Steps & Call to Action",
-                        "content": [
-                            "Schedule a detailed technical consultation",
-                            "Review and finalize solution specifications",
-                            "Confirm project timeline and milestones",
-                            "Sign agreement and initiate implementation",
-                            "Begin your journey to technology excellence"
-                        ]
                     }
                 ],
                 "language_resolution": {
@@ -481,65 +500,68 @@ Note: The comparison table will be populated with real competitor data separatel
         """Add comparison table with improved styling and Japanese font support"""
         rows = len(table_data["rows"]) + 1  # +1 for header
         cols = len(table_data["columns"])
-        left = Inches(0.5)
-        top = Inches(1.8)
-        width = Inches(9)
-        height = Inches(4.5)
-
+        left, top, width, height = TABLE_BOX
         table_shape = slide.shapes.add_table(rows, cols, left, top, width, height).table
-        
         # Set table style
         table_shape.table_direction = 0  # Left to right
-        
+        # Add black borders to all cells (namespace safe)
+        NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        nsmap = {'a': NS_A}
+        for row in range(rows):
+            for col in range(cols):
+                cell = table_shape.cell(row, col)
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                for border in ["lnL", "lnR", "lnT", "lnB"]:
+                    tag = f'{{{NS_A}}}{border}'
+                    ln = tcPr.find(tag)
+                    if ln is None:
+                        ln = tcPr.makeelement(tag)
+                        tcPr.append(ln)
+                    ln.set("w", "12700")  # 1pt
+                    ln.set("cap", "flat")
+                    ln.set("cmpd", "sng")
+                    ln.set("algn", "ctr")
+                    # Set solidFill for black
+                    solidFill = ln.find(f'{{{NS_A}}}solidFill')
+                    if solidFill is None:
+                        solidFill = ln.makeelement(f'{{{NS_A}}}solidFill')
+                        ln.append(solidFill)
+                    srgbClr = solidFill.find(f'{{{NS_A}}}srgbClr')
+                    if srgbClr is None:
+                        srgbClr = ln.makeelement(f'{{{NS_A}}}srgbClr')
+                        solidFill.append(srgbClr)
+                    srgbClr.set("val", "000000")
+
         # Header row with improved styling
         for col, header in enumerate(table_data["columns"]):
             cell = table_shape.cell(0, col)
-            
-            # Clear existing content and add with proper font
             cell.text_frame.clear()
             p = cell.text_frame.paragraphs[0]
             self._apply_font_to_paragraph(p, header, is_title=True)
             p.font.bold = True
-            p.font.size = Pt(14)
-            p.font.color.rgb = RGBColor(255, 255, 255)  # White text
+            p.font.size = TABLE_HEADER_FONT_SIZE
+            p.font.color.rgb = RGBColor(255, 255, 255)
             p.alignment = PP_ALIGN.CENTER
-            
-            # Set cell background color
             cell.fill.solid()
-            cell.fill.fore_color.rgb = RGBColor(52, 73, 94)  # Dark blue
-            
-            # Add margins
-            cell.margin_left = Inches(0.1)
-            cell.margin_right = Inches(0.1)
-            cell.margin_top = Inches(0.1)
-            cell.margin_bottom = Inches(0.1)
-
-        # Data rows with improved styling
+            cell.fill.fore_color.rgb = RGBColor(231, 76, 60)
+            cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom = TABLE_HEADER_MARGIN
         for i, row in enumerate(table_data["rows"], start=1):
             for j, value in enumerate(row):
                 cell = table_shape.cell(i, j)
-                
-                # Clear existing content and add with proper font
                 cell.text_frame.clear()
                 p = cell.text_frame.paragraphs[0]
                 self._apply_font_to_paragraph(p, str(value), is_title=False)
-                p.font.size = Pt(12)
-                p.font.color.rgb = RGBColor(44, 62, 80)  # Dark text
+                p.font.size = TABLE_ROW_FONT_SIZE
+                p.font.color.rgb = RGBColor(44, 62, 80)
                 p.alignment = PP_ALIGN.CENTER
-                
-                # Set alternating row colors
                 if i % 2 == 0:
                     cell.fill.solid()
-                    cell.fill.fore_color.rgb = RGBColor(248, 249, 250)  # Light gray
+                    cell.fill.fore_color.rgb = RGBColor(248, 249, 250)
                 else:
                     cell.fill.solid()
-                    cell.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White
-                
-                # Add margins
-                cell.margin_left = Inches(0.1)
-                cell.margin_right = Inches(0.1)
-                cell.margin_top = Inches(0.1)
-                cell.margin_bottom = Inches(0.1)
+                    cell.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom = TABLE_ROW_MARGIN
 
     def create_comparison_table_from_products(self, similar_products: List[Dict[str, Any]], title: str = "Product Comparison") -> Dict[str, Any]:
         """Create a comparison table using real similar products from hybrid retriever"""
@@ -610,275 +632,293 @@ Note: The comparison table will be populated with real competitor data separatel
         logger.info(f"Created comparison table with {len(comparison_table['rows'])} products")
         return comparison_table
 
-    async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx", similar_products: List[Dict[str, Any]] = None):
-        """Generate a PowerPoint presentation from the structured data with hybrid language support and optional similar products"""
-        
-        # Get resolved language from data
+    def get_product_category(self, product_category: str, language: str = "en") -> dict:
+        """
+        Returns a dict with both the English and localized product category names, falling back to 'general products' if not found.
+        { 'en': <english_name>, 'localized': <localized_name> }
+        """
+        import warnings
+        from services.localisation import get_category_translation
+        fallback_en = "general products"
+        fallback_localized = get_category_translation("general products", language)
+        if not product_category:
+            warnings.warn(f"No category provided, falling back to '{fallback_localized}'")
+            return {"en": fallback_en, "localized": fallback_localized}
+        # Check if category file exists
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        category_file = os.path.abspath(os.path.join(base_dir, "..", "Data", "json", f"{product_category}.json"))
+        if not os.path.exists(category_file):
+            warnings.warn(f"Category file '{category_file}' not found, falling back to '{fallback_localized}'")
+            return {"en": fallback_en, "localized": fallback_localized}
+        # Return both English and localized category name
+        return {"en": product_category, "localized": get_category_translation(product_category, language)}
+
+    def _get_logo_path(self):
+        """Return the path to the company logo image, or None if not found."""
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        assets_dir = os.path.abspath(os.path.join(base_dir, "..", "Data", "assets"))
+        logo_path = os.path.join(assets_dir, "company_logo.png")
+        if os.path.exists(logo_path):
+            return logo_path
+        # Try jpg fallback
+        logo_path_jpg = os.path.join(assets_dir, "company_logo.jpg")
+        if os.path.exists(logo_path_jpg):
+            return logo_path_jpg
+        return None
+
+    def _add_logo_to_slide(self, slide, position="top-left"):
+        """Add the company logo to the slide at the specified position ('top-left', 'bottom-left')."""
+        logo_path = self._get_logo_path()
+        if not logo_path:
+            return
+        if position == "bottom-left":
+            left = Inches(0.2)
+            top = Inches(6.5)
+        else:  # top-left
+            left = Inches(0.2)
+            top = Inches(0.2)
+        width = Inches(1.0)
+        try:
+            slide.shapes.add_picture(logo_path, left, top, width=width)
+        except Exception as e:
+            logger.warning(f"Could not add logo: {e}")
+
+    def _add_contextual_image(self, slide, product_type_en: str, cover=False):
+        """Add a contextual product image to the slide based on the ENGLISH product_type/category name. On cover, make it prominent and always centered below subtitle."""
+        from PIL import Image
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        assets_dir = os.path.abspath(os.path.join(base_dir, "..", "Data", "assets"))
+        image_filename = f"{product_type_en.lower()}.jpg"
+        image_path = os.path.join(assets_dir, image_filename)
+        if not os.path.exists(image_path):
+            image_path = os.path.join(assets_dir, "general.jpg")
+            if not os.path.exists(image_path):
+                return
+        if cover:
+            # --- DYNAMIC CENTERED IMAGE LOGIC ---
+            # Slide dimensions (inches)
+            SLIDE_WIDTH = 13.33  # 1280px/96
+            SLIDE_HEIGHT = 7.5   # 720px/96
+            # Subtitle bottom Y (inches)
+            SUBTITLE_BOTTOM = 3.2 + 1  # COVER_SUBTITLE_BOX top + height
+            BOTTOM_MARGIN = 0.4
+            available_height = SLIDE_HEIGHT - SUBTITLE_BOTTOM - BOTTOM_MARGIN
+            available_width = SLIDE_WIDTH - 2 * 1.0  # 1 inch margin left/right
+            # Get image size and aspect ratio
+            try:
+                with Image.open(image_path) as img:
+                    img_width, img_height = img.size
+                    aspect = img_width / img_height
+            except Exception:
+                aspect = 4/3  # fallback
+            # Fit image to available area
+            max_width = available_width
+            max_height = available_height
+            if aspect >= 1:
+                width = min(max_width, max_height * aspect)
+                height = width / aspect
+            else:
+                height = min(max_height, max_width / aspect)
+                width = height * aspect
+            # Center horizontally, place just below subtitle
+            left = (SLIDE_WIDTH - width) / 2
+            top = SUBTITLE_BOTTOM + ((available_height - height) / 2)
+            left = Inches(left - 2)
+            top = Inches(top)
+            width = Inches(width)
+            try:
+                slide.shapes.add_picture(image_path, left, top, width=width)
+            except Exception as e:
+                logger.warning(f"Could not add contextual image: {e}")
+        else:
+            left, top, width = COVER_IMAGE_NORMAL
+            try:
+                slide.shapes.add_picture(image_path, left, top, width=width)
+            except Exception as e:
+                logger.warning(f"Could not add contextual image: {e}")
+
+    async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx", similar_products: List[Dict[str, Any]] = None, product_name: str = None):
+        """Generate a PowerPoint presentation from the structured data with hybrid language support and optional similar products, with improved design."""
         resolved_language = data.get('resolved_language', 'en')
         language_resolution = data.get('language_resolution', {})
-        
         logger.info(f"🌐 Generating presentation in resolved language: {resolved_language}")
         if language_resolution:
             logger.info(f"   Detection method: {language_resolution.get('method', 'unknown')}")
             logger.info(f"   Confidence: {language_resolution.get('confidence', 0):.2f}")
-        
-        # Always resolve template path relative to project root
         base_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(base_dir, "..", "Data", "assets", "template.pptx")
         template_path = os.path.abspath(template_path)
-
         if os.path.exists(template_path):
             logger.info(f"Using template.pptx at {template_path}")
             prs = Presentation(template_path)
         else:
             logger.info("Creating new presentation (no template found)")
             prs = Presentation()
-        
-        # Color scheme
-        TITLE_COLOR = RGBColor(44, 62, 80)
-        ACCENT_COLOR = RGBColor(52, 152, 219)
+        # --- RED THEME ---
+        TITLE_COLOR = RGBColor(192, 57, 43)      # Red
+        ACCENT_COLOR = RGBColor(231, 76, 60)     # Lighter red
         BODY_COLOR = RGBColor(80, 80, 80)
-
-        # Create cover slide with improved design
+        # Cover slide
         cover_slide = prs.slides.add_slide(prs.slide_layouts[0])
-        self.hide_placeholders(cover_slide)  # Hide template placeholders
-        
-        # Add main title box with improved styling
-        title_box = cover_slide.shapes.add_textbox(Inches(1), Inches(2), Inches(8), Inches(2))
+        self.hide_placeholders(cover_slide)
+        # Main title
+        title_box = cover_slide.shapes.add_textbox(*COVER_TITLE_BOX)
         tf = title_box.text_frame
         tf.clear()
-        tf.margin_left = Inches(0.3)
-        tf.margin_right = Inches(0.3)
-        tf.margin_top = Inches(0.2)
-        tf.margin_bottom = Inches(0.2)
-        
-        # Main title with language support
+        tf.margin_left, tf.margin_right, tf.margin_top, tf.margin_bottom = COVER_TITLE_MARGIN
+        main_title = get_category_translation("main_title", resolved_language)
         title_p = tf.paragraphs[0]
-        if resolved_language == "ja":
-            main_title = "営業プレゼンテーション"
-        elif resolved_language == "es":
-            main_title = "Presentación de Ventas"
-        elif resolved_language == "fr":
-            main_title = "Présentation de Vente"
-        elif resolved_language == "de":
-            main_title = "Verkaufspräsentation"
-        else:
-            main_title = "Sales Pitch Deck"
-            
         self._apply_font_to_paragraph(title_p, main_title, is_title=True)
-        title_p.font.size = Pt(48)
+        title_p.font.size = COVER_TITLE_FONT_SIZE
         title_p.font.bold = True
         title_p.font.color.rgb = TITLE_COLOR
         title_p.alignment = PP_ALIGN.CENTER
-        
-        # Add decorative elements
-        # Top accent line
+        # Top accent line (red)
         top_line = cover_slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE, 
-            Inches(1.5), Inches(1.5), Inches(7), Inches(0.1)
+            MSO_SHAPE.RECTANGLE, *COVER_TOP_LINE
         )
         top_line.fill.solid()
         top_line.fill.fore_color.rgb = ACCENT_COLOR
         top_line.line.fill.background()
-        
-        # Bottom accent line
+        # Bottom accent line (red)
         bottom_line = cover_slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE, 
-            Inches(1.5), Inches(4.2), Inches(7), Inches(0.1)
+            MSO_SHAPE.RECTANGLE, *COVER_BOTTOM_LINE
         )
         bottom_line.fill.solid()
         bottom_line.fill.fore_color.rgb = ACCENT_COLOR
         bottom_line.line.fill.background()
-        
-        # Subtitle with improved styling and language support
-        subtitle_box = cover_slide.shapes.add_textbox(Inches(1), Inches(4.5), Inches(8), Inches(1))
+        # Subtitle: Quotation for {product category} from Otsuka Corporation (dynamic for Japanese)
+        product_type = None
+        product_type_en = None
+        product_type_localized = None
+        if product_name:
+            cat = self.get_product_category(product_name, resolved_language)
+            product_type_en = cat["en"]
+            product_type_localized = cat["localized"]
+        if resolved_language == "ja":
+            subtitle_text = f"大塚株式会社からの{product_type_localized if product_type_localized else '製品'}見積書"
+        else:
+            subtitle_text = f"Quotation for {product_type_localized if product_type_localized else 'Product'} from Otsuka Co."
+        subtitle_box = cover_slide.shapes.add_textbox(*COVER_SUBTITLE_BOX)
         tf_sub = subtitle_box.text_frame
         tf_sub.clear()
-        tf_sub.margin_left = Inches(0.3)
-        tf_sub.margin_right = Inches(0.3)
-        tf_sub.margin_top = Inches(0.1)
-        tf_sub.margin_bottom = Inches(0.1)
-        
+        tf_sub.margin_left, tf_sub.margin_right, tf_sub.margin_top, tf_sub.margin_bottom = COVER_SUBTITLE_MARGIN
         subtitle_p = tf_sub.paragraphs[0]
-        if resolved_language == "ja":
-            subtitle_text = "見積もり分析から生成"
-        elif resolved_language == "es":
-            subtitle_text = "Generado desde Análisis de Cotización"
-        elif resolved_language == "fr":
-            subtitle_text = "Généré depuis l'Analyse de Devis"
-        elif resolved_language == "de":
-            subtitle_text = "Erstellt aus Angebotsanalyse"
-        else:
-            subtitle_text = "Generated from Quotation Analysis"
-            
         self._apply_font_to_paragraph(subtitle_p, subtitle_text, is_title=False)
-        subtitle_p.font.size = Pt(24)
+        subtitle_p.font.size = COVER_SUBTITLE_FONT_SIZE
         subtitle_p.font.color.rgb = ACCENT_COLOR
         subtitle_p.alignment = PP_ALIGN.CENTER
-        
-        # Add company info box with language support
-        company_box = cover_slide.shapes.add_textbox(Inches(1), Inches(6), Inches(8), Inches(1))
-        tf_company = company_box.text_frame
-        tf_company.clear()
-        tf_company.margin_left = Inches(0.3)
-        tf_company.margin_right = Inches(0.3)
-        tf_company.margin_top = Inches(0.1)
-        tf_company.margin_bottom = Inches(0.1)
-        
-        company_p = tf_company.paragraphs[0]
-        if resolved_language == "ja":
-            company_text = "プロフェッショナルテクノロジーソリューション"
-        elif resolved_language == "es":
-            company_text = "Soluciones Tecnológicas Profesionales"
-        elif resolved_language == "fr":
-            company_text = "Solutions Technologiques Professionnelles"
-        elif resolved_language == "de":
-            company_text = "Professionelle Technologielösungen"
-        else:
-            company_text = "Professional Technology Solutions"
-            
-        self._apply_font_to_paragraph(company_p, company_text, is_title=False)
-        company_p.font.size = Pt(18)
-        company_p.font.color.rgb = RGBColor(100, 100, 100)
-        company_p.alignment = PP_ALIGN.CENTER
-
-        # Create content slides with improved formatting
+        # Remove company info box (no third text)
+        # Add logo to cover slide (bottom left)
+        self._add_logo_to_slide(cover_slide, position="bottom-left")
+        # Add contextual image to cover slide if product_type is available (large and centered)
+        if product_type_en:
+            self._add_contextual_image(cover_slide, product_type_en, cover=True)
+        # Content slides
         for i, slide_data in enumerate(data.get("slides", [])):
-            slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
-            self.hide_placeholders(slide)  # Hide template placeholders
-            
-            # Add title with improved styling and centering
-            title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(9), Inches(1.2))
+            if not isinstance(slide_data, dict):
+                logger.warning(f"Slide data at index {i} is not a dict: {slide_data}")
+                continue
+            title = slide_data.get("title", f"Slide {i+1}")
+            content = slide_data.get("content", [])
+            slide = prs.slides.add_slide(prs.slide_layouts[1])
+            self.hide_placeholders(slide)
+            # Title
+            title_box = slide.shapes.add_textbox(*CONTENT_TITLE_BOX)
             tf = title_box.text_frame
             tf.clear()
-            tf.margin_left = Inches(0.2)
-            tf.margin_right = Inches(0.2)
-            tf.margin_top = Inches(0.1)
-            tf.margin_bottom = Inches(0.1)
-            
+            tf.margin_left, tf.margin_right, tf.margin_top, tf.margin_bottom = CONTENT_TITLE_MARGIN
             title_p = tf.paragraphs[0]
-            self._apply_font_to_paragraph(title_p, slide_data["title"], is_title=True)
-            title_p.font.size = Pt(36)
+            self._apply_font_to_paragraph(title_p, title, is_title=True)
+            title_p.font.size = CONTENT_TITLE_FONT_SIZE
             title_p.font.bold = True
             title_p.font.color.rgb = TITLE_COLOR
             title_p.alignment = PP_ALIGN.CENTER
-
-            # Add decorative underline
+            # Decorative underline (red)
             underline_shape = slide.shapes.add_shape(
-                MSO_SHAPE.RECTANGLE, 
-                Inches(2), Inches(1.3), Inches(6), Inches(0.05)
+                MSO_SHAPE.RECTANGLE, *CONTENT_UNDERLINE
             )
             underline_shape.fill.solid()
             underline_shape.fill.fore_color.rgb = ACCENT_COLOR
             underline_shape.line.fill.background()
-
-            # Add content with improved formatting and center alignment
-            content_box = slide.shapes.add_textbox(Inches(0.8), Inches(1.8), Inches(8.4), Inches(5.5))
+            # Content
+            content_box = slide.shapes.add_textbox(*CONTENT_BOX)
             tf = content_box.text_frame
             tf.word_wrap = True
             tf.clear()
-            tf.margin_left = Inches(0.3)
-            tf.margin_right = Inches(0.3)
-            tf.margin_top = Inches(0.2)
-            tf.margin_bottom = Inches(0.2)
-
-            for j, line_text in enumerate(slide_data["content"]):
+            tf.margin_left, tf.margin_right, tf.margin_top, tf.margin_bottom = CONTENT_MARGIN
+            for j, line_text in enumerate(content):
                 if j == 0:
-                    # First paragraph already exists
                     p = tf.paragraphs[0]
                 else:
                     p = tf.add_paragraph()
-                
                 bullet_text = f"• {line_text}"
                 self._apply_font_to_paragraph(p, bullet_text, is_title=False)
-                p.font.size = Pt(18)
-                p.font.color.rgb = BODY_COLOR
+                p.font.size = CONTENT_FONT_SIZE
+                p.font.color.rgb = BODY_COLOR if j % 2 == 0 else RGBColor(120, 20, 20)
                 p.alignment = PP_ALIGN.LEFT
-                p.space_after = Pt(16)  # Increased spacing for better readability
-                p.space_before = Pt(8)   # Add space before each bullet
-                
-                # Add some color variation for visual interest
-                if j % 2 == 0:
-                    p.font.color.rgb = BODY_COLOR
-                else:
-                    p.font.color.rgb = RGBColor(60, 60, 60)  # Slightly lighter
-            
-            # Add slide number
-            slide_number_box = slide.shapes.add_textbox(Inches(8.5), Inches(7.2), Inches(1), Inches(0.5))
+                p.space_after = Pt(16)
+                p.space_before = Pt(8)
+            # Slide number
+            slide_number_box = slide.shapes.add_textbox(*CONTENT_SLIDE_NUMBER_BOX)
             tf_num = slide_number_box.text_frame
             tf_num.clear()
-            
             num_p = tf_num.paragraphs[0]
-            self._apply_font_to_paragraph(num_p, f"{i+2}", is_title=False)  # +2 because cover slide is 1
-            num_p.font.size = Pt(12)
+            self._apply_font_to_paragraph(num_p, f"{i+2}", is_title=False)
+            num_p.font.size = CONTENT_SLIDE_NUMBER_FONT_SIZE
             num_p.font.color.rgb = RGBColor(150, 150, 150)
             num_p.alignment = PP_ALIGN.RIGHT
-
-        # Create table slides - check if we have similar products to replace any existing table
+            # Add logo to each content slide (top right)
+            self._add_logo_to_slide(slide, position="top-left")
+        # Table slides (ensure competitor/comparison slide is always present if requested)
         tables_to_process = data.get("tables", [])
-        
-        # If we have similar products, create a comparison table
-        if similar_products:
-            if resolved_language == "ja":
-                comparison_title = "製品比較"
-            elif resolved_language == "es":
-                comparison_title = "Comparación de Productos"
-            elif resolved_language == "fr":
-                comparison_title = "Comparaison de Produits"
-            elif resolved_language == "de":
-                comparison_title = "Produktvergleich"
-            else:
-                comparison_title = "Product Comparison"
-                
-            comparison_table = self.create_comparison_table_from_products(similar_products, comparison_title)
-            
-            # Replace any existing comparison table or add new one
-            comparison_found = False
+        # Use localized comparison table title for detection
+        comparison_title_localized = get_category_translation("comparison", resolved_language)
+        def is_comparison_table(table):
+            title = table.get("title", "").lower()
+            return (
+                "comparison" in title or "product" in title or
+                comparison_title_localized.lower() in title
+            )
+        if similar_products or not any(is_comparison_table(t) for t in tables_to_process):
+            # Always add a competitor slide if not present
+            comparison_table = self.create_comparison_table_from_products(similar_products or [], comparison_title_localized)
+            found = False
             for i, table_data in enumerate(tables_to_process):
-                if "comparison" in table_data.get("title", "").lower() or "product" in table_data.get("title", "").lower():
+                if is_comparison_table(table_data):
                     tables_to_process[i] = comparison_table
-                    comparison_found = True
-                    logger.info("Replaced existing comparison table with similar products")
+                    found = True
                     break
-            
-            # If no comparison table found, add the new one
-            if not comparison_found:
+            if not found:
                 tables_to_process.append(comparison_table)
-                logger.info("Added new comparison table with similar products")
-        
-        # Create table slides with improved formatting
         for table_data in tables_to_process:
-            slide = prs.slides.add_slide(prs.slide_layouts[1])  # Use content layout
-            self.hide_placeholders(slide)  # Hide template placeholders
-            
-            # Add title with improved styling and centering
-            title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(9), Inches(1.2))
+            if not isinstance(table_data, dict):
+                logger.warning(f"Table data is not a dict: {table_data}")
+                continue
+            slide = prs.slides.add_slide(prs.slide_layouts[1])
+            self.hide_placeholders(slide)
+            # Title
+            title_box = slide.shapes.add_textbox(*CONTENT_TITLE_BOX)
             tf = title_box.text_frame
             tf.clear()
-            tf.margin_left = Inches(0.2)
-            tf.margin_right = Inches(0.2)
-            tf.margin_top = Inches(0.1)
-            tf.margin_bottom = Inches(0.1)
-            
+            tf.margin_left, tf.margin_right, tf.margin_top, tf.margin_bottom = CONTENT_TITLE_MARGIN
             title_p = tf.paragraphs[0]
-            self._apply_font_to_paragraph(title_p, table_data["title"], is_title=True)
+            self._apply_font_to_paragraph(title_p, table_data.get("title", "Table"), is_title=True)
             title_p.font.size = Pt(32)
             title_p.font.bold = True
             title_p.font.color.rgb = TITLE_COLOR
             title_p.alignment = PP_ALIGN.CENTER
-            
-            # Add decorative underline
+            # Decorative underline (red)
             underline_shape = slide.shapes.add_shape(
-                MSO_SHAPE.RECTANGLE, 
-                Inches(2), Inches(1.3), Inches(6), Inches(0.05)
+                MSO_SHAPE.RECTANGLE, *CONTENT_UNDERLINE
             )
             underline_shape.fill.solid()
             underline_shape.fill.fore_color.rgb = ACCENT_COLOR
             underline_shape.line.fill.background()
-            
-            # Add table with improved positioning
+            # Table
             self.add_comparison_table(slide, table_data)
-
+            # Add logo to each table slide (top left)
+            self._add_logo_to_slide(slide, position="top-left")
         try:
             prs.save(output_path)
             logger.info("Presentation saved successfully to: %s", output_path)
@@ -887,62 +927,3 @@ Note: The comparison table will be populated with real competitor data separatel
         except Exception as e:
             logger.error("Error saving presentation: %s", e)
             raise
-
-# Test function for Japanese PowerPoint generation
-def test_japanese_ppt():
-    """Test Japanese text in PowerPoint generation"""
-    import asyncio
-    
-    async def run_test():
-        service = PitchDeckService()
-        
-        # Test data with Japanese content
-        test_data = {
-            "slides": [
-                {
-                    "title": "お客様のニーズ",
-                    "content": [
-                        "高性能なワークステーションが必要",
-                        "信頼性の高いシステムを求めています",
-                        "効率的な作業環境の構築",
-                        "長期サポートが重要",
-                        "コストパフォーマンスを重視"
-                    ]
-                },
-                {
-                    "title": "私たちのソリューション",
-                    "content": [
-                        "最新技術を活用した高性能PC",
-                        "24時間365日のサポート体制",
-                        "カスタマイズ可能な構成",
-                        "長期保証による安心",
-                        "競争力のある価格設定"
-                    ]
-                }
-            ],
-            "tables": [
-                {
-                    "title": "製品比較表",
-                    "columns": ["製品名", "価格", "CPU", "メモリ", "ストレージ", "保証", "サポート"],
-                    "rows": [
-                        ["ワークステーション Pro", "¥300,000", "Intel i7", "32GB", "1TB SSD", "3年", "24/7"],
-                        ["ワークステーション Advanced", "¥350,000", "Intel i7", "32GB", "1TB SSD", "3年", "24/7"],
-                        ["ワークステーション Premium", "¥400,000", "Intel i7", "32GB", "1TB SSD", "3年", "24/7"]
-                    ]
-                }
-            ]
-        }
-        
-        output_path = await service.generate_ppt(test_data, "japanese_test_presentation.pptx")
-        print(f"✅ Japanese test PowerPoint saved to: {output_path}")
-    
-    # Note: You'll need to handle the async call appropriately in your application
-    # This is just for demonstration
-    try:
-        asyncio.run(run_test())
-    except RuntimeError:
-        # If already in an async context, use this instead
-        print("Run test_japanese_ppt() in an async context")
-
-if __name__ == "__main__":
-    test_japanese_ppt()

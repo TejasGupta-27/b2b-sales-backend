@@ -151,6 +151,80 @@ Make sure all prices are realistic and the quote looks professional. If specific
     }
 }
 
+# Category translations for use by other services
+category_translations = {
+    "en": {
+        "case": "case",
+        "case-accessory": "case accessory",
+        "case-fan": "case fan",
+        "cpu": "CPU",
+        "cpu-cooler": "CPU cooler",
+        "external-hard-drive": "external hard drive",
+        "fan-controller": "fan controller",
+        "headphones": "headphones",
+        "internal-hard-drive": "internal hard drive",
+        "keyboard": "keyboard",
+        "memory": "memory",
+        "monitor": "monitor",
+        "motherboard": "motherboard",
+        "mouse": "mouse",
+        "optical-drive": "optical drive",
+        "os": "operating system",
+        "power-supply": "power supply",
+        "sound-card": "sound card",
+        "speakers": "speakers",
+        "thermal-paste": "thermal paste",
+        "ups": "UPS",
+        "video-card": "video card",
+        "webcam": "webcam",
+        "wired-network-card": "wired network card",
+        "wireless-network-card": "wireless network card",
+        "workstation": "workstation",
+        "server": "server",
+        "laptop": "laptop",
+        "general products": "general products",
+        "general": "general products",
+        "main_title": "Sales Pitch Deck",
+        "subtitle": "Generated from Quotation Analysis",
+        "comparison": "Product Comparison"
+    },
+    "ja": {
+        "case": "PCケース",
+        "case-accessory": "ケースアクセサリー",
+        "case-fan": "ケースファン",
+        "cpu": "CPU",
+        "cpu-cooler": "CPUクーラー",
+        "external-hard-drive": "外付けハードドライブ",
+        "fan-controller": "ファンコントローラー",
+        "headphones": "ヘッドホン",
+        "internal-hard-drive": "内蔵ハードドライブ",
+        "keyboard": "キーボード",
+        "memory": "メモリ",
+        "monitor": "モニター",
+        "motherboard": "マザーボード",
+        "mouse": "マウス",
+        "optical-drive": "光学ドライブ",
+        "os": "オペレーティングシステム",
+        "power-supply": "電源ユニット",
+        "sound-card": "サウンドカード",
+        "speakers": "スピーカー",
+        "thermal-paste": "熱伝導グリス",
+        "ups": "無停電電源装置（UPS）",
+        "video-card": "ビデオカード",
+        "webcam": "ウェブカメラ",
+        "wired-network-card": "有線ネットワークカード",
+        "wireless-network-card": "無線ネットワークカード",
+        "workstation": "ワークステーション",
+        "server": "サーバー",
+        "laptop": "ノートパソコン",
+        "general products": "汎用製品",
+        "general": "汎用製品",
+        "main_title": "営業プレゼンテーション",
+        "subtitle": "見積もり分析から生成",
+        "comparison": "製品比較"
+    }
+}
+
 def get_quote_translations(language: str, fallback: bool = True) -> dict:
     """
     Get quote translations for specified language with fallback support
@@ -168,11 +242,11 @@ def get_quote_translations(language: str, fallback: bool = True) -> dict:
     
     # Fallback to English if enabled
     if fallback and language != 'en':
-        logger.warning(f"⚠️ Language '{language}' not found, falling back to English")
+        print(f"⚠️ Language '{language}' not found, falling back to English")
         return quote_translations.get('en', {})
     
     # Return empty dict if no fallback
-    logger.error(f"❌ Language '{language}' not found and no fallback enabled")
+    print(f"❌ Language '{language}' not found and no fallback enabled")
     return {}
 
 def get_supported_languages() -> list:
@@ -219,3 +293,7 @@ def get_translation(key: str, language: str, fallback: bool = True) -> str:
     if not translations and fallback:
         translations = quote_translations.get('en', {})
     return translations.get(key, f"[Missing translation for {key}]")
+
+def get_category_translation(category: str, language: str = "en") -> str:
+    """Get the localized category name for a given category and language."""
+    return category_translations.get(language, category_translations["en"]).get(category, category)
