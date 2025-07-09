@@ -35,6 +35,7 @@ async def interactive_test():
         azure_embedding_endpoint=settings.azure_embedding_endpoint,
         azure_embedding_key=settings.azure_embedding_api_key
     )
+    await hybrid_retriever.initialize()
     
     print("✅ Ready for interactive testing!")
     print()
@@ -215,6 +216,7 @@ async def test_custom_query_standalone(query: str):
         azure_embedding_endpoint=settings.azure_embedding_endpoint,
         azure_embedding_key=settings.azure_embedding_api_key
     )
+    await hybrid_retriever.initialize()
     
     # Test the query
     await test_custom_query(hybrid_retriever, query)
