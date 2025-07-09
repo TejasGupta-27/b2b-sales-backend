@@ -135,6 +135,181 @@ b2b_quotation_value_total = Gauge(
     ['currency']
 )
 
+# Sales-Focused Metrics
+b2b_product_recommendations_total = Counter(
+    'b2b_product_recommendations_total',
+    'Total product recommendations generated',
+    ['category', 'status']
+)
+
+b2b_product_selections_total = Counter(
+    'b2b_product_selections_total',
+    'Total product selections by customers',
+    ['category', 'product_id']
+)
+
+b2b_quotation_line_items_total = Counter(
+    'b2b_quotation_line_items_total',
+    'Total line items in quotations',
+    ['category', 'status']
+)
+
+b2b_quotation_quantities_total = Counter(
+    'b2b_quotation_quantities_total',
+    'Total quantities of products in quotations',
+    ['category', 'product_id']
+)
+
+b2b_sales_funnel_stage = Gauge(
+    'b2b_sales_funnel_stage',
+    'Number of leads at each sales funnel stage',
+    ['stage', 'status']
+)
+
+b2b_customer_engagement_score = Gauge(
+    'b2b_customer_engagement_score',
+    'Customer engagement score based on interaction patterns',
+    ['lead_id', 'engagement_type']
+)
+
+b2b_conversation_duration_minutes = Histogram(
+    'b2b_conversation_duration_minutes',
+    'Duration of sales conversations in minutes',
+    ['lead_id', 'outcome']
+)
+
+b2b_product_view_duration_seconds = Histogram(
+    'b2b_product_view_duration_seconds',
+    'Time spent viewing product recommendations',
+    ['category', 'product_id']
+)
+
+b2b_quote_request_to_generation_seconds = Histogram(
+    'b2b_quote_request_to_generation_seconds',
+    'Time from quote request to generation',
+    ['lead_id']
+)
+
+b2b_recommendation_quality_score = Gauge(
+    'b2b_recommendation_quality_score',
+    'Quality score of product recommendations',
+    ['category', 'recommendation_set_id']
+)
+
+b2b_customer_satisfaction_score = Gauge(
+    'b2b_customer_satisfaction_score',
+    'Customer satisfaction score based on feedback',
+    ['lead_id', 'interaction_type']
+)
+
+b2b_sales_velocity = Gauge(
+    'b2b_sales_velocity',
+    'Sales velocity metrics (deals per day, average deal size, etc.)',
+    ['metric_type']
+)
+
+b2b_top_products_recommended = Counter(
+    'b2b_top_products_recommended',
+    'Most frequently recommended products',
+    ['product_id', 'product_name', 'category']
+)
+
+b2b_top_products_selected = Counter(
+    'b2b_top_products_selected',
+    'Most frequently selected products',
+    ['product_id', 'product_name', 'category']
+)
+
+b2b_average_quote_value = Gauge(
+    'b2b_average_quote_value',
+    'Average quote value by category and time period',
+    ['category', 'period']
+)
+
+b2b_conversion_by_category = Counter(
+    'b2b_conversion_by_category',
+    'Conversion rates by product category',
+    ['category', 'from_stage', 'to_stage']
+)
+
+b2b_customer_lifetime_value = Gauge(
+    'b2b_customer_lifetime_value',
+    'Customer lifetime value metrics',
+    ['lead_id', 'calculation_type']
+)
+
+b2b_sales_cycle_duration_days = Histogram(
+    'b2b_sales_cycle_duration_days',
+    'Duration of sales cycles in days',
+    ['category', 'deal_size_range']
+)
+
+b2b_quote_acceptance_rate = Gauge(
+    'b2b_quote_acceptance_rate',
+    'Quote acceptance rate by category and time period',
+    ['category', 'period']
+)
+
+b2b_product_bundle_recommendations = Counter(
+    'b2b_product_bundle_recommendations',
+    'Product bundle recommendations',
+    ['bundle_type', 'category_combination']
+)
+
+b2b_customer_feedback_sentiment = Gauge(
+    'b2b_customer_feedback_sentiment',
+    'Customer feedback sentiment scores',
+    ['lead_id', 'feedback_type']
+)
+
+b2b_sales_rep_performance = Gauge(
+    'b2b_sales_rep_performance',
+    'Sales representative performance metrics',
+    ['rep_id', 'metric_type']
+)
+
+b2b_lead_source_effectiveness = Counter(
+    'b2b_lead_source_effectiveness',
+    'Lead source effectiveness metrics',
+    ['source', 'conversion_stage']
+)
+
+b2b_product_cross_sell_opportunities = Counter(
+    'b2b_product_cross_sell_opportunities',
+    'Cross-sell opportunities identified',
+    ['primary_category', 'cross_sell_category']
+)
+
+b2b_upsell_opportunities = Counter(
+    'b2b_upsell_opportunities',
+    'Upsell opportunities identified',
+    ['category', 'upsell_type']
+)
+
+b2b_customer_churn_risk = Gauge(
+    'b2b_customer_churn_risk',
+    'Customer churn risk assessment',
+    ['lead_id', 'risk_factors']
+)
+
+b2b_sales_forecast_accuracy = Gauge(
+    'b2b_sales_forecast_accuracy',
+    'Sales forecast accuracy metrics',
+    ['forecast_period', 'category']
+)
+
+b2b_competitive_analysis_metrics = Counter(
+    'b2b_competitive_analysis_metrics',
+    'Competitive analysis metrics',
+    ['competitor', 'metric_type']
+)
+
+b2b_market_trend_indicators = Gauge(
+    'b2b_market_trend_indicators',
+    'Market trend indicators',
+    ['trend_type', 'category']
+)
+
 class MetricsService:
     def __init__(self):
         self.start_time = time.time()
@@ -261,6 +436,208 @@ class MetricsService:
     def update_conversion_rate(self, stage: str, rate: float):
         """Update lead conversion rate"""
         b2b_conversion_rate.labels(stage=stage).set(rate)
+    
+    # Sales-Focused Methods
+    def record_product_recommendation(self, category: str, product_id: str, product_name: str, status: str = "generated"):
+        """Record product recommendation metrics"""
+        b2b_product_recommendations_total.labels(category=category, status=status).inc()
+        b2b_top_products_recommended.labels(
+            product_id=product_id, 
+            product_name=product_name, 
+            category=category
+        ).inc()
+    
+    def record_product_selection(self, category: str, product_id: str, product_name: str, quantity: int = 1):
+        """Record product selection metrics"""
+        b2b_product_selections_total.labels(category=category, product_id=product_id).inc()
+        b2b_top_products_selected.labels(
+            product_id=product_id, 
+            product_name=product_name, 
+            category=category
+        ).inc()
+        b2b_quotation_quantities_total.labels(category=category, product_id=product_id).inc(quantity)
+    
+    def record_quotation_line_item(self, category: str, status: str = "added"):
+        """Record quotation line item metrics"""
+        b2b_quotation_line_items_total.labels(category=category, status=status).inc()
+    
+    def record_sales_funnel_stage(self, stage: str, status: str, count: int = 1):
+        """Record sales funnel stage metrics"""
+        b2b_sales_funnel_stage.labels(stage=stage, status=status).set(count)
+    
+    def record_customer_engagement(self, lead_id: str, engagement_type: str, score: float):
+        """Record customer engagement metrics"""
+        b2b_customer_engagement_score.labels(lead_id=lead_id, engagement_type=engagement_type).set(score)
+    
+    def record_conversation_duration(self, lead_id: str, duration_minutes: float, outcome: str):
+        """Record conversation duration metrics"""
+        b2b_conversation_duration_minutes.labels(lead_id=lead_id, outcome=outcome).observe(duration_minutes)
+    
+    def record_product_view_duration(self, category: str, product_id: str, duration_seconds: float):
+        """Record product view duration metrics"""
+        b2b_product_view_duration_seconds.labels(category=category, product_id=product_id).observe(duration_seconds)
+    
+    def record_quote_request_to_generation(self, lead_id: str, duration_seconds: float):
+        """Record time from quote request to generation"""
+        b2b_quote_request_to_generation_seconds.labels(lead_id=lead_id).observe(duration_seconds)
+    
+    def record_recommendation_quality(self, category: str, recommendation_set_id: str, quality_score: float):
+        """Record recommendation quality metrics"""
+        b2b_recommendation_quality_score.labels(category=category, recommendation_set_id=recommendation_set_id).set(quality_score)
+    
+    def record_customer_satisfaction(self, lead_id: str, interaction_type: str, satisfaction_score: float):
+        """Record customer satisfaction metrics"""
+        b2b_customer_satisfaction_score.labels(lead_id=lead_id, interaction_type=interaction_type).set(satisfaction_score)
+    
+    def record_sales_velocity(self, metric_type: str, value: float):
+        """Record sales velocity metrics"""
+        b2b_sales_velocity.labels(metric_type=metric_type).set(value)
+    
+    def record_average_quote_value(self, category: str, period: str, average_value: float):
+        """Record average quote value metrics"""
+        b2b_average_quote_value.labels(category=category, period=period).set(average_value)
+    
+    def record_conversion_by_category(self, category: str, from_stage: str, to_stage: str):
+        """Record conversion metrics by category"""
+        b2b_conversion_by_category.labels(category=category, from_stage=from_stage, to_stage=to_stage).inc()
+    
+    def record_customer_lifetime_value(self, lead_id: str, calculation_type: str, clv: float):
+        """Record customer lifetime value metrics"""
+        b2b_customer_lifetime_value.labels(lead_id=lead_id, calculation_type=calculation_type).set(clv)
+    
+    def record_sales_cycle_duration(self, category: str, deal_size_range: str, duration_days: float):
+        """Record sales cycle duration metrics"""
+        b2b_sales_cycle_duration_days.labels(category=category, deal_size_range=deal_size_range).observe(duration_days)
+    
+    def record_quote_acceptance_rate(self, category: str, period: str, acceptance_rate: float):
+        """Record quote acceptance rate metrics"""
+        b2b_quote_acceptance_rate.labels(category=category, period=period).set(acceptance_rate)
+    
+    def record_product_bundle_recommendation(self, bundle_type: str, category_combination: str):
+        """Record product bundle recommendation metrics"""
+        b2b_product_bundle_recommendations.labels(bundle_type=bundle_type, category_combination=category_combination).inc()
+    
+    def record_customer_feedback_sentiment(self, lead_id: str, feedback_type: str, sentiment_score: float):
+        """Record customer feedback sentiment metrics"""
+        b2b_customer_feedback_sentiment.labels(lead_id=lead_id, feedback_type=feedback_type).set(sentiment_score)
+    
+    def record_sales_rep_performance(self, rep_id: str, metric_type: str, performance_score: float):
+        """Record sales representative performance metrics"""
+        b2b_sales_rep_performance.labels(rep_id=rep_id, metric_type=metric_type).set(performance_score)
+    
+    def record_lead_source_effectiveness(self, source: str, conversion_stage: str):
+        """Record lead source effectiveness metrics"""
+        b2b_lead_source_effectiveness.labels(source=source, conversion_stage=conversion_stage).inc()
+    
+    def record_cross_sell_opportunity(self, primary_category: str, cross_sell_category: str):
+        """Record cross-sell opportunity metrics"""
+        b2b_product_cross_sell_opportunities.labels(primary_category=primary_category, cross_sell_category=cross_sell_category).inc()
+    
+    def record_upsell_opportunity(self, category: str, upsell_type: str):
+        """Record upsell opportunity metrics"""
+        b2b_upsell_opportunities.labels(category=category, upsell_type=upsell_type).inc()
+    
+    def record_customer_churn_risk(self, lead_id: str, risk_factors: str, risk_score: float):
+        """Record customer churn risk metrics"""
+        b2b_customer_churn_risk.labels(lead_id=lead_id, risk_factors=risk_factors).set(risk_score)
+    
+    def record_sales_forecast_accuracy(self, forecast_period: str, category: str, accuracy_score: float):
+        """Record sales forecast accuracy metrics"""
+        b2b_sales_forecast_accuracy.labels(forecast_period=forecast_period, category=category).set(accuracy_score)
+    
+    def record_competitive_analysis(self, competitor: str, metric_type: str):
+        """Record competitive analysis metrics"""
+        b2b_competitive_analysis_metrics.labels(competitor=competitor, metric_type=metric_type).inc()
+    
+    def record_market_trend_indicator(self, trend_type: str, category: str, indicator_value: float):
+        """Record market trend indicator metrics"""
+        b2b_market_trend_indicators.labels(trend_type=trend_type, category=category).set(indicator_value)
+    
+    def record_quote_with_details(self, quote_data: Dict[str, Any], lead_id: str = None):
+        """Record comprehensive quote metrics with detailed breakdown"""
+        try:
+            # Extract quote value
+            total_value = quote_data.get('total_value', 0.0)
+            currency = quote_data.get('currency', 'USD')
+            
+            # Record basic quote generation
+            self.record_quote_generation(status="success", quote_value=total_value, currency=currency)
+            
+            # Record line items and quantities
+            line_items = quote_data.get('line_items', [])
+            for item in line_items:
+                category = item.get('category', 'unknown')
+                quantity = item.get('quantity', 1)
+                product_id = item.get('product_id', 'unknown')
+                product_name = item.get('name', 'Unknown Product')
+                
+                self.record_quotation_line_item(category=category, status="added")
+                self.record_product_selection(category=category, product_id=product_id, product_name=product_name, quantity=quantity)
+            
+            # Record quote request to generation time if available
+            if lead_id and 'quote_requested_at' in quote_data and 'generated_at' in quote_data:
+                try:
+                    request_time = datetime.fromisoformat(quote_data['quote_requested_at'])
+                    generation_time = datetime.fromisoformat(quote_data['generated_at'])
+                    duration_seconds = (generation_time - request_time).total_seconds()
+                    self.record_quote_request_to_generation(lead_id=lead_id, duration_seconds=duration_seconds)
+                except:
+                    pass  # Skip if timestamp parsing fails
+            
+            print(f"📊 Recorded comprehensive quote metrics for {len(line_items)} line items")
+            
+        except Exception as e:
+            print(f"❌ Error recording quote details: {e}")
+            self.record_error("quote_details_recording", "metrics_service")
+    
+    def record_recommendation_set_metrics(self, recommendation_set: Dict[str, Any], lead_id: str = None):
+        """Record comprehensive recommendation set metrics"""
+        try:
+            recommendations = recommendation_set.get('recommendations', [])
+            selected_recommendations = recommendation_set.get('selected_recommendations', [])
+            
+            # Record all recommendations
+            for rec in recommendations:
+                category = rec.get('category', 'unknown')
+                product_id = rec.get('product_id', 'unknown')
+                product_name = rec.get('name', 'Unknown Product')
+                suitability_score = rec.get('suitability_score', 0.0)
+                
+                self.record_product_recommendation(
+                    category=category,
+                    product_id=product_id,
+                    product_name=product_name,
+                    status="generated"
+                )
+                
+                # Record quality score
+                recommendation_set_id = recommendation_set.get('id', 'unknown')
+                self.record_recommendation_quality(
+                    category=category,
+                    recommendation_set_id=recommendation_set_id,
+                    quality_score=suitability_score
+                )
+            
+            # Record selections
+            for selected_id in selected_recommendations:
+                # Find the selected recommendation
+                selected_rec = next((r for r in recommendations if r.get('product_id') == selected_id), None)
+                if selected_rec:
+                    category = selected_rec.get('category', 'unknown')
+                    product_id = selected_rec.get('product_id', 'unknown')
+                    product_name = selected_rec.get('name', 'Unknown Product')
+                    
+                    self.record_product_selection(
+                        category=category,
+                        product_id=product_id,
+                        product_name=product_name
+                    )
+            
+            print(f"📊 Recorded recommendation set metrics: {len(recommendations)} recommendations, {len(selected_recommendations)} selections")
+            
+        except Exception as e:
+            print(f"❌ Error recording recommendation set metrics: {e}")
+            self.record_error("recommendation_set_recording", "metrics_service")
     
     def update_token_usage_metrics(self):
         """Update token usage metrics from token_usage.json"""
