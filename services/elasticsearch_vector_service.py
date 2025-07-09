@@ -108,7 +108,20 @@ class DynamicQueryGeneration(BaseModel):
         description="Optimized semantic search query for vector search"
     )
     keyword_query: Dict[str, Any] = Field(
-        description="Structured keyword query for Elasticsearch with field boosting"
+        description="Structured keyword query for Elasticsearch with field boosting",
+        default_factory=lambda: {
+            "query": {
+                "bool": {
+                    "should": [
+                        {"match": {"name": {"query": "product", "boost": 4.0}}},
+                        {"match": {"description": {"query": "product", "boost": 3.0}}},
+                        {"match": {"features": {"query": "product", "boost": 2.0}}},
+                        {"match": {"category": {"query": "product", "boost": 1.5}}}
+                    ]
+                }
+            },
+            "size": 20
+        }
     )
     category_filters: List[str] = Field(
         description="Relevant product categories to search in",
@@ -116,18 +129,26 @@ class DynamicQueryGeneration(BaseModel):
     )
     field_priorities: Dict[str, float] = Field(
         description="Field-specific boost values for keyword search",
-        default_factory=dict
+        default_factory=lambda: {
+            "name": 4.0,
+            "description": 3.0,
+            "features": 2.0,
+            "category": 1.5
+        }
     )
     search_strategy: str = Field(
-        description="Search strategy: 'hybrid', 'vector_only', 'keyword_only', 'category_specific'"
+        description="Search strategy: 'hybrid', 'vector_only', 'keyword_only', 'category_specific'",
+        default="hybrid"
     )
     confidence: float = Field(
         description="Confidence in query generation (0.0 to 1.0)",
         ge=0.0,
-        le=1.0
+        le=1.0,
+        default=0.5
     )
     reasoning: str = Field(
-        description="Explanation of why this query structure was chosen"
+        description="Explanation of why this query structure was chosen",
+        default="AI-generated query based on requirements analysis"
     )
     suggested_filters: Dict[str, Any] = Field(
         description="Suggested filters based on requirements",
@@ -1550,29 +1571,33 @@ Index Mapping: {json.dumps(data_structure.index_mapping, indent=2)}
 SEARCH STRATEGY: {search_type}
 
 TASK:
-1. Generate an optimized semantic query for vector search
-2. Create a structured keyword query for Elasticsearch with appropriate field boosting
-3. Identify relevant product categories to search in
-4. Determine field-specific priorities based on the requirements
-5. Choose the best search strategy
-6. Suggest any relevant filters
+Generate a comprehensive search query strategy with ALL of the following components:
 
-GUIDELINES:
-- For semantic queries: Focus on natural language that captures the intent
-- For keyword queries: Use field-specific boosting based on importance
+1. SEMANTIC_QUERY: Natural language query optimized for vector search
+2. KEYWORD_QUERY: Complete Elasticsearch query structure with field boosting
+3. CATEGORY_FILTERS: List of relevant product categories to search
+4. FIELD_PRIORITIES: Field-specific boost values for keyword search
+5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only', 'category_specific'
+6. CONFIDENCE: Confidence score (0.0 to 1.0)
+7. REASONING: Explanation of query strategy
+8. SUGGESTED_FILTERS: Any relevant filters (price, performance, etc.)
+
+CRITICAL REQUIREMENTS:
+- You MUST generate ALL fields, especially the keyword_query field
+- The keyword_query must be a complete Elasticsearch query structure
+- Use field boosting based on the requirements (gaming, workstation, storage, etc.)
 - Consider category-specific fields when relevant
 - Balance precision and recall
 - Use hybrid approach when both semantic and keyword search would be beneficial
-- Consider filters for price, performance, or other specific requirements
 
 EXAMPLES:
-- Gaming focus: Boost GPU, CPU, memory fields
-- Workstation focus: Boost CPU, memory, storage fields  
-- Storage focus: Boost capacity, speed, interface fields
-- Budget focus: Consider price filters
-- Performance focus: Consider performance-related filters
+For gaming focus: Boost GPU, CPU, memory fields
+For workstation focus: Boost CPU, memory, storage fields  
+For storage focus: Boost capacity, speed, interface fields
+For budget focus: Consider price filters
+For performance focus: Consider performance-related filters
 
-Generate a comprehensive query strategy that maximizes search effectiveness."""
+Generate a complete query strategy that maximizes search effectiveness. ALL fields must be included."""
 
             try:
                 # Use Pydantic function calling for structured response
@@ -1611,11 +1636,12 @@ Generate a comprehensive query strategy that maximizes search effectiveness."""
             use_case = requirements.get('use_case', 'business solution')
             semantic_query = f"{use_case} technology solution"
         
-        # Build keyword query
+        # Build keyword query with proper structure
         search_terms = requirements.get('search_terms', [])
         if not search_terms:
             search_terms = ['business', 'solution']
         
+        # Create a complete Elasticsearch query structure
         keyword_query = {
             "query": {
                 "bool": {
@@ -1638,19 +1664,43 @@ Generate a comprehensive query strategy that maximizes search effectiveness."""
         if not categories:
             categories = requirements.get('product_categories', [])
         
+        # Determine field priorities based on use case
+        field_priorities = {
+            "name": 4.0,
+            "description": 3.0,
+            "features": 2.0,
+            "category": 1.5
+        }
+        
+        # Adjust priorities based on use case
+        use_case = requirements.get('use_case', '').lower()
+        if 'gaming' in use_case:
+            field_priorities.update({
+                "chipset": 3.5,
+                "core_clock": 3.0,
+                "memory": 2.5
+            })
+        elif 'workstation' in use_case:
+            field_priorities.update({
+                "core_count": 3.5,
+                "capacity": 3.0,
+                "speed": 2.5
+            })
+        elif 'storage' in use_case:
+            field_priorities.update({
+                "capacity": 4.0,
+                "price_per_gb": 3.5,
+                "interface": 3.0
+            })
+        
         return DynamicQueryGeneration(
             semantic_query=semantic_query,
             keyword_query=keyword_query,
             category_filters=categories,
-            field_priorities={
-                "name": 4.0,
-                "description": 3.0,
-                "features": 2.0,
-                "category": 1.5
-            },
+            field_priorities=field_priorities,
             search_strategy=search_type,
             confidence=0.5,
-            reasoning="Fallback query generation - using standard field boosting",
+            reasoning="Fallback query generation - using standard field boosting with use case optimization",
             suggested_filters={}
         )
 
