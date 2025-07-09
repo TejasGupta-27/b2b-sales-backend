@@ -243,6 +243,72 @@ def should_disable_speech_service():
     
     return False
 
+def save_quote_to_database(quote: Dict[str, Any], lead_id: str = None, db: Session = None) -> str:
+    """Save quote to database for persistence"""
+    try:
+        from db.models import Quote
+        from datetime import datetime, timedelta
+        
+        # Extract quote data
+        quote_id = quote.get('quote_id', str(uuid.uuid4()))
+        quote_number = quote.get('quote_number', f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        
+        # Extract customer info
+        customer_info = quote.get('customer_info', {})
+        customer_name = customer_info.get('contact_name', 'Unknown Customer')
+        customer_email = customer_info.get('email', 'unknown@example.com')
+        company_name = customer_info.get('company_name', 'Unknown Company')
+        
+        # Extract financial data
+        financials = quote.get('financials', {})
+        subtotal = financials.get('subtotal', 0.0)
+        tax_rate = financials.get('tax_rate', 0.0)
+        tax_amount = financials.get('tax_amount', 0.0)
+        total = financials.get('total', 0.0)
+        currency = financials.get('currency', 'USD')
+        
+        # Extract line items
+        line_items = quote.get('line_items', [])
+        
+        # Set valid until date (30 days from now)
+        valid_until = datetime.now() + timedelta(days=30)
+        
+        # Create quote object
+        db_quote = Quote(
+            id=quote_id,
+            quote_number=quote_number,
+            lead_id=lead_id or "unknown",
+            customer_name=customer_name,
+            customer_email=customer_email,
+            company_name=company_name,
+            items=line_items,
+            subtotal=subtotal,
+            tax_rate=tax_rate,
+            tax_amount=tax_amount,
+            total=total,
+            currency=currency,
+            valid_until=valid_until,
+            terms=quote.get('terms_and_conditions', []),
+            notes=quote.get('implementation_notes', []),
+            pdf_filename=quote.get('pdf_path'),
+            pdf_url=quote.get('pdf_url'),
+            status="draft"
+        )
+        
+        if db:
+            db.add(db_quote)
+            db.commit()
+            db.refresh(db_quote)
+            logger.info(f"✅ Quote saved to database: {quote_id} - ${total} {currency}")
+            return quote_id
+        else:
+            logger.warning("⚠️ No database session provided, quote not saved to database")
+            return quote_id
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to save quote to database: {e}")
+        return quote.get('quote_id', str(uuid.uuid4()))
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
@@ -686,8 +752,8 @@ async def generate_quote(quote_request: Dict[str, Any]):
         try:
             # Extract quote details for metrics
             quote_data = {
-                'total_value': quote.get('total_amount', 0.0),
-                'currency': quote.get('currency', 'USD'),
+                'total_value': quote.get('financials', {}).get('total', 0.0) if quote.get('financials') else quote.get('total_amount', 0.0),
+                'currency': quote.get('financials', {}).get('currency', 'USD') if quote.get('financials') else quote.get('currency', 'USD'),
                 'line_items': quote.get('line_items', []),
                 'quote_requested_at': quote.get('created_at', datetime.now().isoformat()),
                 'generated_at': datetime.now().isoformat()
@@ -756,6 +822,12 @@ async def generate_quote(quote_request: Dict[str, Any]):
         
         # Record successful quote generation
         metrics_service.record_quote_generation(status="success")
+        
+        # Save quote to database for persistence
+        try:
+            save_quote_to_database(quote, lead_id=None, db=None)
+        except Exception as db_error:
+            logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
         
         # Generate unique IDs
         quote_id = quote.get('quote_id', str(uuid.uuid4()))
@@ -1632,8 +1704,8 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         try:
             # Extract quote details for metrics
             quote_data = {
-                'total_value': quote.get('total_amount', 0.0),
-                'currency': quote.get('currency', 'USD'),
+                'total_value': quote.get('financials', {}).get('total', 0.0) if quote.get('financials') else quote.get('total_amount', 0.0),
+                'currency': quote.get('financials', {}).get('currency', 'USD') if quote.get('financials') else quote.get('currency', 'USD'),
                 'line_items': quote.get('line_items', []),
                 'quote_requested_at': quote.get('created_at', datetime.now().isoformat()),
                 'generated_at': datetime.now().isoformat()
@@ -1755,6 +1827,12 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         except Exception as quote_metrics_error:
             logger.warning(f"⚠️ Failed to record conversation quote metrics: {quote_metrics_error}")
         
+        # Save quote to database for persistence
+        try:
+            save_quote_to_database(quote, lead_id=lead_id, db=db)
+        except Exception as db_error:
+            logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
+        
         # Generate pitch deck if quote was successful
         deck_id = str(uuid.uuid4())
         pitch_deck_path = None
@@ -1844,50 +1922,6 @@ async def get_sales_metrics():
         
         # Get current metrics from Prometheus
         metrics_data = metrics_service.get_metrics()
-        
-        # Parse metrics to extract sales-focused data
-        sales_metrics = {
-            "timestamp": datetime.now().isoformat(),
-            "product_recommendations": {
-                "total_generated": 0,
-                "by_category": {},
-                "selection_rate": 0.0,
-                "quality_score": 0.0
-            },
-            "quotations": {
-                "total_generated": 0,
-                "total_value_usd": 0.0,
-                "average_value": 0.0,
-                "success_rate": 0.0,
-                "line_items_total": 0,
-                "quantities_total": 0
-            },
-            "sales_funnel": {
-                "discovery": 0,
-                "solution_presentation": 0,
-                "quote_generation": 0,
-                "conversion_rates": {}
-            },
-            "customer_engagement": {
-                "average_score": 0.0,
-                "conversation_duration": 0.0,
-                "satisfaction_score": 0.0
-            },
-            "top_products": {
-                "recommended": [],
-                "selected": []
-            },
-            "sales_opportunities": {
-                "cross_sell_opportunities": 0,
-                "upsell_opportunities": 0,
-                "bundle_recommendations": 0
-            },
-            "performance_metrics": {
-                "quote_generation_time": 0.0,
-                "conversation_duration": 0.0,
-                "sales_velocity": 0.0
-            }
-        }
         
         # Parse metrics string to extract values
         lines = metrics_data.split('\n')

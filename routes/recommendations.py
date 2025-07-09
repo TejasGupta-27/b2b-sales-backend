@@ -420,6 +420,14 @@ async def generate_quote(
                 
                 db.commit()
                 db.refresh(db_recommendation_set)
+                
+                # Save quote to database for persistence
+                try:
+                    from main import save_quote_to_database
+                    save_quote_to_database(quote_data, lead_id=db_recommendation_set.lead_id, db=db)
+                except Exception as db_error:
+                    logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
+                
                 logger.info(f"✅ Quote generated and saved successfully for {len(selected_recommendations_data)} products")
             else:
                 logger.warning("⚠️ Quote generation returned no result")
