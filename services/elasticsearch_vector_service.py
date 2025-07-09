@@ -1572,7 +1572,7 @@ Generate a search query strategy with these components:
 
 1. SEMANTIC_QUERY: Natural language query for vector search (keep simple and clear)
 2. KEYWORD_QUERY: Basic Elasticsearch query structure (use simple field matching)
-3. CATEGORY_FILTERS: List of 3-5 most relevant product categories
+3. CATEGORY_FILTERS: List of most relevant product categories
 4. FIELD_PRIORITIES: Basic field boost values (name: 4.0, description: 3.0, etc.)
 5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only'
 6. CONFIDENCE: Confidence score between 0.0 and 1.0
@@ -1907,8 +1907,7 @@ ANALYSIS GUIDELINES:
 1. Focus on categories that directly solve the customer's stated needs
 2. Consider the primary use case and industry context
 3. Prioritize essential components over accessories
-4. Limit to 3-5 most relevant categories for focused search
-5. Consider complementary products that work together
+4. Consider complementary products that work together
 
 COMMON USE CASE PATTERNS:
 • Gaming: video-card, cpu, memory, monitor
