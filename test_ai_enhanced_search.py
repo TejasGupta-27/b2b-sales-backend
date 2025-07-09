@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-Interactive test script for AI-Enhanced Search Functionality
-Allows you to test custom queries through terminal input
+Interactive test script for AI-enhanced search functionality
 """
 
 import asyncio
-import json
 import sys
-from typing import Dict, Any
+import os
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ai_services.factory import AIServiceFactory
 from ai_services.hybrid_product_retriever_agent import HybridProductRetrieverAgent
-from ai_services.azure_openai import AzureOpenAIProvider
 from config import settings
 
 async def interactive_test():
-    """Interactive test mode for custom queries"""
+    """Interactive test for AI-enhanced search"""
     
     print("🧪 Interactive AI-Enhanced Search Test")
     print("=" * 50)
@@ -22,10 +24,9 @@ async def interactive_test():
     print("Type 'help' for available commands.")
     print()
     
-    # Initialize AI provider
+    # Initialize AI provider using factory
     print("🔧 Initializing AI Provider...")
-    ai_provider = AzureOpenAIProvider()
-    await ai_provider.initialize()
+    ai_provider = AIServiceFactory.create_provider("azure_openai")
     
     # Initialize hybrid retriever
     print("🔧 Initializing Hybrid Product Retriever...")
@@ -34,7 +35,6 @@ async def interactive_test():
         azure_embedding_endpoint=settings.azure_embedding_endpoint,
         azure_embedding_key=settings.azure_embedding_api_key
     )
-    await hybrid_retriever.initialize()
     
     print("✅ Ready for interactive testing!")
     print()
@@ -208,15 +208,13 @@ async def test_custom_query_standalone(query: str):
     """Standalone function to test a single query (for command line usage)"""
     
     # Initialize components
-    ai_provider = AzureOpenAIProvider()
-    await ai_provider.initialize()
+    ai_provider = AIServiceFactory.create_provider("azure_openai")
     
     hybrid_retriever = HybridProductRetrieverAgent(
         base_provider=ai_provider,
         azure_embedding_endpoint=settings.azure_embedding_endpoint,
         azure_embedding_key=settings.azure_embedding_api_key
     )
-    await hybrid_retriever.initialize()
     
     # Test the query
     await test_custom_query(hybrid_retriever, query)
