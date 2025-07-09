@@ -634,72 +634,49 @@ class ElasticsearchVectorService:
                 index_names = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
                 logger.info(f"🌐 Searching in all indices: {len(index_names)} indices")
             
-            # Build the search query
+            # Use proper KNN search instead of script_score
             search_query = {
-                "size": size * 3,  # Get more results to allow for better filtering
+                "size": size * 2,  # Get more results to allow for better filtering
+                "knn": {
+                    "field": "content_vector",
+                    "query_vector": query_vector,
+                    "k": size * 2,
+                    "num_candidates": size * 5
+                },
                 "query": {
                     "bool": {
-                        "should": []
+                        "should": [
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": [
+                                        "name^4",
+                                        "description^3", 
+                                        "features^2",
+                                        "searchable_content^1.5"
+                                    ],
+                                    "type": "best_fields",
+                                    "fuzziness": "AUTO"
+                                }
+                            },
+                            {
+                                "match_phrase": {
+                                    "name": {
+                                        "query": query,
+                                        "boost": 5.0
+                                    }
+                                }
+                            }
+                        ]
                     }
                 },
-                "_source": {"excludes": ["content_vector"]}  # Exclude vector from response
+                "_source": {"excludes": ["content_vector"]}
             }
-            
-            # Add vector similarity search
-            knn_query = {
-                "script_score": {
-                    "query": {"match_all": {}},
-                    "script": {
-                        "source": "cosineSimilarity(params.query_vector, 'content_vector') + 1.0",
-                        "params": {"query_vector": query_vector}
-                    }
-                }
-            }
-            
-            # Add text search for hybrid approach with improved field matching
-            text_query = {
-                "multi_match": {
-                    "query": query,
-                    "fields": [
-                        "name^4",                    # Highest boost for name
-                        "description^3",             # High boost for description
-                        "features^2",                # Medium boost for features
-                        "use_cases^2",               # Medium boost for use cases
-                        "tags^2",                    # Medium boost for tags
-                        "category^1.5",              # Lower boost for category
-                        "searchable_content^1.5"     # Lower boost for searchable content
-                    ],
-                    "type": "best_fields",
-                    "fuzziness": "AUTO",
-                    "operator": "or"  # Use OR for better recall
-                }
-            }
-            
-            # Add a more precise query for exact term matching
-            exact_query = {
-                "bool": {
-                    "should": [
-                        {"match_phrase": {"name": {"query": query, "boost": 5.0}}},
-                        {"match_phrase": {"description": {"query": query, "boost": 3.0}}},
-                        {"match_phrase": {"searchable_content": {"query": query, "boost": 2.0}}}
-                    ]
-                }
-            }
-            
-            if hybrid_weight > 0:
-                # Hybrid search with both exact and fuzzy matching
-                search_query["query"]["bool"]["should"].extend([
-                    {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
-                    {"constant_score": {"filter": exact_query, "boost": hybrid_weight * 2}},  # Higher boost for exact matches
-                    {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
-                ])
-            else:
-                # Pure vector search
-                search_query["query"] = knn_query
             
             # Add filters if provided
             if filters:
-                search_query["query"]["bool"]["filter"] = []
+                if "filter" not in search_query["query"]["bool"]:
+                    search_query["query"]["bool"]["filter"] = []
                 for field, value in filters.items():
                     if isinstance(value, list):
                         search_query["query"]["bool"]["filter"].append({"terms": {field: value}})
@@ -714,8 +691,8 @@ class ElasticsearchVectorService:
             for hit in response["hits"]["hits"]:
                 product = hit["_source"]
                 product["_score"] = hit["_score"]
-                product["_similarity_score"] = hit["_score"]  # For compatibility
-                product["_index"] = hit["_index"]  # Track which index this came from
+                product["_similarity_score"] = hit["_score"]
+                product["_index"] = hit["_index"]
                 products.append(product)
             
             # Apply strict category filtering if categories are specified
@@ -729,56 +706,54 @@ class ElasticsearchVectorService:
                 
                 products = filtered_products
                 logger.info(f"🎯 Strict category filtering: {len(products)} products from specified categories")
-            else:
-                # No category filtering, just limit to requested size
-                products = products[:size]
             
-            # Apply strict query filtering to prioritize products containing the query
+            # Apply query-specific filtering to prioritize products containing the query
             if query and len(query.strip()) > 0:
                 exact_match_products = []
                 partial_match_products = []
                 other_products = []
                 
                 query_lower = query.lower()
-                query_words = query_lower.split()
+                query_words = [word.strip() for word in query_lower.split() if len(word.strip()) > 2]
                 
                 for product in products:
                     product_name = product.get('name', '').lower()
                     product_desc = product.get('description', '').lower()
                     product_content = product.get('searchable_content', '').lower()
                     
-                    # Check if the exact query term appears in the product
-                    if query_lower in product_name or query_lower in product_desc or query_lower in product_content:
+                    # Check for exact phrase match
+                    if query_lower in product_name:
                         exact_match_products.append(product)
-                    elif any(word in product_name or word in product_desc or word in product_content for word in query_words):
+                    # Check for all query words present
+                    elif all(word in product_name or word in product_desc for word in query_words):
                         partial_match_products.append(product)
+                    # Check for any query words present
+                    elif any(word in product_name or word in product_desc or word in product_content for word in query_words):
+                        other_products.append(product)
                     else:
+                        # No query match, but might be semantically similar
                         other_products.append(product)
                 
-                # If we have exact or partial matches, use them; otherwise keep all products
-                if exact_match_products or partial_match_products:
-                    # Reorder products: exact matches first, then partial matches, then others
-                    products = exact_match_products + partial_match_products + other_products
-                    products = products[:size]  # Limit to requested size
-                    logger.info(f"🎯 Query filtering: {len(exact_match_products)} exact matches, {len(partial_match_products)} partial matches, {len(other_products)} others")
-                else:
-                    # No matches found, keep all products but limit size
-                    products = products[:size]
-                    logger.info(f"🎯 No query matches found, keeping all {len(products)} products")
+                # Prioritize: exact matches first, then partial matches, then others
+                products = exact_match_products + partial_match_products + other_products
+                
+                logger.info(f"🎯 Query filtering: {len(exact_match_products)} exact matches, {len(partial_match_products)} partial matches, {len(other_products)} others")
+            
+            # Limit to requested size
+            products = products[:size]
             
             logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
-            logger.info(f"   Searched indices: {index_names}")
             if products:
-                # Log product categories for debugging
-                product_categories = [p.get('category', 'unknown') for p in products[:5]]
-                logger.info(f"   Top 5 product categories: {product_categories}")
+                # Log product names for debugging
+                product_names = [p.get('name', 'Unknown')[:50] for p in products[:3]]
+                logger.info(f"   Top 3 products: {product_names}")
             
             return products
             
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
             return []
-
+    
     async def _balanced_category_search(
         self, 
         query_vector: List[float], 
