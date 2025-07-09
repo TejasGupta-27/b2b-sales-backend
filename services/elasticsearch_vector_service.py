@@ -612,15 +612,15 @@ class ElasticsearchVectorService:
     ) -> List[Dict[str, Any]]:
         """Perform vector search on products with optional category filtering and balanced results"""
         try:
-            logger.info(f"🔍 Vector search called with categories: {categories}")
+            logger.info(f"🔍 Vector search called with query: '{query}', categories: {categories}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
             
-            # Determine which indices to search - be less restrictive
+            # Determine which indices to search - be more restrictive when categories are specified
             if categories and len(categories) > 0:
-                # Search in specified category indices, but also include some general search
+                # Search ONLY in specified category indices
                 index_names = []
                 for category in categories:
                     index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
@@ -628,15 +628,7 @@ class ElasticsearchVectorService:
                 # Remove duplicates
                 index_names = list(set(index_names))
                 
-                # Also include a few other major categories for diversity
-                major_categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive', 'monitor']
-                for cat in major_categories:
-                    if cat not in categories:
-                        index_name = CATEGORY_INDEX_MAP.get(cat, DEFAULT_PRODUCTS_INDEX)
-                        if index_name not in index_names:
-                            index_names.append(index_name)
-                
-                logger.info(f"🎯 Searching in category-specific indices: {index_names}")
+                logger.info(f"🎯 Searching ONLY in specified category indices: {index_names}")
             else:
                 # Search in all category indices
                 index_names = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
@@ -644,7 +636,7 @@ class ElasticsearchVectorService:
             
             # Build the search query
             search_query = {
-                "size": size * 2,  # Get more results to allow for better filtering
+                "size": size * 3,  # Get more results to allow for better filtering
                 "query": {
                     "bool": {
                         "should": []
@@ -726,35 +718,30 @@ class ElasticsearchVectorService:
                 product["_index"] = hit["_index"]  # Track which index this came from
                 products.append(product)
             
-            # Apply post-search filtering if categories are specified
+            # Apply strict category filtering if categories are specified
             if categories and len(categories) > 0:
-                # Prioritize products from specified categories but don't exclude others completely
-                prioritized_products = []
-                other_products = []
-                
+                # Only include products from specified categories
+                filtered_products = []
                 for product in products:
                     product_category = product.get('category', '').lower()
                     if product_category in [cat.lower() for cat in categories]:
-                        prioritized_products.append(product)
-                    else:
-                        other_products.append(product)
+                        filtered_products.append(product)
                 
-                # Combine prioritized products first, then others
-                final_products = prioritized_products + other_products
-                products = final_products[:size]  # Limit to requested size
-                
-                logger.info(f"🎯 Category filtering: {len(prioritized_products)} prioritized, {len(other_products)} others")
+                products = filtered_products
+                logger.info(f"🎯 Strict category filtering: {len(products)} products from specified categories")
             else:
                 # No category filtering, just limit to requested size
                 products = products[:size]
             
-            # Apply exact term filtering to prioritize products containing the query
+            # Apply strict query filtering to prioritize products containing the query
             if query and len(query.strip()) > 0:
                 exact_match_products = []
                 partial_match_products = []
                 other_products = []
                 
                 query_lower = query.lower()
+                query_words = query_lower.split()
+                
                 for product in products:
                     product_name = product.get('name', '').lower()
                     product_desc = product.get('description', '').lower()
@@ -763,7 +750,7 @@ class ElasticsearchVectorService:
                     # Check if the exact query term appears in the product
                     if query_lower in product_name or query_lower in product_desc or query_lower in product_content:
                         exact_match_products.append(product)
-                    elif any(word in product_name or word in product_desc for word in query_lower.split()):
+                    elif any(word in product_name or word in product_desc or word in product_content for word in query_words):
                         partial_match_products.append(product)
                     else:
                         other_products.append(product)

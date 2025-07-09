@@ -1476,11 +1476,37 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 logger.info("🧠 Using AI-powered vector search...")
                 return await self.vector_service.vector_search_products_with_ai_query(requirements, settings.final_result_limit)
             
-            # Fallback to original method
-            # Use semantic query from requirements
+            # Fallback to original method - build a more specific query
             semantic_query = requirements.get('semantic_query', '')
             if not semantic_query:
-                semantic_query = requirements.get('use_case', 'business solution')
+                # Build query from technical requirements and search terms
+                search_terms = requirements.get('search_keywords', [])
+                tech_reqs = requirements.get('technical_requirements', [])
+                
+                # Combine all search terms into a specific query
+                all_terms = []
+                if search_terms:
+                    if isinstance(search_terms, list):
+                        all_terms.extend([str(term) for term in search_terms])
+                    else:
+                        all_terms.append(str(search_terms))
+                
+                if tech_reqs:
+                    if isinstance(tech_reqs, list):
+                        all_terms.extend([str(req) for req in tech_reqs])
+                    else:
+                        all_terms.append(str(tech_reqs))
+                
+                # Add use case if available
+                use_case = requirements.get('use_case', '')
+                if use_case:
+                    all_terms.append(str(use_case))
+                
+                # Create specific query from all terms
+                if all_terms:
+                    semantic_query = ' '.join(all_terms)
+                else:
+                    semantic_query = requirements.get('use_case', 'business solution')
             
             # Get category recommendations from multiple possible sources
             categories = None
