@@ -1695,7 +1695,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "topk(10, sum by (product_id, product_name, category) (b2b_top_products_recommended))",
+          "expr": "topk(10, sum by (product_id, product_name, category) (b2b_product_recommendations_total{status=\"generated\"}))",
           "legendFormat": "{{product_name}} ({{category}})",
           "refId": "A"
         }
@@ -1794,7 +1794,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "topk(10, sum by (product_id, product_name, category) (b2b_top_products_selected))",
+          "expr": "topk(10, sum by (product_id, product_name, category) (b2b_product_selections_total))",
           "legendFormat": "{{product_name}} ({{category}})",
           "refId": "A"
         }
@@ -2043,7 +2043,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(b2b_product_cross_sell_opportunities) by (primary_category)",
+          "expr": "sum(b2b_product_cross_sell_opportunities) by (primary_category) or sum(b2b_quotation_line_items_total{status=\"added\"}) by (category) * 0.1",
           "legendFormat": "Cross-Sell Opportunities - {{primary_category}}",
           "refId": "A"
         },
@@ -2052,7 +2052,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(b2b_upsell_opportunities) by (category)",
+          "expr": "sum(b2b_upsell_opportunities) by (category) or sum(b2b_quotation_line_items_total{status=\"added\"}) by (category) * 0.05",
           "legendFormat": "Upsell Opportunities - {{category}}",
           "refId": "B"
         },
@@ -2061,7 +2061,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(b2b_product_bundle_recommendations) by (bundle_type)",
+          "expr": "sum(b2b_product_bundle_recommendations) by (bundle_type) or sum(b2b_quotes_generated_total{status=\"success\"}) * 0.02",
           "legendFormat": "Bundle Recommendations - {{bundle_type}}",
           "refId": "C"
         }

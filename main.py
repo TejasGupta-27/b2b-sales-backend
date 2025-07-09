@@ -1702,6 +1702,27 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
             line_items = quote_data.get('line_items', [])
             categories = [item.get('category', 'unknown') for item in line_items]
             
+            # Record product selections from quote line items
+            for line_item in line_items:
+                product_id = line_item.get('product_id', 'unknown')
+                product_name = line_item.get('name', 'Unknown Product')
+                category = line_item.get('category', 'unknown')
+                quantity = line_item.get('quantity', 1)
+                
+                # Record product selection
+                metrics_service.record_product_selection(
+                    category=category,
+                    product_id=product_id,
+                    product_name=product_name,
+                    quantity=quantity
+                )
+                
+                # Record quotation line item
+                metrics_service.record_quotation_line_item(
+                    category=category,
+                    status="added"
+                )
+            
             if len(set(categories)) > 1:
                 # Multiple categories indicate cross-sell opportunity
                 for i, category1 in enumerate(categories):
