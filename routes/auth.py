@@ -192,7 +192,7 @@ async def list_public_organizations(db: Session = Depends(get_db)):
 @router.post("/organizations", response_model=Organization)
 async def create_organization(
     org_data: OrganizationCreate,
-    current_user: DBUser = Depends(require_role("admin"))
+    current_user: DBUser = Depends(require_role("ADMIN"))
 ):
     """Create a new organization (admin only)"""
     db = next(get_db())
@@ -229,7 +229,7 @@ async def create_organization(
 
 @router.get("/organizations", response_model=List[Organization])
 async def list_organizations(
-    current_user: DBUser = Depends(require_role("admin")),
+    current_user: DBUser = Depends(require_role("ADMIN")),
     db: Session = Depends(get_db)
 ):
     """List all organizations (admin only)"""
@@ -244,7 +244,7 @@ async def list_organization_users(
 ):
     """List users in an organization"""
     # Check if user is admin or belongs to the organization
-    if current_user.role.value != "admin" and current_user.organization_id != org_id:
+    if current_user.role.value != "ADMIN" and current_user.organization_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this organization's users"

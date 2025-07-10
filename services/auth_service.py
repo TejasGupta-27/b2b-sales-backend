@@ -279,7 +279,7 @@ def require_role(*allowed_roles: str):
 # Admin access dependency
 def get_admin_user(current_user: DBUser = Depends(get_current_active_user)) -> DBUser:
     """Dependency to ensure admin access"""
-    if current_user.role.value != "admin":
+    if current_user.role.value != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"

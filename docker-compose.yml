@@ -73,7 +73,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /opt/postgres_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
@@ -135,6 +135,9 @@ services:
       - monitoring
 
 volumes:
+  postgres_data:
+    driver: local
+
   elasticsearch_data:
     driver: local
 

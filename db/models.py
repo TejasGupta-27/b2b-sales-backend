@@ -20,10 +20,10 @@ class LeadStatus(PyEnum):
     CLOSED_LOST = "closed_lost"
 
 class UserRole(PyEnum):
-    ADMIN = "admin"
-    SALES_AGENT = "sales_agent"
-    SALES_MANAGER = "sales_manager"
-    VIEWER = "viewer"
+    ADMIN = "ADMIN"
+    SALES_AGENT = "SALES_AGENT"
+    SALES_MANAGER = "SALES_MANAGER"
+    VIEWER = "VIEWER"
 
 class OrganizationType(PyEnum):
     ENTERPRISE = "enterprise"
