@@ -19,6 +19,74 @@ class LeadStatus(PyEnum):
     CLOSED_WON = "closed_won"
     CLOSED_LOST = "closed_lost"
 
+class UserRole(PyEnum):
+    ADMIN = "admin"
+    SALES_AGENT = "sales_agent"
+    SALES_MANAGER = "sales_manager"
+    VIEWER = "viewer"
+
+class OrganizationType(PyEnum):
+    ENTERPRISE = "enterprise"
+    SMB = "smb"
+    STARTUP = "startup"
+
+# New User model for multi-user support
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.SALES_AGENT)
+    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    
+    # Organization relationship
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False)
+    organization = relationship("Organization", back_populates="users")
+    
+    # User preferences and settings
+    preferences = Column(JSON, default=dict)  # UI preferences, notifications, etc.
+    api_rate_limit = Column(Integer, default=1000)  # Requests per day
+    ai_token_limit = Column(Integer, default=50000)  # AI tokens per month
+    
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    last_login = Column(DateTime)
+    
+    # Relationships
+    leads = relationship("Lead", back_populates="assigned_user", cascade="all, delete-orphan")
+    chat_messages = relationship("ChatMessage", back_populates="user")
+
+# New Organization model for multi-tenancy
+class Organization(Base):
+    __tablename__ = "organizations"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    domain = Column(String, unique=True, nullable=False)  # company.com
+    org_type = Column(Enum(OrganizationType), default=OrganizationType.SMB)
+    
+    # Subscription and limits
+    max_users = Column(Integer, default=5)
+    max_leads = Column(Integer, default=1000)
+    ai_token_limit_monthly = Column(Integer, default=100000)
+    is_active = Column(Boolean, default=True)
+    
+    # Settings
+    settings = Column(JSON, default=dict)  # Org-specific configurations
+    
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    users = relationship("User", back_populates="organization")
+    leads = relationship("Lead", back_populates="organization")
+
 class Lead(Base):
     __tablename__ = "leads"
     
@@ -43,7 +111,13 @@ class Lead(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
-    # Relationship with chat messages
+    # Multi-user fields
+    assigned_user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False)
+    
+    # Relationships
+    assigned_user = relationship("User", back_populates="leads")
+    organization = relationship("Organization", back_populates="leads")
     chat_messages = relationship("ChatMessage", back_populates="lead", cascade="all, delete-orphan")
 
 class ChatMessage(Base):
@@ -51,14 +125,16 @@ class ChatMessage(Base):
     
     id = Column(String, primary_key=True)
     lead_id = Column(String, ForeignKey("leads.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)  # Add user tracking
     message_type = Column(Enum(MessageType), nullable=False)
     content = Column(Text, nullable=False)
     stage = Column(String)
     message_metadata = Column(JSON)  # Store additional metadata
     created_at = Column(DateTime, server_default=func.now())
     
-    # Relationship with lead
+    # Relationships
     lead = relationship("Lead", back_populates="chat_messages")
+    user = relationship("User", back_populates="chat_messages")
 
 class Quote(Base):
     __tablename__ = "quotes"
@@ -66,6 +142,7 @@ class Quote(Base):
     id = Column(String, primary_key=True)
     quote_number = Column(String, unique=True, nullable=False)
     lead_id = Column(String, ForeignKey("leads.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)  # Add user tracking
     customer_name = Column(String, nullable=False)
     customer_email = Column(String, nullable=False)
     company_name = Column(String, nullable=False)
@@ -92,8 +169,9 @@ class Quote(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
-    # Relationship with lead
+    # Relationships
     lead = relationship("Lead")
+    user = relationship("User")
 
 class ProductRecommendation(Base):
     __tablename__ = "product_recommendations"
@@ -117,6 +195,7 @@ class RecommendationSet(Base):
     
     id = Column(String, primary_key=True)
     lead_id = Column(String, ForeignKey("leads.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)  # Add user tracking
     recommendations = Column(JSON, nullable=False)  # List of ProductRecommendation objects
     created_at = Column(DateTime, server_default=func.now())
     selected_recommendations = Column(JSON, default=list)  # List of selected product IDs
@@ -128,8 +207,33 @@ class RecommendationSet(Base):
     quote_data = Column(JSON)  # Store generated quote data
     quote_generated_at = Column(DateTime)  # Timestamp when quote was generated
     
-    # Relationship with lead
+    # Relationships
     lead = relationship("Lead")
+    user = relationship("User")
+    product_recommendations = relationship("ProductRecommendation", back_populates="recommendation_set", cascade="all, delete-orphan")
+
+# Add API Rate Limiting and Usage Tracking
+class UserAPIUsage(Base):
+    __tablename__ = "user_api_usage"
     
-    # Relationship with product recommendations
-    product_recommendations = relationship("ProductRecommendation", back_populates="recommendation_set", cascade="all, delete-orphan") 
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    date = Column(DateTime, nullable=False)
+    api_calls = Column(Integer, default=0)
+    ai_tokens_used = Column(Integer, default=0)
+    
+    # Relationship
+    user = relationship("User")
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    session_token = Column(String, unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+    is_active = Column(Boolean, default=True)
+    
+    # Relationship
+    user = relationship("User") 

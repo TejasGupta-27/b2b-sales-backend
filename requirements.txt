@@ -8,8 +8,11 @@ sqlalchemy
 psycopg2-binary
 alembic
 python-multipart
+
+# Authentication dependencies for multi-user support
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt
 
 # ML and additional dependencies that might change
 httpx
