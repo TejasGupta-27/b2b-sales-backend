@@ -135,8 +135,7 @@ services:
       - monitoring
 
 volumes:
-  postgres_data:
-    driver: local
+
 
   elasticsearch_data:
     driver: local
