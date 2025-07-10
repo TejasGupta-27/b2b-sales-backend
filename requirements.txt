@@ -8,8 +8,11 @@ sqlalchemy
 psycopg2-binary
 alembic
 python-multipart
+
+# Authentication dependencies for multi-user support
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt
 
 # ML and additional dependencies that might change
 httpx
@@ -30,6 +33,9 @@ reportlab
 jinja2
 ragas
 
+# Language detection and multilingual support
+langdetect
+
 # Speech recognition
 ffmpeg-python
 python-ffmpeg
@@ -41,6 +47,7 @@ soundfile
 librosa>=0.10.0
 numba>=0.56.0
 llvmlite>=0.39.0
+
 # Testing dependencies
 requests
 
@@ -55,3 +62,4 @@ python-pptx
 
 # Monitoring and metrics
 prometheus-client
+psutil

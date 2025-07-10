@@ -9,3 +9,26 @@ __pycache__/
 logs/
 test_outputs/
 .git
+
+# Database data directories (should not be included in build context)
+postgres_data/
+elasticsearch_data/
+
+# Development and temporary files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+
+
+# Documentation
+*.md
+!README.md
+
+# Monitoring and optional services
+monitoring/
+docker-compose.monitoring.yml

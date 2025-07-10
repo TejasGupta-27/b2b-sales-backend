@@ -102,6 +102,77 @@ class CategoryAnalysis(BaseModel):
         default_factory=list
     )
 
+class DynamicQueryGeneration(BaseModel):
+    """AI-powered dynamic query generation based on data structure and categories"""
+    semantic_query: str = Field(
+        description="Optimized semantic search query for vector search"
+    )
+    keyword_query: Dict[str, Any] = Field(
+        description="Structured keyword query for Elasticsearch with field boosting",
+        default_factory=lambda: {
+            "query": {
+                "bool": {
+                    "should": [
+                        {"match": {"name": {"query": "product", "boost": 4.0}}},
+                        {"match": {"description": {"query": "product", "boost": 3.0}}},
+                        {"match": {"features": {"query": "product", "boost": 2.0}}},
+                        {"match": {"category": {"query": "product", "boost": 1.5}}}
+                    ]
+                }
+            },
+            "size": 20
+        }
+    )
+    category_filters: List[str] = Field(
+        description="Relevant product categories to search in",
+        default_factory=list
+    )
+    field_priorities: Dict[str, float] = Field(
+        description="Field-specific boost values for keyword search",
+        default_factory=lambda: {
+            "name": 4.0,
+            "description": 3.0,
+            "features": 2.0,
+            "category": 1.5
+        }
+    )
+    search_strategy: str = Field(
+        description="Search strategy: 'hybrid', 'vector_only', 'keyword_only', 'category_specific'",
+        default="hybrid"
+    )
+    confidence: float = Field(
+        description="Confidence in query generation (0.0 to 1.0)",
+        ge=0.0,
+        le=1.0,
+        default=0.5
+    )
+    reasoning: str = Field(
+        description="Explanation of why this query structure was chosen",
+        default="AI-generated query based on requirements analysis"
+    )
+    suggested_filters: Dict[str, Any] = Field(
+        description="Suggested filters based on requirements",
+        default_factory=dict
+    )
+
+class DataStructureInfo(BaseModel):
+    """Information about our data structure for AI query generation"""
+    available_categories: List[str] = Field(
+        description="All available product categories"
+    )
+    category_fields: Dict[str, List[str]] = Field(
+        description="Fields available for each category"
+    )
+    searchable_fields: List[str] = Field(
+        description="All searchable fields across categories"
+    )
+    field_importance: Dict[str, float] = Field(
+        description="Default importance/boost values for fields"
+    )
+    index_mapping: Dict[str, str] = Field(
+        description="Category to index mapping"
+    )
+
 class ElasticsearchVectorService:
     """Enhanced Elasticsearch service with vector search capabilities"""
     
@@ -541,90 +612,71 @@ class ElasticsearchVectorService:
     ) -> List[Dict[str, Any]]:
         """Perform vector search on products with optional category filtering and balanced results"""
         try:
-            logger.info(f"🔍 Vector search called with categories: {categories}")
+            logger.info(f"🔍 Vector search called with query: '{query}', categories: {categories}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
             query_vector = query_embeddings[0]
             
-            # If categories are specified, search each category separately for balanced results
-            if categories and len(categories) > 1:
-                logger.info(f"🎯 Performing balanced search across {len(categories)} categories")
-                return await self._balanced_category_search(query_vector, query, categories, size, filters, hybrid_weight)
-            elif categories and len(categories) == 1:
-                logger.info(f"🎯 Single category search for: {categories[0]}")
-            else:
-                logger.info(f"🔍 No categories or insufficient categories for balanced search - using standard search")
-            
-            # Determine which indices to search
-            if categories:
-                # Search only in specified category indices
+            # Determine which indices to search - be more restrictive when categories are specified
+            if categories and len(categories) > 0:
+                # Search ONLY in specified category indices
                 index_names = []
                 for category in categories:
                     index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
                     index_names.append(index_name)
                 # Remove duplicates
                 index_names = list(set(index_names))
-                logger.info(f"🎯 Searching in category-specific indices: {index_names}")
+                
+                logger.info(f"🎯 Searching ONLY in specified category indices: {index_names}")
             else:
                 # Search in all category indices
                 index_names = list(CATEGORY_INDEX_MAP.values()) + [DEFAULT_PRODUCTS_INDEX]
                 logger.info(f"🌐 Searching in all indices: {len(index_names)} indices")
             
-            # Build the search query
+            # Use proper KNN search instead of script_score
             search_query = {
-                "size": size,
+                "size": size * 2,  # Get more results to allow for better filtering
+                "knn": {
+                    "field": "content_vector",
+                    "query_vector": query_vector,
+                    "k": size * 2,
+                    "num_candidates": size * 5
+                },
                 "query": {
                     "bool": {
-                        "should": []
+                        "should": [
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": [
+                                        "name^4",
+                                        "description^3", 
+                                        "features^2",
+                                        "searchable_content^1.5"
+                                    ],
+                                    "type": "best_fields",
+                                    "fuzziness": "AUTO"
+                                }
+                            },
+                            {
+                                "match_phrase": {
+                                    "name": {
+                                        "query": query,
+                                        "boost": 5.0
+                                    }
+                                }
+                            }
+                        ]
                     }
                 },
-                "_source": {"excludes": ["content_vector"]}  # Exclude vector from response
+                "_source": {"excludes": ["content_vector"]}
             }
-            
-            # Add vector similarity search
-            knn_query = {
-                "script_score": {
-                    "query": {"match_all": {}},
-                    "script": {
-                        "source": "cosineSimilarity(params.query_vector, 'content_vector') + 1.0",
-                        "params": {"query_vector": query_vector}
-                    }
-                }
-            }
-            
-            # Add text search for hybrid approach with improved field matching
-            text_query = {
-                "multi_match": {
-                    "query": query,
-                    "fields": [
-                        "name^4",                    # Highest boost for name
-                        "description^3",             # High boost for description
-                        "features^2",                # Medium boost for features
-                        "use_cases^2",               # Medium boost for use cases
-                        "tags^2",                    # Medium boost for tags
-                        "category^1.5",              # Lower boost for category
-                        "searchable_content^1.5"     # Lower boost for searchable content
-                    ],
-                    "type": "best_fields",
-                    "fuzziness": "AUTO",
-                    "operator": "or"  # Use OR for better recall
-                }
-            }
-            
-            if hybrid_weight > 0:
-                # Hybrid search
-                search_query["query"]["bool"]["should"].extend([
-                    {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
-                    {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
-                ])
-            else:
-                # Pure vector search
-                search_query["query"] = knn_query
             
             # Add filters if provided
             if filters:
-                search_query["query"]["bool"]["filter"] = []
+                if "filter" not in search_query["query"]["bool"]:
+                    search_query["query"]["bool"]["filter"] = []
                 for field, value in filters.items():
                     if isinstance(value, list):
                         search_query["query"]["bool"]["filter"].append({"terms": {field: value}})
@@ -639,23 +691,69 @@ class ElasticsearchVectorService:
             for hit in response["hits"]["hits"]:
                 product = hit["_source"]
                 product["_score"] = hit["_score"]
-                product["_similarity_score"] = hit["_score"]  # For compatibility
-                product["_index"] = hit["_index"]  # Track which index this came from
+                product["_similarity_score"] = hit["_score"]
+                product["_index"] = hit["_index"]
                 products.append(product)
             
+            # Apply strict category filtering if categories are specified
+            if categories and len(categories) > 0:
+                # Only include products from specified categories
+                filtered_products = []
+                for product in products:
+                    product_category = product.get('category', '').lower()
+                    if product_category in [cat.lower() for cat in categories]:
+                        filtered_products.append(product)
+                
+                products = filtered_products
+                logger.info(f"🎯 Strict category filtering: {len(products)} products from specified categories")
+            
+            # Apply query-specific filtering to prioritize products containing the query
+            if query and len(query.strip()) > 0:
+                exact_match_products = []
+                partial_match_products = []
+                other_products = []
+                
+                query_lower = query.lower()
+                query_words = [word.strip() for word in query_lower.split() if len(word.strip()) > 2]
+                
+                for product in products:
+                    product_name = product.get('name', '').lower()
+                    product_desc = product.get('description', '').lower()
+                    product_content = product.get('searchable_content', '').lower()
+                    
+                    # Check for exact phrase match
+                    if query_lower in product_name:
+                        exact_match_products.append(product)
+                    # Check for all query words present
+                    elif all(word in product_name or word in product_desc for word in query_words):
+                        partial_match_products.append(product)
+                    # Check for any query words present
+                    elif any(word in product_name or word in product_desc or word in product_content for word in query_words):
+                        other_products.append(product)
+                    else:
+                        # No query match, but might be semantically similar
+                        other_products.append(product)
+                
+                # Prioritize: exact matches first, then partial matches, then others
+                products = exact_match_products + partial_match_products + other_products
+                
+                logger.info(f"🎯 Query filtering: {len(exact_match_products)} exact matches, {len(partial_match_products)} partial matches, {len(other_products)} others")
+            
+            # Limit to requested size
+            products = products[:size]
+            
             logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
-            logger.info(f"   Searched indices: {index_names}")
             if products:
-                # Log product categories for debugging
-                product_categories = [p.get('category', 'unknown') for p in products[:5]]
-                logger.info(f"   Top 5 product categories: {product_categories}")
+                # Log product names for debugging
+                product_names = [p.get('name', 'Unknown')[:50] for p in products[:3]]
+                logger.info(f"   Top 3 products: {product_names}")
             
             return products
             
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
             return []
-
+    
     async def _balanced_category_search(
         self, 
         query_vector: List[float], 
@@ -844,10 +942,22 @@ class ElasticsearchVectorService:
                 }
             }
             
+            # Add a more precise query for exact term matching
+            exact_query = {
+                "bool": {
+                    "should": [
+                        {"match_phrase": {"name": {"query": query, "boost": 5.0}}},
+                        {"match_phrase": {"description": {"query": query, "boost": 3.0}}},
+                        {"match_phrase": {"searchable_content": {"query": query, "boost": 2.0}}}
+                    ]
+                }
+            }
+            
             if hybrid_weight > 0:
-                # Hybrid search
+                # Hybrid search with both exact and fuzzy matching
                 search_query["query"]["bool"]["should"].extend([
                     {"constant_score": {"filter": knn_query, "boost": 1.0 - hybrid_weight}},
+                    {"constant_score": {"filter": exact_query, "boost": hybrid_weight * 2}},  # Higher boost for exact matches
                     {"constant_score": {"filter": text_query, "boost": hybrid_weight}}
                 ])
             else:
@@ -1095,7 +1205,7 @@ class ElasticsearchVectorService:
             categories = await self._extract_categories_fallback(requirements)
         
         # If still no categories, default to core categories based on common use cases
-        if not categories:
+        if not categories and not settings.disable_automatic_category_defaults:
             # Check if this looks like a workstation/professional use case
             text_content = []
             for key in ['semantic_query', 'technical_requirements', 'business_requirements']:
@@ -1124,6 +1234,9 @@ class ElasticsearchVectorService:
                 # Default to most common categories
                 categories = ['cpu', 'memory', 'internal-hard-drive']
                 logger.info("🎯 Applied general default categories")
+        elif not categories and settings.disable_automatic_category_defaults:
+            logger.info("ℹ️ Automatic category defaults disabled (DISABLE_AUTOMATIC_CATEGORY_DEFAULTS=true)")
+            return None  # No categories to return
         
         logger.info(f"🎯 Final categories selected: {categories}")
         return categories
@@ -1412,6 +1525,373 @@ class ElasticsearchVectorService:
         self.llm_provider = llm_provider
         logger.info("✅ LLM provider set for intelligent category detection")
 
+    def _get_data_structure_info(self) -> DataStructureInfo:
+        """Get comprehensive data structure information for AI query generation"""
+        return DataStructureInfo(
+            available_categories=list(FIELD_MAP.keys()),
+            category_fields=FIELD_MAP,
+            searchable_fields=[
+                "name", "description", "category", "features", "use_cases", 
+                "tags", "specifications", "compatibility", "warranty"
+            ],
+            field_importance={
+                "name": 4.0,
+                "description": 3.0,
+                "features": 2.0,
+                "use_cases": 2.0,
+                "tags": 2.0,
+                "category": 1.5,
+                "searchable_content": 1.5
+            },
+            index_mapping=CATEGORY_INDEX_MAP
+        )
+
+    async def generate_dynamic_query(
+        self, 
+        requirements: Dict[str, Any],
+        search_type: str = "hybrid"
+    ) -> DynamicQueryGeneration:
+        """Generate dynamic queries using AI based on data structure and requirements"""
+        
+        if not self.llm_provider:
+            logger.warning("No LLM provider available for dynamic query generation")
+            return self._fallback_query_generation(requirements, search_type)
+        
+        try:
+            # Get data structure information
+            data_structure = self._get_data_structure_info()
+            
+            # Build context for AI query generation
+            context_parts = []
+            
+            # Add requirements context
+            if requirements.get('semantic_query'):
+                context_parts.append(f"Semantic Query: {requirements['semantic_query']}")
+            
+            if requirements.get('use_case'):
+                context_parts.append(f"Use Case: {requirements['use_case']}")
+            
+            if requirements.get('technical_requirements'):
+                tech_reqs = requirements['technical_requirements']
+                if isinstance(tech_reqs, list):
+                    context_parts.append(f"Technical Requirements: {', '.join(str(req) for req in tech_reqs)}")
+                else:
+                    context_parts.append(f"Technical Requirements: {tech_reqs}")
+            
+            if requirements.get('business_requirements'):
+                business_reqs = requirements['business_requirements']
+                if isinstance(business_reqs, list):
+                    context_parts.append(f"Business Requirements: {', '.join(str(req) for req in business_reqs)}")
+                else:
+                    context_parts.append(f"Business Requirements: {business_reqs}")
+            
+            if requirements.get('search_terms'):
+                search_terms = requirements['search_terms']
+                if isinstance(search_terms, list):
+                    context_parts.append(f"Search Terms: {', '.join(str(term) for term in search_terms)}")
+                else:
+                    context_parts.append(f"Search Terms: {search_terms}")
+            
+            requirements_text = "\n".join(context_parts)
+            
+            # Create AI prompt for dynamic query generation
+            query_generation_prompt = f"""You are an expert search query optimizer for a B2B technology product database. Generate optimized search queries based on the customer requirements and our data structure.
+
+CUSTOMER REQUIREMENTS:
+{requirements_text}
+
+DATA STRUCTURE INFORMATION:
+Available Categories: {', '.join(data_structure.available_categories)}
+Searchable Fields: {', '.join(data_structure.searchable_fields)}
+
+SEARCH STRATEGY: {search_type}
+
+TASK:
+Generate a search query strategy with these components:
+
+1. SEMANTIC_QUERY: Natural language query for vector search (keep simple and clear)
+2. KEYWORD_QUERY: Basic Elasticsearch query structure (use simple field matching)
+3. CATEGORY_FILTERS: List of most relevant product categories
+4. FIELD_PRIORITIES: Basic field boost values (name: 4.0, description: 3.0, etc.)
+5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only'
+6. CONFIDENCE: Confidence score between 0.0 and 1.0
+7. REASONING: Brief explanation of strategy
+8. SUGGESTED_FILTERS: Empty object {{}} (no complex filters)
+
+CRITICAL JSON FORMATTING REQUIREMENTS:
+- Use ONLY simple string values, no special characters
+- Ensure all strings are properly quoted with double quotes
+- Use simple field names: name, description, features, category
+- Avoid complex nested structures in keyword_query
+- Keep all JSON properly formatted and valid
+
+EXAMPLE KEYWORD_QUERY STRUCTURE:
+{{
+  "query": {{
+    "bool": {{
+      "should": [
+        {{"match": {{"name": {{"query": "gaming", "boost": 4.0}}}}}},
+        {{"match": {{"description": {{"query": "gaming", "boost": 3.0}}}}}}
+      ]
+    }}
+  }},
+  "size": 20
+}}
+
+IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces. Use simple, clean strings without special characters."""
+
+            try:
+                # Use Pydantic function calling for structured response
+                logger.info("🧠 Using AI for dynamic query generation...")
+                dynamic_query = await self.llm_provider.generate_structured_response(
+                    [AIMessage(role="user", content=query_generation_prompt)],
+                    DynamicQueryGeneration
+                )
+                
+                logger.info(f"🧠 AI Query Generation:")
+                logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+                logger.info(f"   Categories: {dynamic_query.category_filters}")
+                logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+                logger.info(f"   Reasoning: {dynamic_query.reasoning}")
+                
+                return dynamic_query
+                    
+            except Exception as e:
+                logger.warning(f"AI query generation failed: {e}")
+                logger.info("🔄 Falling back to standard query generation...")
+                return self._fallback_query_generation(requirements, search_type)
+                
+        except Exception as e:
+            logger.error(f"Dynamic query generation failed: {e}")
+            logger.info("🔄 Using fallback query generation...")
+            return self._fallback_query_generation(requirements, search_type)
+
+    def _fallback_query_generation(
+        self, 
+        requirements: Dict[str, Any], 
+        search_type: str
+    ) -> DynamicQueryGeneration:
+        """Fallback query generation when AI is not available"""
+        
+        # Build semantic query - preserve exact terms from requirements
+        semantic_query = requirements.get('semantic_query', '')
+        if not semantic_query:
+            # Use technical requirements if available
+            tech_reqs = requirements.get('technical_requirements', [])
+            if tech_reqs:
+                semantic_query = ' '.join([str(req) for req in tech_reqs])
+            else:
+                use_case = requirements.get('use_case', 'business solution')
+                semantic_query = f"{use_case} technology solution"
+        
+        # Extract the actual search query from semantic_query or technical_requirements
+        actual_query = semantic_query
+        if not actual_query and requirements.get('technical_requirements'):
+            tech_reqs = requirements.get('technical_requirements', [])
+            if isinstance(tech_reqs, list):
+                actual_query = ' '.join([str(req) for req in tech_reqs])
+            else:
+                actual_query = str(tech_reqs)
+        
+        # If still no query, use a fallback
+        if not actual_query:
+            actual_query = "business solution"
+        
+        # Create a simple, effective Elasticsearch query that uses the actual search terms
+        keyword_query = {
+            "query": {
+                "bool": {
+                    "should": [
+                        # Exact phrase matching gets highest boost
+                        {"match_phrase": {"name": {"query": actual_query, "boost": 6.0}}},
+                        {"match_phrase": {"description": {"query": actual_query, "boost": 4.0}}},
+                        # Regular matching with good boosts
+                        {"match": {"name": {"query": actual_query, "boost": 4.0}}},
+                        {"match": {"description": {"query": actual_query, "boost": 3.0}}},
+                        {"match": {"features": {"query": actual_query, "boost": 2.0}}},
+                        {"match": {"searchable_content": {"query": actual_query, "boost": 1.5}}}
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "size": 20
+        }
+        
+        # Get categories from requirements or use defaults
+        categories = requirements.get('recommended_categories', [])
+        if not categories:
+            categories = requirements.get('product_categories', [])
+        if not categories:
+            # Infer categories from the query content
+            query_lower = actual_query.lower()
+            if any(term in query_lower for term in ['i9', 'i7', 'i5', 'ryzen', 'cpu', 'processor']):
+                categories = ['cpu']
+            elif any(term in query_lower for term in ['rtx', 'gtx', 'graphics', 'video card', 'gpu']):
+                categories = ['video-card']
+            elif any(term in query_lower for term in ['ram', 'memory', 'ddr4', 'ddr5']):
+                categories = ['memory']
+            elif any(term in query_lower for term in ['monitor', 'display', '4k', '1440p']):
+                categories = ['monitor']
+            elif any(term in query_lower for term in ['ssd', 'hdd', 'storage', 'drive']):
+                categories = ['internal-hard-drive']
+            else:
+                # Use default categories based on use case
+                use_case = requirements.get('use_case', '').lower()
+                if 'gaming' in use_case:
+                    categories = ['video-card', 'cpu', 'memory']
+                elif 'workstation' in use_case:
+                    categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
+                elif 'storage' in use_case:
+                    categories = ['internal-hard-drive', 'external-hard-drive']
+                else:
+                    categories = ['cpu', 'memory', 'internal-hard-drive']
+        
+        # Determine field priorities based on query content
+        field_priorities = {
+            "name": 4.0,
+            "description": 3.0,
+            "features": 2.0,
+            "category": 1.5
+        }
+        
+        # Adjust priorities based on query content
+        query_lower = actual_query.lower()
+        if any(term in query_lower for term in ['i9', 'i7', 'i5', 'ryzen', 'cpu']):
+            field_priorities.update({
+                "name": 6.0,  # Higher boost for CPU queries
+                "core_count": 3.5,
+                "core_clock": 3.0,
+                "boost_clock": 2.5
+            })
+        elif any(term in query_lower for term in ['gaming', 'fps']):
+            field_priorities.update({
+                "chipset": 3.5,
+                "core_clock": 3.0,
+                "memory": 2.5
+            })
+        elif any(term in query_lower for term in ['workstation', 'professional']):
+            field_priorities.update({
+                "core_count": 3.5,
+                "capacity": 3.0,
+                "speed": 2.5
+            })
+        elif any(term in query_lower for term in ['storage', 'drive']):
+            field_priorities.update({
+                "capacity": 4.0,
+                "price_per_gb": 3.5,
+                "interface": 3.0
+            })
+        
+        return DynamicQueryGeneration(
+            semantic_query=semantic_query,
+            keyword_query=keyword_query,
+            category_filters=categories,
+            field_priorities=field_priorities,
+            search_strategy=search_type,
+            confidence=0.7,  # Higher confidence since we're using exact query terms
+            reasoning=f"Using direct query terms '{actual_query}' with category-specific optimization",
+            suggested_filters={}
+        )
+
+    async def vector_search_products_with_ai_query(
+        self, 
+        requirements: Dict[str, Any],
+        size: int = 10,
+        search_type: str = "hybrid"
+    ) -> List[Dict[str, Any]]:
+        """Perform vector search using AI-generated dynamic queries"""
+        
+        try:
+            # Generate dynamic query using AI
+            dynamic_query = await self.generate_dynamic_query(requirements, search_type)
+            
+            logger.info(f"🧠 AI-Generated Query:")
+            logger.info(f"   Semantic Query: {dynamic_query.semantic_query}")
+            logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+            logger.info(f"   Categories: {dynamic_query.category_filters}")
+            logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+            
+            # Use the AI-generated semantic query
+            query = dynamic_query.semantic_query
+            categories = dynamic_query.category_filters if dynamic_query.category_filters else None
+            
+            # Perform vector search with AI-generated query
+            return await self.vector_search_products(
+                query=query,
+                size=size,
+                categories=categories,
+                hybrid_weight=0.2  # Default hybrid weight
+            )
+            
+        except Exception as e:
+            logger.error(f"AI-powered vector search failed: {e}")
+            # Fallback to standard search
+            return await self.vector_search_products(
+                query=requirements.get('semantic_query', 'business solution'),
+                size=size
+            )
+
+    async def elasticsearch_search_with_ai_query(
+        self, 
+        requirements: Dict[str, Any],
+        size: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Perform Elasticsearch search using AI-generated dynamic queries"""
+        
+        try:
+            # Generate dynamic query using AI
+            dynamic_query = await self.generate_dynamic_query(requirements, "keyword_only")
+            
+            logger.info(f"🔍 AI-Generated Elasticsearch Query:")
+            logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+            logger.info(f"   Field Priorities: {dynamic_query.field_priorities}")
+            logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+            
+            # Use the AI-generated keyword query
+            query = dynamic_query.keyword_query
+            query["size"] = size
+            
+            # Add filters if suggested by AI
+            if dynamic_query.suggested_filters:
+                if "query" not in query:
+                    query["query"] = {}
+                if "bool" not in query["query"]:
+                    query["query"]["bool"] = {}
+                if "filter" not in query["query"]["bool"]:
+                    query["query"]["bool"]["filter"] = []
+                
+                for field, value in dynamic_query.suggested_filters.items():
+                    if isinstance(value, list):
+                        query["query"]["bool"]["filter"].append({"terms": {field: value}})
+                    else:
+                        query["query"]["bool"]["filter"].append({"term": {field: value}})
+            
+            # Perform search using the standard search method
+            results = await self.search_products(query)
+            
+            # Add AI query metadata
+            for product in results:
+                product['ai_query_generated'] = True
+                product['ai_confidence'] = dynamic_query.confidence
+                product['ai_search_strategy'] = dynamic_query.search_strategy
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"AI-powered Elasticsearch search failed: {e}")
+            # Fallback to standard search
+            return await self.search_products({
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"name": {"query": "business solution", "boost": 2.0}}},
+                            {"match": {"description": {"query": "business solution", "boost": 1.0}}}
+                        ]
+                    }
+                },
+                "size": size
+            })
+
     async def _extract_categories_with_llm(self, requirements: Dict[str, Any]) -> List[str]:
         """Use LLM with Pydantic function calling to intelligently extract relevant product categories"""
         
@@ -1501,8 +1981,7 @@ ANALYSIS GUIDELINES:
 1. Focus on categories that directly solve the customer's stated needs
 2. Consider the primary use case and industry context
 3. Prioritize essential components over accessories
-4. Limit to 3-5 most relevant categories for focused search
-5. Consider complementary products that work together
+4. Consider complementary products that work together
 
 COMMON USE CASE PATTERNS:
 • Gaming: video-card, cpu, memory, monitor

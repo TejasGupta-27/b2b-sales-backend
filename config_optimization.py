@@ -47,12 +47,19 @@ PERFORMANCE_CONFIG = {
     "speech_timeout": 5000,          # 5 seconds timeout
     "speech_quality": "medium",      # Balance quality vs speed
     "speech_parallel_processing": True,
+    "disable_speech_on_high_cpu": True,  # Disable speech when CPU > 80%
+    "cpu_threshold_for_speech_disable": 80.0,  # CPU threshold percentage
+    
+    # Service Caching
+    "enable_service_caching": True,  # Cache AI providers and agents
+    "pre_initialize_agents": True,   # Pre-initialize agents on startup
     
     # Monitoring Configuration
     "enable_performance_monitoring": True,
     "performance_logging": True,
     "response_time_tracking": True,
     "cache_hit_rate_tracking": True,
+    "cpu_monitoring": True,
 }
 
 # Conversational Agent Settings

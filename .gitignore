@@ -49,3 +49,4 @@ models/models--guillaumekln--faster-whisper-base
 models/models--guillaumekln--faster-whisper-medium
 
 chroma_db/
+postgres_data/

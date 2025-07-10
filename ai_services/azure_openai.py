@@ -186,3 +186,62 @@ class AzureOpenAIProvider(AIProvider):
             "description": f"Structured response for {model.__name__}. ALL required fields must be included.",
             "parameters": schema
         } 
+
+    def _fix_json_arguments(self, json_str: str) -> str:
+        """Attempt to fix common JSON parsing issues"""
+        try:
+            import re
+            
+            # Log the problematic JSON for debugging
+            logger.debug(f"Attempting to fix malformed JSON: {json_str[:500]}...")
+            
+            # Remove any trailing commas before closing braces/brackets
+            fixed = re.sub(r',(\s*[}\]])', r'\1', json_str)
+            
+            # Fix common quote issues
+            # Remove any unescaped quotes in the middle of strings
+            fixed = re.sub(r'([^\\])"([^"]*?)([^\\])"', r'\1"\2\3"', fixed)
+            
+            # Try to balance quotes by adding missing closing quotes
+            quote_count = fixed.count('"')
+            if quote_count % 2 != 0:
+                # Find the last unescaped quote and add a closing quote
+                last_quote_pos = fixed.rfind('"')
+                if last_quote_pos != -1:
+                    # Check if it's already escaped
+                    if last_quote_pos == 0 or fixed[last_quote_pos - 1] != '\\':
+                        fixed = fixed + '"'
+            
+            # Fix common escape sequence issues
+            # Replace any unescaped backslashes that aren't part of valid escape sequences
+            fixed = re.sub(r'\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})', r'\\\\', fixed)
+            
+            # Fix newlines and other control characters in strings
+            fixed = fixed.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+            
+            # Remove any null bytes or other invalid characters
+            fixed = fixed.replace('\x00', '')
+            
+            # Try to fix malformed object/array structures
+            # Count braces and brackets to ensure they're balanced
+            brace_count = fixed.count('{') - fixed.count('}')
+            bracket_count = fixed.count('[') - fixed.count(']')
+            
+            if brace_count > 0:
+                fixed = fixed + '}' * brace_count
+            elif brace_count < 0:
+                # Remove extra closing braces
+                fixed = re.sub(r'}+$', '}', fixed)
+            
+            if bracket_count > 0:
+                fixed = fixed + ']' * bracket_count
+            elif bracket_count < 0:
+                # Remove extra closing brackets
+                fixed = re.sub(r'\]+$', ']', fixed)
+            
+            logger.debug(f"Fixed JSON: {fixed[:500]}...")
+            return fixed
+            
+        except Exception as e:
+            logger.error(f"Failed to fix JSON arguments: {e}")
+            return None 

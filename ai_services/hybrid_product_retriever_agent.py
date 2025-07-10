@@ -394,25 +394,71 @@ class RRFHybridFusion:
         max_results: int = None
     ) -> List[Dict]:
         """
-        Apply RRF fusion within each category and return equal number of products per category.
+        Apply RRF fusion within each category and return balanced results.
+        Modified to be less restrictive and allow more products per category.
         """
         max_results = max_results or settings.final_result_limit
         num_categories = len(categories)
         if num_categories == 0:
             return []
-        per_category = max_results // num_categories
+        
+        # Calculate minimum products per category, but allow more if available
+        min_per_category = max(1, max_results // num_categories)
         remainder = max_results % num_categories
+        
+        print(f"🎯 Per-category fusion: {num_categories} categories, {max_results} total results")
+        print(f"   Min per category: {min_per_category}, remainder: {remainder}")
+        
         final_products = []
         used_ids = set()
+        
         for i, category in enumerate(categories):
-            n = per_category + (1 if i < remainder else 0)
+            # Calculate target for this category (minimum + extra if available)
+            target_per_category = min_per_category + (1 if i < remainder else 0)
+            
+            # Get products for this category
             es_cat = [p for p in elasticsearch_products if p.get('category') == category]
             vec_cat = [p for p in vector_products if p.get('category') == category]
-            fused = self.fuse_rankings(es_cat, vec_cat, max_results=n)
-            for prod in fused:
-                if prod.get('id') not in used_ids:
-                    final_products.append(prod)
-                    used_ids.add(prod.get('id'))
+            
+            print(f"   📦 Category '{category}': {len(es_cat)} ES, {len(vec_cat)} vector products")
+            
+            # If we have products for this category, fuse them
+            if es_cat or vec_cat:
+                # Allow more products per category if we have them (up to 2x the minimum)
+                category_max = min(target_per_category * 2, max_results // max(1, num_categories // 2))
+                fused = self.fuse_rankings(es_cat, vec_cat, max_results=category_max)
+                
+                # Add unique products from this category
+                for prod in fused:
+                    if prod.get('id') not in used_ids:
+                        final_products.append(prod)
+                        used_ids.add(prod.get('id'))
+                        print(f"     ✅ Added: {prod.get('name', 'Unknown')} (RRF: {prod.get('rrf_score', 0):.4f})")
+                        
+                        # Stop if we've reached the overall limit
+                        if len(final_products) >= max_results:
+                            break
+            else:
+                print(f"     ⚠️ No products found for category '{category}'")
+        
+        # If we haven't filled the quota, add remaining high-scoring products from any category
+        if len(final_products) < max_results:
+            print(f"📊 Adding additional products to reach {max_results} total...")
+            
+            # Get all unselected products
+            all_products = elasticsearch_products + vector_products
+            unselected_products = [p for p in all_products if p.get('id') not in used_ids]
+            
+            # Sort by score and add remaining products
+            unselected_products.sort(key=lambda x: max(x.get('_score', 0), x.get('_similarity_score', 0)), reverse=True)
+            
+            for product in unselected_products:
+                if len(final_products) >= max_results:
+                    break
+                final_products.append(product)
+                print(f"     ✅ Added additional: {product.get('name', 'Unknown')} (Score: {max(product.get('_score', 0), product.get('_similarity_score', 0)):.3f})")
+        
+        print(f"🎯 Per-category fusion complete: {len(final_products)} total products")
         return final_products
 
 class HybridProductRetrieverAgent(AIProvider):
@@ -487,40 +533,64 @@ class HybridProductRetrieverAgent(AIProvider):
         conversation_messages: List[AIMessage],
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Enhanced conversation analysis with LLM-powered context understanding
-        """
-        print("🧠 Hybrid Product Retriever: Starting LLM-powered context analysis...")
+        """Enhanced conversation analysis with AI-powered dynamic query generation"""
         
         try:
+            print("🧠 Enhanced Hybrid Product Retriever: Starting AI-powered analysis...")
+            
             # Step 1: LLM-powered context analysis
             context_analysis = await self._analyze_conversation_context(conversation_messages, customer_context)
-            print(f"✅ Context Analysis: {context_analysis.primary_need}")
-            print(f"   Keywords: {context_analysis.search_keywords}")
-            print(f"   Semantic Queries: {context_analysis.semantic_queries}")
-            print(f"🎯 Category Recommendations: {context_analysis.recommended_categories}")
+            print(f"✅ Context Analysis Complete:")
+            print(f"   Primary Need: {context_analysis.primary_need}")
+            print(f"   Business Context: {context_analysis.business_context}")
+            print(f"   Technical Requirements: {context_analysis.technical_requirements}")
+            print(f"   Recommended Categories: {context_analysis.recommended_categories}")
             print(f"   Category Confidence: {context_analysis.category_confidence:.1%}")
             
-            # Step 2: Enhanced requirement extraction with context
+            # Step 2: Similar products analysis
+            similar_products_analysis = await self._analyze_similar_products(context_analysis)
+            print(f"✅ Similar Products Analysis Complete:")
+            print(f"   Base Product: {similar_products_analysis.base_product}")
+            print(f"   Search Criteria: {similar_products_analysis.search_criteria}")
+            print(f"   Alternative Approaches: {similar_products_analysis.alternative_approaches}")
+            
+            # Step 3: Enhanced requirements extraction with LLM context
             requirements = await self._extract_requirements_with_context(conversation_messages, customer_context, context_analysis)
+            print(f"✅ Enhanced Requirements Extraction Complete:")
+            print(f"   Use Case: {requirements.get('use_case', 'Not specified')}")
+            print(f"   Technical Requirements: {len(requirements.get('technical_requirements', []))} items")
+            print(f"   Search Keywords: {len(requirements.get('search_keywords', []))} terms")
+            print(f"   Semantic Queries: {len(requirements.get('semantic_queries', []))} queries")
             
-            # Step 3: Similar product analysis if applicable
-            similar_products_analysis = None
-            if context_analysis.similar_products:
-                similar_products_analysis = await self._analyze_similar_products(context_analysis)
-                print(f"🔍 Similar Products Analysis: {len(similar_products_analysis.search_criteria)} criteria")
+            # Step 4: AI-Enhanced hybrid search using dynamic query generation
+            if hasattr(self, '_perform_ai_enhanced_hybrid_search') and settings.enable_ai_enhanced_search:
+                print("🧠 Using AI-Enhanced Hybrid Search with dynamic query generation...")
+                search_results = await self._perform_ai_enhanced_hybrid_search(requirements, context_analysis, similar_products_analysis)
+            else:
+                print("🔄 Using standard enhanced hybrid search...")
+                search_results = await self._perform_enhanced_hybrid_search(requirements, context_analysis, similar_products_analysis)
             
-            # Step 4: Enhanced hybrid search with LLM insights
-            search_results = await self._perform_enhanced_hybrid_search(requirements, context_analysis, similar_products_analysis)
+            # Step 5: Analyze and rank results
+            analysis = await self._analyze_and_rank_results(search_results, context_analysis, requirements)
             
-            # Step 5: LLM-powered result analysis and ranking
-            final_results = await self._analyze_and_rank_results(search_results, context_analysis, requirements)
-            
-            return final_results
+            return {
+                "requirements": requirements,
+                "products": search_results["products"],
+                "solutions": search_results["solutions"],
+                "analysis": analysis,
+                "search_methods": search_results["search_methods"],
+                "retrieval_confidence": self._calculate_hybrid_confidence(search_results, requirements),
+                "llm_context_used": True,
+                "similar_products_analysis": context_analysis.similar_products is not None,
+                "ai_enhanced": search_results.get("ai_enhanced", False)
+            }
             
         except Exception as e:
-            logger.error(f"Enhanced conversation analysis failed: {e}")
-            # Fallback to original method
+            print(f"❌ Enhanced analysis failed: {e}")
+            import traceback
+            print(traceback.format_exc())
+            
+            # Fallback to original analysis
             return await self._fallback_analysis(conversation_messages, customer_context)
     
     async def _analyze_conversation_context(
@@ -704,6 +774,109 @@ Think broadly about their needs and suggest relevant alternatives."""
         
         # Perform the hybrid search with preserved requirements
         return await self._perform_hybrid_search(requirements)
+
+    async def _perform_ai_enhanced_hybrid_search(
+        self,
+        requirements: Dict[str, Any],
+        context_analysis: ContextAnalysis,
+        similar_products_analysis: Optional[SimilarProductSearch]
+    ) -> Dict[str, Any]:
+        """Perform AI-enhanced hybrid search with dynamic query generation"""
+        
+        print("🧠 AI-Enhanced Hybrid Search: Using dynamic query generation...")
+        
+        # Use LLM-generated search keywords and semantic queries
+        search_keywords = context_analysis.search_keywords
+        semantic_queries = context_analysis.semantic_queries
+        
+        # Add similar products to search if available
+        if similar_products_analysis:
+            search_keywords.extend(similar_products_analysis.search_criteria)
+            semantic_queries.extend(similar_products_analysis.alternative_approaches)
+        
+        # Enhance requirements with LLM insights
+        enhanced_requirements = requirements.copy()
+        enhanced_requirements['search_keywords'] = search_keywords
+        enhanced_requirements['semantic_queries'] = semantic_queries
+        enhanced_requirements['llm_context'] = {
+            'primary_need': context_analysis.primary_need,
+            'business_context': context_analysis.business_context,
+            'technical_requirements': context_analysis.technical_requirements,
+            'recommended_categories': context_analysis.recommended_categories,
+            'category_confidence': context_analysis.category_confidence
+        }
+        
+        # Use AI-powered dynamic query generation for both search types
+        search_methods = {
+            "methods": [],
+            "fusion_enabled": settings.use_rrf_merging,
+            "elasticsearch_weight": settings.rrf_elasticsearch_weight,
+            "semantic_weight": settings.rrf_semantic_weight,
+            "ai_enhanced": True
+        }
+        
+        print("🧠 Step 1: AI-Enhanced Elasticsearch search...")
+        elasticsearch_products = await self._elasticsearch_search(enhanced_requirements)
+        search_methods["methods"].append("ai_enhanced_elasticsearch_keyword")
+        search_methods["elasticsearch_count"] = len(elasticsearch_products)
+        print(f"   Found {len(elasticsearch_products)} products via AI-enhanced keyword search")
+        
+        # Step 2: AI-Enhanced Vector search for products
+        vector_products = []
+        if self.vector_service:
+            print("🧠 Step 2: AI-Enhanced Vector search for products...")
+            vector_products = await self._elasticsearch_vector_search_products(enhanced_requirements)
+            search_methods["methods"].append("ai_enhanced_vector_semantic")
+            search_methods["vector_products_count"] = len(vector_products)
+            print(f"   Found {len(vector_products)} products via AI-enhanced vector search")
+        
+        # Step 3: Vector search for solutions
+        vector_solutions = []
+        if self.vector_service:
+            print("🧠 Step 3: Vector search for solutions...")
+            vector_solutions = await self._elasticsearch_vector_search_solutions(enhanced_requirements)
+            search_methods["methods"].append("vector_solutions")
+            search_methods["vector_solutions_count"] = len(vector_solutions)
+            print(f"   Found {len(vector_solutions)} solutions via vector search")
+        
+        # Step 4: RRF fusion for products
+        print("🎯 Step 4: RRF fusion for products...")
+        categories = enhanced_requirements.get('recommended_categories') or enhanced_requirements.get('llm_context', {}).get('recommended_categories')
+        if settings.use_rrf_merging and categories:
+            fused_products = self.rrf_fusion.fuse_rankings_per_category(
+                elasticsearch_products, 
+                vector_products,
+                categories,
+                max_results=settings.final_result_limit
+            )
+            search_methods["fusion_method"] = "rrf_per_category"
+            print(f"   RRF per-category fusion complete: {len(fused_products)} products")
+        elif settings.use_rrf_merging:
+            fused_products = self.rrf_fusion.fuse_rankings(
+                elasticsearch_products, 
+                vector_products,
+                max_results=settings.final_result_limit
+            )
+            search_methods["fusion_method"] = "rrf"
+            print(f"   RRF fusion complete: {len(fused_products)} products")
+        else:
+            # Simple merge if RRF is disabled
+            fused_products = self._merge_product_results_simple(
+                elasticsearch_products, 
+                vector_products
+            )
+            search_methods["fusion_method"] = "simple"
+            print(f"   Simple merge complete: {len(fused_products)} products")
+        
+        # Step 5: Process solutions (no fusion needed for solutions)
+        solutions = vector_solutions[:settings.final_result_limit] if vector_solutions else []
+        
+        return {
+            "products": fused_products,
+            "solutions": solutions,
+            "search_methods": search_methods,
+            "ai_enhanced": True
+        }
     
     async def _fallback_analysis(
         self,
@@ -843,10 +1016,10 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
         if use_case:
             query_parts.append(use_case)
         
-        # Add technical requirements with more detail
+        # Add technical requirements with more detail - preserve exact terms
         tech_reqs = requirements.get('technical_requirements', [])
         if tech_reqs:
-            # Convert to string and add context
+            # Convert to string and add context, but preserve exact terms like "i5"
             tech_text = ' '.join([str(req) for req in tech_reqs if str(req)])
             if tech_text:
                 query_parts.append(f"Technical requirements: {tech_text}")
@@ -858,7 +1031,7 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             if business_text:
                 query_parts.append(f"Business needs: {business_text}")
         
-        # Add search terms as additional context (not as filters)
+        # Add search terms as additional context (not as filters) - preserve exact terms
         search_terms = requirements.get('search_terms', [])
         if search_terms:
             search_text = ' '.join([str(term) for term in search_terms if str(term)])
@@ -1234,6 +1407,12 @@ Provide detailed analysis considering both keyword relevance and semantic simila
     async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Perform Elasticsearch keyword search for products"""
         try:
+            # Use AI-powered dynamic query generation if available
+            if self.vector_service and hasattr(self.vector_service, 'elasticsearch_search_with_ai_query'):
+                logger.info("🧠 Using AI-powered Elasticsearch search...")
+                return await self.vector_service.elasticsearch_search_with_ai_query(requirements, settings.final_result_limit)
+            
+            # Fallback to original method
             # Build search query from requirements
             search_terms = requirements.get('search_terms', [])
             product_categories = requirements.get('product_categories', [])
@@ -1255,6 +1434,10 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 "query": {
                     "bool": {
                         "should": [
+                            {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in query_terms
+                        ] + [
+                            {"match_phrase": {"description": {"query": term, "boost": 2.0}}} for term in query_terms
+                        ] + [
                             {"match": {"name": {"query": term, "boost": 2.0}}} for term in query_terms
                         ] + [
                             {"match": {"description": {"query": term, "boost": 1.0}}} for term in query_terms
@@ -1288,10 +1471,42 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             if not self.vector_service:
                 return []
             
-            # Use semantic query from requirements
+            # Use AI-powered dynamic query generation if available
+            if hasattr(self.vector_service, 'vector_search_products_with_ai_query'):
+                logger.info("🧠 Using AI-powered vector search...")
+                return await self.vector_service.vector_search_products_with_ai_query(requirements, settings.final_result_limit)
+            
+            # Fallback to original method - build a more specific query
             semantic_query = requirements.get('semantic_query', '')
             if not semantic_query:
-                semantic_query = requirements.get('use_case', 'business solution')
+                # Build query from technical requirements and search terms
+                search_terms = requirements.get('search_keywords', [])
+                tech_reqs = requirements.get('technical_requirements', [])
+                
+                # Combine all search terms into a specific query
+                all_terms = []
+                if search_terms:
+                    if isinstance(search_terms, list):
+                        all_terms.extend([str(term) for term in search_terms])
+                    else:
+                        all_terms.append(str(search_terms))
+                
+                if tech_reqs:
+                    if isinstance(tech_reqs, list):
+                        all_terms.extend([str(req) for req in tech_reqs])
+                    else:
+                        all_terms.append(str(tech_reqs))
+                
+                # Add use case if available
+                use_case = requirements.get('use_case', '')
+                if use_case:
+                    all_terms.append(str(use_case))
+                
+                # Create specific query from all terms
+                if all_terms:
+                    semantic_query = ' '.join(all_terms)
+                else:
+                    semantic_query = requirements.get('use_case', 'business solution')
             
             # Get category recommendations from multiple possible sources
             categories = None
@@ -1452,6 +1667,74 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         except Exception as e:
             logger.error(f"Category recommendation failed: {e}")
             return [], 0.0
+
+    async def test_ai_enhanced_search(
+        self,
+        test_requirements: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Test AI-enhanced search functionality with sample requirements"""
+        
+        print("🧪 Testing AI-Enhanced Search Functionality...")
+        
+        try:
+            # Test dynamic query generation
+            if self.vector_service and hasattr(self.vector_service, 'generate_dynamic_query'):
+                print("🔍 Testing AI Dynamic Query Generation...")
+                dynamic_query = await self.vector_service.generate_dynamic_query(test_requirements, "hybrid")
+                
+                print(f"✅ AI Query Generation Test Results:")
+                print(f"   Semantic Query: {dynamic_query.semantic_query}")
+                print(f"   Search Strategy: {dynamic_query.search_strategy}")
+                print(f"   Categories: {dynamic_query.category_filters}")
+                print(f"   Confidence: {dynamic_query.confidence:.1%}")
+                print(f"   Reasoning: {dynamic_query.reasoning}")
+                
+                # Test AI-enhanced vector search
+                print("🧠 Testing AI-Enhanced Vector Search...")
+                vector_results = await self.vector_service.vector_search_products_with_ai_query(
+                    test_requirements, 
+                    size=5
+                )
+                
+                print(f"✅ AI-Enhanced Vector Search Results:")
+                print(f"   Products Found: {len(vector_results)}")
+                for i, product in enumerate(vector_results[:3]):
+                    print(f"   {i+1}. {product.get('name', 'Unknown')} (Score: {product.get('_similarity_score', 0):.3f})")
+                
+                # Test AI-enhanced Elasticsearch search
+                print("🔍 Testing AI-Enhanced Elasticsearch Search...")
+                es_results = await self.vector_service.elasticsearch_search_with_ai_query(
+                    test_requirements, 
+                    size=5
+                )
+                
+                print(f"✅ AI-Enhanced Elasticsearch Search Results:")
+                print(f"   Products Found: {len(es_results)}")
+                for i, product in enumerate(es_results[:3]):
+                    print(f"   {i+1}. {product.get('name', 'Unknown')} (Score: {product.get('_score', 0):.3f})")
+                
+                return {
+                    "test_type": "ai_enhanced_search",
+                    "dynamic_query": dynamic_query.model_dump(),
+                    "vector_results_count": len(vector_results),
+                    "elasticsearch_results_count": len(es_results),
+                    "success": True
+                }
+            else:
+                print("⚠️ AI-enhanced search not available - LLM provider not configured")
+                return {
+                    "test_type": "ai_enhanced_search",
+                    "success": False,
+                    "error": "AI-enhanced search not available"
+                }
+                
+        except Exception as e:
+            print(f"❌ AI-Enhanced Search Test Failed: {e}")
+            return {
+                "test_type": "ai_enhanced_search",
+                "success": False,
+                "error": str(e)
+            }
 
 # Async helper to avoid import issues
 async def run_async(coro):

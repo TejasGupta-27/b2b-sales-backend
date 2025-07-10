@@ -15,10 +15,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text, func, and_
 import asyncio
 import time
+import psutil
 
 # Import database components
 from db.database import get_db, engine, create_tables, test_connection, reset_database, cleanup_conflicting_data
-from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
+from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus, User as DBUser
 
 # Import routes
 from routes.leads import router as leads_router
@@ -26,6 +27,7 @@ from routes.quotes import router as quotes_router
 from routes.speech import router as speech_router
 from routes.recommendations import router as recommendations_router
 from routes.admin import router as admin_router
+from routes.auth import router as auth_router  # Add authentication routes
 
 # Import AI services
 from ai_services.factory import AIServiceFactory
@@ -42,6 +44,9 @@ from services.cache_service import get_cache_service, start_cache_cleanup_task
 from services.elasticsearch_vector_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from services.metrics_service import metrics_middleware, metrics_endpoint, get_metrics_service
+
+# Import authentication
+from services.auth_service import get_current_active_user, auth_service
 
 # Import configuration
 from config import settings
@@ -72,8 +77,8 @@ logger.addHandler(main_log_handler)
 # Create FastAPI app
 app = FastAPI(
     title="B2B Sales AI Assistant",
-    description="AI-powered B2B sales assistant with dynamic product intelligence",
-    version="2.0.0"
+    description="AI-powered B2B sales assistant with dynamic product intelligence and multi-user support",
+    version="3.0.0"  # Updated version for multi-user support
 )
 
 # Add metrics middleware
@@ -91,10 +96,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global speech service instance
-speech_service = None
-
-# Include routers
+# Include routers - Add authentication first
+app.include_router(auth_router)  # Authentication routes (no auth required)
 app.include_router(leads_router)
 app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
@@ -162,6 +165,13 @@ class ChatSearchRequest(BaseModel):
 # Add Elasticsearch Vector service initialization
 vector_service = None
 
+# Global service instances for caching
+speech_service = None
+ai_provider = None
+conversational_agent = None
+quote_agent = None
+elasticsearch_service = None
+
 # Add simple context helper function
 def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Dict[str, Any]]) -> List[AIMessage]:
     """Add simple context without complex analysis"""
@@ -178,10 +188,137 @@ def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Di
     
     return messages
 
+def get_cached_ai_provider():
+    """Get cached AI provider instance"""
+    global ai_provider
+    if ai_provider is None:
+        ai_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
+    return ai_provider
+
+def get_cached_conversational_agent():
+    """Get cached conversational agent instance"""
+    global conversational_agent
+    if conversational_agent is None:
+        base_provider = get_cached_ai_provider()
+        conversational_agent = SimpleConversationalAgent(base_provider)
+    return conversational_agent
+
+def get_cached_quote_agent():
+    """Get cached quote generation agent instance"""
+    global quote_agent
+    if quote_agent is None:
+        base_provider = get_cached_ai_provider()
+        quote_agent = QuoteGenerationAgent(base_provider)
+    return quote_agent
+
+def get_cached_speech_service():
+    """Get cached speech service instance"""
+    global speech_service
+    return speech_service
+
+def get_cached_elasticsearch_service():
+    """Get cached elasticsearch service instance"""
+    global elasticsearch_service
+    if elasticsearch_service is None:
+        elasticsearch_service = get_elasticsearch_service()
+    return elasticsearch_service
+
+def get_cached_vector_service():
+    """Get cached vector service instance"""
+    global vector_service
+    return vector_service
+
+def get_cpu_usage():
+    """Get current CPU usage percentage"""
+    try:
+        return psutil.cpu_percent(interval=1)
+    except Exception:
+        return 0.0
+
+def should_disable_speech_service():
+    """Check if speech service should be disabled based on CPU usage"""
+    if settings.disable_speech_service:
+        return True
+    
+    if settings.disable_speech_on_high_cpu:
+        cpu_usage = get_cpu_usage()
+        if cpu_usage > settings.cpu_threshold_for_speech_disable:
+            logger.warning(f"CPU usage is {cpu_usage:.1f}% - disabling speech service for performance")
+            return True
+    
+    return False
+
+def save_quote_to_database(quote: Dict[str, Any], lead_id: str = None, user_id: str = None, db: Session = None) -> str:
+    """Save quote to database for persistence with user association"""
+    try:
+        from db.models import Quote
+        from datetime import datetime, timedelta
+        
+        # Extract quote data
+        quote_id = quote.get('quote_id', str(uuid.uuid4()))
+        quote_number = quote.get('quote_number', f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        
+        # Extract customer info
+        customer_info = quote.get('customer_info', {})
+        customer_name = customer_info.get('contact_name', 'Unknown Customer')
+        customer_email = customer_info.get('email', 'unknown@example.com')
+        company_name = customer_info.get('company_name', 'Unknown Company')
+        
+        # Extract financial data
+        financials = quote.get('financials', {})
+        subtotal = financials.get('subtotal', 0.0)
+        tax_rate = financials.get('tax_rate', 0.0)
+        tax_amount = financials.get('tax_amount', 0.0)
+        total = financials.get('total', 0.0)
+        currency = financials.get('currency', 'USD')
+        
+        # Extract line items
+        line_items = quote.get('line_items', [])
+        
+        # Set valid until date (30 days from now)
+        valid_until = datetime.now() + timedelta(days=30)
+        
+        # Create quote object
+        db_quote = Quote(
+            id=quote_id,
+            quote_number=quote_number,
+            lead_id=lead_id or "unknown",
+            user_id=user_id,  # Associate with user
+            customer_name=customer_name,
+            customer_email=customer_email,
+            company_name=company_name,
+            items=line_items,
+            subtotal=subtotal,
+            tax_rate=tax_rate,
+            tax_amount=tax_amount,
+            total=total,
+            currency=currency,
+            valid_until=valid_until,
+            terms=quote.get('terms_and_conditions', []),
+            notes=quote.get('implementation_notes', []),
+            pdf_filename=quote.get('pdf_path'),
+            pdf_url=quote.get('pdf_url'),
+            status="draft"
+        )
+        
+        if db:
+            db.add(db_quote)
+            db.commit()
+            db.refresh(db_quote)
+            logger.info(f"✅ Quote saved to database: {quote_id} - ${total} {currency} (User: {user_id})")
+            return quote_id
+        else:
+            logger.warning("⚠️ No database session provided, quote not saved to database")
+            return quote_id
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to save quote to database: {e}")
+        return quote.get('quote_id', str(uuid.uuid4()))
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global vector_service, speech_service
+    global vector_service, speech_service, conversational_agent, quote_agent, elasticsearch_service
     
     try:
         logger.info("🚀 Starting B2B Sales AI Assistant...")
@@ -219,14 +356,32 @@ async def startup_event():
             logger.error(f"❌ Elasticsearch initialization failed: {es_error}")
             logger.warning("⚠️ Continuing without Elasticsearch - some features may be limited")
         
-        # Initialize speech service
+        # Initialize speech service only if not disabled
+        if not should_disable_speech_service():
+            try:
+                speech_service = SpeechService()
+                await speech_service.initialize()
+                logger.info("✅ Speech service initialized")
+            except Exception as speech_error:
+                logger.error(f"❌ Speech service initialization failed: {speech_error}")
+                logger.warning("⚠️ Continuing without speech service - text-to-speech will be disabled")
+        else:
+            logger.info("ℹ️ Speech service disabled for performance optimization")
+        
+        # Pre-initialize AI agents for better performance
         try:
-            speech_service = SpeechService()
-            await speech_service.initialize()
-            logger.info("✅ Speech service initialized")
-        except Exception as speech_error:
-            logger.error(f"❌ Speech service initialization failed: {speech_error}")
-            logger.warning("⚠️ Continuing without speech service - text-to-speech will be disabled")
+            # Initialize conversational agent
+            conversational_agent = get_cached_conversational_agent()
+            await conversational_agent.initialize()
+            logger.info("✅ Conversational agent pre-initialized")
+            
+            # Initialize quote agent
+            quote_agent = get_cached_quote_agent()
+            logger.info("✅ Quote generation agent pre-initialized")
+            
+        except Exception as ai_error:
+            logger.error(f"❌ AI agent initialization failed: {ai_error}")
+            logger.warning("⚠️ AI agents will be initialized on first request")
         
         # Start periodic metrics update task
         asyncio.create_task(periodic_metrics_update())
@@ -283,38 +438,57 @@ async def root():
     return {"message": "B2B Sales AI Assistant is running with dynamic product intelligence!"}
 
 @app.post("/api/chat")
-async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
-    """Optimized sales chat endpoint with reduced latency"""
+async def sales_chat(
+    request: SalesChatMessage, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Optimized sales chat endpoint with reduced latency and user authentication"""
     metrics_service = get_metrics_service()
     start_time = time.time()
     
     try:
-        # Get speech service
-        global speech_service
+        # Get cached speech service
+        speech_service = get_cached_speech_service()
         
         try:
-            # Handle lead management
+            # Handle lead management - Associate with current user
             lead_id = request.lead_id or str(uuid.uuid4())
             if not request.lead_id:
+                # Create new lead associated with current user and organization
                 lead = DBLead(
                     id=lead_id,
                     company_name="Unknown",
                     contact_name="Unknown",
                     email="unknown@example.com",
                     status=LeadStatus.NEW,
+                    assigned_user_id=current_user.id,  # Associate with current user
+                    organization_id=current_user.organization_id,  # Associate with user's organization
                     created_at=datetime.now()
                 )
                 db.add(lead)
                 db.commit()
-                logger.info(f"Created new lead: {lead_id}")
+                logger.info(f"Created new lead: {lead_id} for user: {current_user.id}")
                 
                 # Update lead metrics immediately after creation
                 metrics_service.update_lead_metrics(db)
+            else:
+                # Verify user owns this lead or has access to it
+                existing_lead = db.query(DBLead).filter(
+                    DBLead.id == lead_id,
+                    DBLead.organization_id == current_user.organization_id  # Organization-level access
+                ).first()
+                if not existing_lead:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Access denied: Lead not found or not accessible"
+                    )
             
-            # Save user message
+            # Save user message with user association
             user_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
+                user_id=current_user.id,  # Associate with current user
                 message_type=MessageType.USER.value,
                 content=request.message,
                 stage=request.conversation_stage or "discovery"
@@ -325,10 +499,14 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             # Record chat message metric
             metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
-            # Get conversation history with limit for better performance
+            # Record AI token usage for the user
+            auth_service.record_api_usage(current_user.id, ai_tokens=0, db=db)
+            
+            # Get conversation history with organization filtering
             messages = []
-            existing_messages = db.query(DBChatMessage).filter(
-                DBChatMessage.lead_id == lead_id
+            existing_messages = db.query(DBChatMessage).join(DBLead).filter(
+                DBChatMessage.lead_id == lead_id,
+                DBLead.organization_id == current_user.organization_id  # Organization isolation
             ).order_by(DBChatMessage.created_at.desc()).limit(10).all()  # Reduced to last 10 messages
             
             # Reverse to get chronological order
@@ -338,7 +516,10 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             
             # Get customer context from the lead
             customer_context = None
-            lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
+            lead_record = db.query(DBLead).filter(
+                DBLead.id == lead_id,
+                DBLead.organization_id == current_user.organization_id  # Organization isolation
+            ).first()
             if lead_record:
                 customer_context = {
                     "company_name": lead_record.company_name,
@@ -347,37 +528,43 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     "company_size": getattr(lead_record, 'company_size', None),
                     "industry": getattr(lead_record, 'industry', None),
                     "budget_range": getattr(lead_record, 'budget_range', None),
-                    "timeline": getattr(lead_record, 'decision_timeline', None)
+                    "timeline": getattr(lead_record, 'decision_timeline', None),
+                    "user_organization": current_user.organization.name if current_user.organization else "Unknown"
                 }
             
-            # Check cache first for similar conversations
+            # Check cache first for similar conversations (user-specific cache key)
             cache_service = get_cache_service()
-            cache_key = f"chat_response:{hash(request.message + str(customer_context))}"
+            cache_key = f"chat_response:{current_user.id}:{hash(request.message + str(customer_context))}"
             cached_response = await cache_service.get(cache_key)
             
             if cached_response:
                 logger.info("✅ Serving response from cache")
                 response_content = cached_response
-                response_metadata = {"cached": True, "provider": "cache"}
+                response_metadata = {"cached": True, "provider": "cache", "user_id": current_user.id}
                 metrics_service.record_cache_hit()
             else:
                 # Record cache miss
                 metrics_service.record_cache_miss()
                 
-                # Create simple conversational agent for natural responses
-                base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-                conversational_agent = SimpleConversationalAgent(base_provider)
+                # Use cached conversational agent
+                conversational_agent = get_cached_conversational_agent()
                 
-                # Initialize the agent (this will initialize hybrid retriever if configured)
-                await conversational_agent.initialize()
+                # Initialize the agent if needed (should be pre-initialized)
+                if not hasattr(conversational_agent, '_initialized'):
+                    await conversational_agent.initialize()
+                    conversational_agent._initialized = True
                 
                 # Let the conversational agent handle all types of requests naturally
-                # No hardcoded phrase detection - let the AI determine the best response
                 ai_start_time = time.time()
                 response = await conversational_agent.generate_response(
                     messages, customer_context
                 )
                 ai_duration = time.time() - ai_start_time
+                
+                # Record AI token usage
+                if hasattr(response, 'usage') and response.usage:
+                    total_tokens = response.usage.get('total_tokens', 0)
+                    auth_service.record_api_usage(current_user.id, ai_tokens=total_tokens, db=db)
                 
                 # Record AI response time
                 metrics_service.record_ai_response_time(
@@ -392,28 +579,37 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     "model": response.model,
                     "usage": response.usage,
                     "agent_type": "simple_conversational",
-                    "cached": False
+                    "cached": False,
+                    "user_id": current_user.id,
+                    "organization_id": current_user.organization_id
                 }
                 
-                # Cache the response for 2 minutes
+                # Cache the response for 2 minutes (user-specific)
                 await cache_service.set(cache_key, response_content, ttl=120)
             
-            # Generate speech in parallel (non-blocking)
-            speech_task = asyncio.create_task(
-                speech_service.text_to_speech(text=response_content, language="en")
-            )
+            # Generate speech in parallel (non-blocking) only if speech service is available
+            speech_result = None
+            if speech_service:
+                try:
+                    speech_task = asyncio.create_task(
+                        speech_service.text_to_speech(text=response_content, language="en")
+                    )
+                    
+                    # Wait for speech generation first
+                    speech_result = await speech_task
+                    logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
+                    
+                    # Update metadata with speech data
+                    response_metadata['speech_data'] = speech_result
+                except Exception as speech_error:
+                    logger.warning(f"Speech generation failed: {speech_error}")
+                    response_metadata['speech_error'] = str(speech_error)
             
-            # Wait for speech generation first
-            speech_result = await speech_task
-            logger.info(f"🎤 Speech generated for response: {len(speech_result.get('audio_data', ''))} chars")
-            
-            # Update metadata with speech data
-            response_metadata['speech_data'] = speech_result
-            
-            # Save assistant response with speech data included
+            # Save assistant response with speech data included and user association
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
+                user_id=current_user.id,  # Associate with current user
                 message_type=MessageType.ASSISTANT.value,
                 content=response_content,
                 stage=request.conversation_stage or "discovery",
@@ -421,7 +617,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             )
             db.add(assistant_message)
             db.commit()
-            logger.info(f"💾 Assistant message saved with speech data: {assistant_message.id}")
+            logger.info(f"💾 Assistant message saved with speech data: {assistant_message.id} (User: {current_user.id})")
             
             # Record assistant message metric
             metrics_service.record_chat_message(lead_id=lead_id, message_type="assistant")
@@ -434,7 +630,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 metadata=response_metadata
             )
             
-            logger.info(f"✅ Optimized Sales Chat Response generated for lead: {lead_id}")
+            logger.info(f"✅ Optimized Sales Chat Response generated for lead: {lead_id} (User: {current_user.id})")
             return chat_response
             
         finally:
@@ -476,9 +672,8 @@ async def generate_quote(quote_request: Dict[str, Any]):
     start_time = time.time()
     
     try:
-        # Create and initialize the quote generation agent
-        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-        quote_agent = QuoteGenerationAgent(base_provider)
+        # Use cached quote generation agent
+        quote_agent = get_cached_quote_agent()
         
         # Extract conversation messages from the request
         conversation_messages = quote_request.get('conversation_messages', [])
@@ -509,12 +704,86 @@ async def generate_quote(quote_request: Dict[str, Any]):
             metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
         
+        # Record comprehensive quote metrics
+        try:
+            # Extract quote details for metrics
+            quote_data = {
+                'total_value': quote.get('financials', {}).get('total', 0.0) if quote.get('financials') else quote.get('total_amount', 0.0),
+                'currency': quote.get('financials', {}).get('currency', 'USD') if quote.get('financials') else quote.get('currency', 'USD'),
+                'line_items': quote.get('line_items', []),
+                'quote_requested_at': quote.get('created_at', datetime.now().isoformat()),
+                'generated_at': datetime.now().isoformat()
+            }
+            
+            # Record detailed quote metrics
+            metrics_service.record_quote_with_details(quote_data)
+            
+            # Record sales velocity metrics
+            metrics_service.record_sales_velocity(
+                metric_type="quote_generation_rate",
+                value=1.0  # Increment counter
+            )
+            
+            # Record average quote value
+            if quote_data['total_value'] > 0:
+                metrics_service.record_average_quote_value(
+                    category="general",
+                    period="daily",
+                    average_value=quote_data['total_value']
+                )
+            
+            # Record quote request to generation time
+            if 'quote_requested_at' in quote_data:
+                try:
+                    request_time = datetime.fromisoformat(quote_data['quote_requested_at'])
+                    generation_time = datetime.fromisoformat(quote_data['generated_at'])
+                    duration_seconds = (generation_time - request_time).total_seconds()
+                    metrics_service.record_quote_request_to_generation(
+                        lead_id="quote_generation",
+                        duration_seconds=duration_seconds
+                    )
+                except:
+                    pass  # Skip if timestamp parsing fails
+            
+            # Record cross-sell and upsell opportunities if detected
+            line_items = quote_data.get('line_items', [])
+            categories = [item.get('category', 'unknown') for item in line_items]
+            
+            if len(set(categories)) > 1:
+                # Multiple categories indicate cross-sell opportunity
+                for i, category1 in enumerate(categories):
+                    for category2 in categories[i+1:]:
+                        if category1 != category2:
+                            metrics_service.record_cross_sell_opportunity(
+                                primary_category=category1,
+                                cross_sell_category=category2
+                            )
+            
+            # Record customer satisfaction (estimated based on quote generation success)
+            if quote.get('pdf_generated'):
+                metrics_service.record_customer_satisfaction(
+                    lead_id="quote_generation",
+                    interaction_type="quote_generation",
+                    satisfaction_score=0.8  # High satisfaction for successful quote generation
+                )
+            
+            logger.info(f"📊 Recorded comprehensive quote metrics: {len(line_items)} line items, ${quote_data['total_value']} {quote_data['currency']}")
+            
+        except Exception as quote_metrics_error:
+            logger.warning(f"⚠️ Failed to record quote metrics: {quote_metrics_error}")
+        
         if 'error' in quote:
             metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail=quote['error'])
         
         # Record successful quote generation
         metrics_service.record_quote_generation(status="success")
+        
+        # Save quote to database for persistence
+        try:
+            save_quote_to_database(quote, lead_id=None, user_id=None, db=None)
+        except Exception as db_error:
+            logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
         
         # Generate unique IDs
         quote_id = quote.get('quote_id', str(uuid.uuid4()))
@@ -555,36 +824,56 @@ async def generate_quote(quote_request: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/send")
-async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
+async def send_message(
+    request: ChatRequest, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Send message endpoint with user authentication and organization isolation"""
     metrics_service = get_metrics_service()
     
     try:
-        # Get speech service
-        global speech_service
+        # Get cached speech service
+        speech_service = get_cached_speech_service()
         
         try:
-            # Handle lead management
+            # Handle lead management - Associate with current user
             lead_id = request.lead_id or str(uuid.uuid4())
             if not request.lead_id:
+                # Create new lead associated with current user and organization
                 lead = DBLead(
                     id=lead_id,
                     company_name="Unknown",
                     contact_name="Unknown",
                     email="unknown@example.com",
                     status=LeadStatus.NEW,
+                    assigned_user_id=current_user.id,  # Associate with current user
+                    organization_id=current_user.organization_id,  # Associate with user's organization
                     created_at=datetime.now()
                 )
                 db.add(lead)
                 db.commit()
-                logger.info(f"Created new lead: {lead_id}")
+                logger.info(f"Created new lead: {lead_id} for user: {current_user.id}")
                 
                 # Update lead metrics immediately after creation
                 metrics_service.update_lead_metrics(db)
+            else:
+                # Verify user owns this lead or has access to it
+                existing_lead = db.query(DBLead).filter(
+                    DBLead.id == lead_id,
+                    DBLead.organization_id == current_user.organization_id  # Organization-level access
+                ).first()
+                if not existing_lead:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Access denied: Lead not found or not accessible"
+                    )
             
-            # Save user message
+            # Save user message with user association
             user_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
+                user_id=current_user.id,  # Associate with current user
                 message_type=MessageType.USER.value,
                 content=request.message,
                 stage=request.conversation_stage or "discovery"
@@ -595,21 +884,27 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
             # Record user message metric
             metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
-            # Get conversation history with limit for better performance
+            # Get conversation history with organization filtering
             messages = []
-            existing_messages = db.query(DBChatMessage).filter(
-                DBChatMessage.lead_id == lead_id
+            existing_messages = db.query(DBChatMessage).join(DBLead).filter(
+                DBChatMessage.lead_id == lead_id,
+                DBLead.organization_id == current_user.organization_id  # Organization isolation
             ).order_by(DBChatMessage.created_at).limit(20).all()  # Limit to last 20 messages
             
             for msg in existing_messages:
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
             
-            # Get AI response
-            ai_provider = AIServiceFactory.create_provider()
+            # Get AI response using cached provider
+            ai_provider = get_cached_ai_provider()
             ai_start_time = time.time()
             response = await ai_provider.generate_response(messages)
             ai_duration = time.time() - ai_start_time
+            
+            # Record AI token usage
+            if hasattr(response, 'usage') and response.usage:
+                total_tokens = response.usage.get('total_tokens', 0)
+                auth_service.record_api_usage(current_user.id, ai_tokens=total_tokens, db=db)
             
             # Record AI response time
             metrics_service.record_ai_response_time(
@@ -618,16 +913,22 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                 model=response.model
             )
             
-            # Generate speech for the response
-            speech_result = await speech_service.text_to_speech(
-                text=response.content,
-                language="en"  # Default to English for now
-            )
+            # Generate speech for the response only if speech service is available
+            speech_result = None
+            if speech_service:
+                try:
+                    speech_result = await speech_service.text_to_speech(
+                        text=response.content,
+                        language="en"  # Default to English for now
+                    )
+                except Exception as speech_error:
+                    logger.warning(f"Speech generation failed: {speech_error}")
             
-            # Save assistant response to database
+            # Save assistant response to database with user association
             assistant_message = DBChatMessage(
                 id=str(uuid.uuid4()),
                 lead_id=lead_id,
+                user_id=current_user.id,  # Associate with current user
                 message_type=MessageType.ASSISTANT.value,
                 content=response.content,
                 stage=request.conversation_stage or "discovery",
@@ -635,12 +936,14 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                     "model": response.model,
                     "provider": response.provider,
                     "usage": response.usage,
-                    "speech_data": speech_result
+                    "speech_data": speech_result,
+                    "user_id": current_user.id,
+                    "organization_id": current_user.organization_id
                 }
             )
             db.add(assistant_message)
             db.commit()
-            logger.info(f"Saved assistant message to database: {assistant_message.id}")
+            logger.info(f"Saved assistant message to database: {assistant_message.id} (User: {current_user.id})")
             
             # Record assistant message metric
             metrics_service.record_chat_message(lead_id=lead_id, message_type="assistant")
@@ -653,7 +956,9 @@ async def send_message(request: ChatRequest, db: Session = Depends(get_db)):
                     "model": response.model,
                     "provider": response.provider,
                     "usage": response.usage,
-                    "speech_data": speech_result
+                    "speech_data": speech_result,
+                    "user_id": current_user.id,
+                    "organization_id": current_user.organization_id
                 }
             )
             
@@ -713,117 +1018,135 @@ async def elasticsearch_status():
 
 
 @app.get("/api/chat/history/{lead_id}")
-async def get_chat_history(lead_id: str):
-    """Get chat history for a specific lead"""
+async def get_chat_history(
+    lead_id: str,
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get chat history for a specific lead with organization isolation"""
     try:
-        logger.info(f"Fetching chat history for lead: {lead_id}")
-        db = next(get_db())
-        try:
-            messages = db.query(DBChatMessage).filter(
-                DBChatMessage.lead_id == lead_id
-            ).order_by(DBChatMessage.created_at).all()
+        logger.info(f"Fetching chat history for lead: {lead_id} (User: {current_user.id})")
+        
+        # Verify user has access to this lead
+        lead = db.query(DBLead).filter(
+            DBLead.id == lead_id,
+            DBLead.organization_id == current_user.organization_id  # Organization isolation
+        ).first()
+        
+        if not lead:
+            raise HTTPException(
+                status_code=404,
+                detail="Lead not found or access denied"
+            )
+        
+        # Get messages for this lead
+        messages = db.query(DBChatMessage).filter(
+            DBChatMessage.lead_id == lead_id
+        ).order_by(DBChatMessage.created_at).all()
+        
+        logger.info(f"Found {len(messages)} messages for lead {lead_id}")
+        
+        history = []
+        for msg in messages:
+            metadata = msg.message_metadata or {}
             
-            logger.info(f"Found {len(messages)} messages for lead {lead_id}")
+            # Extract voice data from metadata
+            voice_data = None
+            has_voice = False
             
-            history = []
-            for msg in messages:
-                metadata = msg.message_metadata or {}
-                
-                # Extract voice data from metadata
-                voice_data = None
-                has_voice = False
-                
-                # For assistant messages, get speech_data
-                if msg.message_type == MessageType.ASSISTANT.value:
-                    speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
-                    if speech_data and speech_data.get('audio_data'):
-                        voice_data = speech_data
-                        has_voice = True
-                        logger.debug(f"🎤 Found voice data for assistant message {msg.id}: {len(speech_data.get('audio_data', ''))} chars")
-                    else:
-                        logger.debug(f"⚠️ No voice data found for assistant message {msg.id}")
-                
-                # For user messages, get transcription metadata
-                elif msg.message_type == MessageType.USER.value:
-                    transcription_metadata = metadata.get('transcription_metadata')
-                    if transcription_metadata:
-                        voice_data = {
-                            "type": "transcription",
-                            "data": transcription_metadata
-                        }
-                        has_voice = True
-                        logger.debug(f"🎤 Found transcription data for user message {msg.id}")
-                    else:
-                        logger.debug(f"⚠️ No transcription data found for user message {msg.id}")
-                
-                history.append({
-                    "id": msg.id,
-                    "role": msg.message_type.value.lower(),
-                    "content": msg.content,
-                    "timestamp": msg.created_at.isoformat(),
-                    "stage": msg.stage,
-                    "metadata": metadata,
-                    "has_voice": has_voice,
-                    "voice_data": voice_data
-                })
+            # For assistant messages, get speech_data
+            if msg.message_type == MessageType.ASSISTANT.value:
+                speech_data = metadata.get('speech_data') or metadata.get('speech_metadata')
+                if speech_data and speech_data.get('audio_data'):
+                    voice_data = speech_data
+                    has_voice = True
+                    logger.debug(f"🎤 Found voice data for assistant message {msg.id}: {len(speech_data.get('audio_data', ''))} chars")
+                else:
+                    logger.debug(f"⚠️ No voice data found for assistant message {msg.id}")
             
-            logger.info(f"Returning chat history with voice data: {len([h for h in history if h['has_voice']])} voice messages")
-            return {"history": history}
-        finally:
-            db.close()
+            # For user messages, get transcription metadata
+            elif msg.message_type == MessageType.USER.value:
+                transcription_metadata = metadata.get('transcription_metadata')
+                if transcription_metadata:
+                    voice_data = {
+                        "type": "transcription",
+                        "data": transcription_metadata
+                    }
+                    has_voice = True
+                    logger.debug(f"🎤 Found transcription data for user message {msg.id}")
+                else:
+                    logger.debug(f"⚠️ No transcription data found for user message {msg.id}")
+            
+            history.append({
+                "id": msg.id,
+                "role": msg.message_type.value.lower(),
+                "content": msg.content,
+                "timestamp": msg.created_at.isoformat(),
+                "stage": msg.stage,
+                "metadata": metadata,
+                "has_voice": has_voice,
+                "voice_data": voice_data,
+                "user_id": msg.user_id  # Include user who sent the message
+            })
+        
+        logger.info(f"Returning chat history with voice data: {len([h for h in history if h['has_voice']])} voice messages")
+        return {"history": history}
             
     except Exception as e:
         logger.error(f"Error fetching chat history: {str(e)}")
         return {"history": []}
 
 @app.get("/api/leads")
-async def get_leads():
-    """Get all leads with their latest message - optimized with JOIN query"""
+async def get_leads(
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get all leads for current user's organization with their latest message - optimized with JOIN query"""
     try:
-        db = next(get_db())
-        try:
-            # Use a single JOIN query instead of N+1 individual queries
-            from sqlalchemy import func, and_
-            
-            # Subquery to get the latest message timestamp for each lead
-            latest_message_subquery = db.query(
-                DBChatMessage.lead_id,
-                func.max(DBChatMessage.created_at).label('latest_time')
-            ).group_by(DBChatMessage.lead_id).subquery()
-            
-            # Main query with JOIN to get leads and their latest messages
-            results = db.query(
-                DBLead,
-                DBChatMessage.content.label('last_message_content'),
-                DBChatMessage.created_at.label('last_message_time')
-            ).outerjoin(
-                latest_message_subquery,
-                DBLead.id == latest_message_subquery.c.lead_id
-            ).outerjoin(
-                DBChatMessage,
-                and_(
-                    DBChatMessage.lead_id == DBLead.id,
-                    DBChatMessage.created_at == latest_message_subquery.c.latest_time
-                )
-            ).all()
-            
-            # Format results
-            formatted_results = []
-            for lead, last_message_content, last_message_time in results:
-                formatted_results.append({
-                    "id": lead.id,
-                    "company_name": lead.company_name,
-                    "contact_name": lead.contact_name,
-                    "email": lead.email,
-                    "status": lead.status,
-                    "created_at": lead.created_at.isoformat(),
-                    "last_message": last_message_content,
-                    "last_message_time": last_message_time.isoformat() if last_message_time else None
-                })
-            
-            return {"leads": formatted_results}
-        finally:
-            db.close()
+        # Use a single JOIN query instead of N+1 individual queries
+        from sqlalchemy import func, and_
+        
+        # Subquery to get the latest message timestamp for each lead
+        latest_message_subquery = db.query(
+            DBChatMessage.lead_id,
+            func.max(DBChatMessage.created_at).label('latest_time')
+        ).group_by(DBChatMessage.lead_id).subquery()
+        
+        # Main query with JOIN to get leads and their latest messages - filtered by organization
+        results = db.query(
+            DBLead,
+            DBChatMessage.content.label('last_message_content'),
+            DBChatMessage.created_at.label('last_message_time')
+        ).filter(
+            DBLead.organization_id == current_user.organization_id  # Organization isolation
+        ).outerjoin(
+            latest_message_subquery,
+            DBLead.id == latest_message_subquery.c.lead_id
+        ).outerjoin(
+            DBChatMessage,
+            and_(
+                DBChatMessage.lead_id == DBLead.id,
+                DBChatMessage.created_at == latest_message_subquery.c.latest_time
+            )
+        ).all()
+        
+        # Format results
+        formatted_results = []
+        for lead, last_message_content, last_message_time in results:
+            formatted_results.append({
+                "id": lead.id,
+                "company_name": lead.company_name,
+                "contact_name": lead.contact_name,
+                "email": lead.email,
+                "status": lead.status,
+                "assigned_user_id": lead.assigned_user_id,
+                "created_at": lead.created_at.isoformat(),
+                "last_message": last_message_content,
+                "last_message_time": last_message_time.isoformat() if last_message_time else None
+            })
+        
+        logger.info(f"Returning {len(formatted_results)} leads for organization: {current_user.organization_id}")
+        return {"leads": formatted_results}
             
     except Exception as e:
         logger.error(f"Error fetching leads: {str(e)}")
@@ -922,9 +1245,25 @@ async def debug_lead_messages(lead_id: str):
         return {"error": str(e)}
 
 @app.get("/api/conversations/{lead_id}")
-async def get_conversation(lead_id: str, db: Session = Depends(get_db)):
-    """Get conversation history for a lead"""
+async def get_conversation(
+    lead_id: str, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get conversation history for a lead with organization isolation"""
     try:
+        # Verify user has access to this lead
+        lead = db.query(DBLead).filter(
+            DBLead.id == lead_id,
+            DBLead.organization_id == current_user.organization_id  # Organization isolation
+        ).first()
+        
+        if not lead:
+            raise HTTPException(
+                status_code=404,
+                detail="Lead not found or access denied"
+            )
+        
         messages = db.query(DBChatMessage).filter(
             DBChatMessage.lead_id == lead_id
         ).order_by(DBChatMessage.created_at).all()
@@ -965,7 +1304,8 @@ async def get_conversation(lead_id: str, db: Session = Depends(get_db)):
                 "stage": msg.stage,
                 "metadata": metadata,
                 "has_voice": has_voice,
-                "voice_data": voice_data
+                "voice_data": voice_data,
+                "user_id": msg.user_id  # Include user who sent the message
             })
         
         return {"conversation": conversation}
@@ -1130,6 +1470,12 @@ async def populate_vector_limited(max_per_file: int = 50):
 async def get_vector_status():
     """Get detailed Elasticsearch Vector Service status and perform test search"""
     try:
+        if not settings.enable_debug_vector_endpoints:
+            return {
+                "status": "disabled",
+                "message": "Debug vector endpoints are disabled (ENABLE_DEBUG_VECTOR_ENDPOINTS=false)"
+            }
+            
         if not vector_service:
             return {
                 "status": "not_initialized",
@@ -1140,7 +1486,7 @@ async def get_vector_status():
         # Get collection stats
         stats = await vector_service.get_collection_stats()
         
-        # Perform test searches if data exists
+        # Perform test searches if data exists and testing is enabled
         test_results = {}
         if stats["products_count"] > 0:
             try:
@@ -1179,14 +1525,30 @@ async def get_vector_status():
         }
 
 @app.post("/api/chat/search")
-async def search_chat_messages(request: ChatSearchRequest, db: Session = Depends(get_db)):
-    """Search chat messages by content with optional fuzzy search"""
+async def search_chat_messages(
+    request: ChatSearchRequest, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Search chat messages by content with optional fuzzy search and organization isolation"""
     try:
-        # Build the base query
-        query = db.query(DBChatMessage)
+        # Build the base query with organization filtering
+        query = db.query(DBChatMessage).join(DBLead).filter(
+            DBLead.organization_id == current_user.organization_id  # Organization isolation
+        )
         
-        # Add lead_id filter if provided
+        # Add lead_id filter if provided (and verify access)
         if request.lead_id:
+            # Verify user has access to this lead
+            lead = db.query(DBLead).filter(
+                DBLead.id == request.lead_id,
+                DBLead.organization_id == current_user.organization_id
+            ).first()
+            if not lead:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Lead not found or access denied"
+                )
             query = query.filter(DBChatMessage.lead_id == request.lead_id)
         
         if request.use_fuzzy:
@@ -1224,6 +1586,7 @@ async def search_chat_messages(request: ChatSearchRequest, db: Session = Depends
             result = {
                 "id": msg.id,
                 "lead_id": msg.lead_id,
+                "user_id": msg.user_id,
                 "role": msg.message_type.value.lower(),
                 "content": msg.content,
                 "timestamp": msg.created_at.isoformat(),
@@ -1245,7 +1608,8 @@ async def search_chat_messages(request: ChatSearchRequest, db: Session = Depends
             "total": total_count,
             "offset": request.offset,
             "limit": request.limit,
-            "search_type": "fuzzy" if request.use_fuzzy else "exact"
+            "search_type": "fuzzy" if request.use_fuzzy else "exact",
+            "organization_id": current_user.organization_id
         }
         
     except Exception as e:
@@ -1320,13 +1684,29 @@ async def get_performance_stats():
         return {"error": str(e)}
 
 @app.post("/api/generate-quote-from-conversation/{lead_id}")
-async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(get_db)):
-    """Generate a quote from existing conversation history"""
+async def generate_quote_from_conversation(
+    lead_id: str, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Generate a quote from existing conversation history with user authentication"""
     metrics_service = get_metrics_service()
     start_time = time.time()
     
     try:
-        # Get conversation history for the lead
+        # Verify user has access to this lead
+        lead = db.query(DBLead).filter(
+            DBLead.id == lead_id,
+            DBLead.organization_id == current_user.organization_id  # Organization isolation
+        ).first()
+        
+        if not lead:
+            raise HTTPException(
+                status_code=404,
+                detail="Lead not found or access denied"
+            )
+        
+        # Get conversation history for the lead (only from same organization)
         messages = db.query(DBChatMessage).filter(
             DBChatMessage.lead_id == lead_id
         ).order_by(DBChatMessage.created_at).all()
@@ -1342,7 +1722,10 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
             conversation_messages.append(AIMessage(role=role, content=msg.content))
         
         # Get customer context from lead
-        lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
+        lead_record = db.query(DBLead).filter(
+            DBLead.id == lead_id,
+            DBLead.organization_id == current_user.organization_id  # Organization isolation
+        ).first()
         customer_context = None
         if lead_record:
             customer_context = {
@@ -1352,12 +1735,12 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
                 "company_size": getattr(lead_record, 'company_size', None),
                 "industry": getattr(lead_record, 'industry', None),
                 "budget_range": getattr(lead_record, 'budget_range', None),
-                "timeline": getattr(lead_record, 'decision_timeline', None)
+                "timeline": getattr(lead_record, 'decision_timeline', None),
+                "user_organization": current_user.organization.name if current_user.organization else "Unknown"
             }
         
-        # Create and initialize the quote generation agent
-        base_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
-        quote_agent = QuoteGenerationAgent(base_provider)
+        # Use cached quote generation agent
+        quote_agent = get_cached_quote_agent()
         
         # Generate the quote using the QuoteGenerationAgent
         quote = await quote_agent.generate_quote_from_conversation(
@@ -1376,6 +1759,17 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         
         # Record successful quote generation
         metrics_service.record_quote_generation(status="success")
+        
+        # Record AI token usage
+        if hasattr(quote, 'usage') and quote.usage:
+            total_tokens = quote.usage.get('total_tokens', 0)
+            auth_service.record_api_usage(current_user.id, ai_tokens=total_tokens, db=db)
+        
+        # Save quote to database for persistence
+        try:
+            save_quote_to_database(quote, lead_id=lead_id, user_id=current_user.id, db=db)
+        except Exception as db_error:
+            logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
         
         # Generate pitch deck if quote was successful
         deck_id = str(uuid.uuid4())
@@ -1399,6 +1793,8 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         return {
             "quote": quote,
             "lead_id": lead_id,
+            "user_id": current_user.id,
+            "organization_id": current_user.organization_id,
             "conversation_messages_count": len(conversation_messages),
             "quote_link": quote.get('pdf_url', f"/api/quotes/download-pdf/{quote.get('quote_id', 'unknown')}"),
             "pitch_deck_id": deck_id if pitch_deck_path else None,
@@ -1412,6 +1808,140 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         logger.error(f"Quote generation from conversation failed: {e}")
         metrics_service.record_quote_generation(status="error")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/system-performance")
+async def get_system_performance():
+    """Get system performance metrics including CPU usage"""
+    try:
+        cpu_usage = get_cpu_usage()
+        memory = psutil.virtual_memory()
+        
+        # Get database connection pool stats
+        db_pool_stats = {
+            "pool_size": engine.pool.size(),
+            "checked_in": engine.pool.checkedin(),
+            "checked_out": engine.pool.checkedout(),
+            "overflow": engine.pool.overflow(),
+            "invalid": engine.pool.invalid()
+        }
+        
+        # Check if speech service should be disabled
+        speech_disabled = should_disable_speech_service()
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "system": {
+                "cpu_usage_percent": cpu_usage,
+                "memory_usage_percent": memory.percent,
+                "memory_available_gb": memory.available / (1024**3),
+                "memory_total_gb": memory.total / (1024**3)
+            },
+            "database": {
+                "connection_pool": db_pool_stats,
+                "pool_utilization": f"{(db_pool_stats['checked_out'] / max(db_pool_stats['pool_size'], 1)) * 100:.1f}%"
+            },
+            "services": {
+                "speech_service_enabled": speech_service is not None and not speech_disabled,
+                "speech_service_disabled_reason": "CPU threshold exceeded" if speech_disabled and cpu_usage > settings.cpu_threshold_for_speech_disable else None,
+                "conversational_agent_initialized": conversational_agent is not None,
+                "quote_agent_initialized": quote_agent is not None,
+                "elasticsearch_initialized": elasticsearch_service is not None
+            },
+            "performance_recommendations": []
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting system performance: {e}")
+        return {"error": str(e)}
+
+@app.get("/api/admin/sales-metrics")
+async def get_sales_metrics():
+    """Get comprehensive sales metrics for dashboard and analytics"""
+    try:
+        metrics_service = get_metrics_service()
+        
+        # Get current metrics from Prometheus
+        metrics_data = metrics_service.get_metrics()
+        
+        # Parse metrics string to extract values
+        lines = metrics_data.split('\n')
+        for line in lines:
+            if line.startswith('b2b_product_recommendations_total'):
+                # Extract total recommendations
+                if 'status="generated"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["product_recommendations"]["total_generated"] += value
+                    except:
+                        pass
+            
+            elif line.startswith('b2b_quotes_generated_total'):
+                # Extract total quotes
+                try:
+                    value = int(line.split(' ')[-1])
+                    sales_metrics["quotations"]["total_generated"] += value
+                except:
+                    pass
+            
+            elif line.startswith('b2b_quotation_value_total'):
+                # Extract quotation value
+                if 'currency="USD"' in line:
+                    try:
+                        value = float(line.split(' ')[-1])
+                        sales_metrics["quotations"]["total_value_usd"] = value
+                    except:
+                        pass
+            
+            elif line.startswith('b2b_sales_funnel_stage'):
+                # Extract sales funnel stages
+                if 'stage="discovery"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["sales_funnel"]["discovery"] = value
+                    except:
+                        pass
+                elif 'stage="solution_presentation"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["sales_funnel"]["solution_presentation"] = value
+                    except:
+                        pass
+                elif 'stage="quote_generation"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["sales_funnel"]["quote_generation"] = value
+                    except:
+                        pass
+        
+        # Calculate derived metrics
+        if sales_metrics["product_recommendations"]["total_generated"] > 0:
+            # Estimate selection rate (this would need more detailed tracking)
+            sales_metrics["product_recommendations"]["selection_rate"] = 0.25  # Placeholder
+        
+        if sales_metrics["quotations"]["total_generated"] > 0:
+            sales_metrics["quotations"]["average_value"] = (
+                sales_metrics["quotations"]["total_value_usd"] / 
+                sales_metrics["quotations"]["total_generated"]
+            )
+            sales_metrics["quotations"]["success_rate"] = 0.85  # Placeholder
+        
+        # Add performance recommendations
+        sales_metrics["recommendations"] = []
+        
+        if sales_metrics["product_recommendations"]["selection_rate"] < 0.2:
+            sales_metrics["recommendations"].append("Low product selection rate - improve recommendation quality")
+        
+        if sales_metrics["quotations"]["success_rate"] < 0.8:
+            sales_metrics["recommendations"].append("Low quote success rate - review quote generation process")
+        
+        if sales_metrics["sales_funnel"]["discovery"] > sales_metrics["sales_funnel"]["quote_generation"] * 3:
+            sales_metrics["recommendations"].append("High discovery to quote ratio - optimize conversion process")
+        
+        return sales_metrics
+        
+    except Exception as e:
+        logger.error(f"Error getting sales metrics: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
