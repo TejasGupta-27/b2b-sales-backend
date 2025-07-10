@@ -2,7 +2,7 @@
 -- This script runs when the PostgreSQL container first starts
 
 -- Create the main database first
-CREATE DATABASE b2b_sales;
+CREATE DATABASE IF NOT EXISTS b2b_sales;
 
 -- Connect to the newly created database
 \c b2b_sales;
