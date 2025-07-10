@@ -1,6 +1,12 @@
 -- Initialize database for B2B Sales Backend
 -- This script runs when the PostgreSQL container first starts
 
+-- Create the main database first
+CREATE DATABASE b2b_sales;
+
+-- Connect to the newly created database
+\c b2b_sales;
+
 -- Create extensions for advanced text search and similarity
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS btree_gin;

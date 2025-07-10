@@ -1684,33 +1684,34 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
                 use_case = requirements.get('use_case', 'business solution')
                 semantic_query = f"{use_case} technology solution"
         
-        # Build keyword query with proper structure - preserve exact terms
-        search_terms = requirements.get('search_terms', [])
-        if not search_terms:
-            # Use technical requirements as search terms
+        # Extract the actual search query from semantic_query or technical_requirements
+        actual_query = semantic_query
+        if not actual_query and requirements.get('technical_requirements'):
             tech_reqs = requirements.get('technical_requirements', [])
-            if tech_reqs:
-                search_terms = [str(req) for req in tech_reqs]
+            if isinstance(tech_reqs, list):
+                actual_query = ' '.join([str(req) for req in tech_reqs])
             else:
-                search_terms = ['business', 'solution']
+                actual_query = str(tech_reqs)
         
-        # Create a complete Elasticsearch query structure with exact matching
+        # If still no query, use a fallback
+        if not actual_query:
+            actual_query = "business solution"
+        
+        # Create a simple, effective Elasticsearch query that uses the actual search terms
         keyword_query = {
             "query": {
                 "bool": {
                     "should": [
-                        {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in search_terms
-                    ] + [
-                        {"match_phrase": {"description": {"query": term, "boost": 3.0}}} for term in search_terms
-                    ] + [
-                        {"match": {"name": {"query": term, "boost": 2.0}}} for term in search_terms
-                    ] + [
-                        {"match": {"description": {"query": term, "boost": 1.5}}} for term in search_terms
-                    ] + [
-                        {"match": {"features": {"query": term, "boost": 2.0}}} for term in search_terms
-                    ] + [
-                        {"match": {"category": {"query": term, "boost": 1.5}}} for term in search_terms
-                    ]
+                        # Exact phrase matching gets highest boost
+                        {"match_phrase": {"name": {"query": actual_query, "boost": 6.0}}},
+                        {"match_phrase": {"description": {"query": actual_query, "boost": 4.0}}},
+                        # Regular matching with good boosts
+                        {"match": {"name": {"query": actual_query, "boost": 4.0}}},
+                        {"match": {"description": {"query": actual_query, "boost": 3.0}}},
+                        {"match": {"features": {"query": actual_query, "boost": 2.0}}},
+                        {"match": {"searchable_content": {"query": actual_query, "boost": 1.5}}}
+                    ],
+                    "minimum_should_match": 1
                 }
             },
             "size": 20
@@ -1721,18 +1722,31 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
         if not categories:
             categories = requirements.get('product_categories', [])
         if not categories:
-            # Use default categories based on use case
-            use_case = requirements.get('use_case', '').lower()
-            if 'gaming' in use_case:
-                categories = ['video-card', 'cpu', 'memory']
-            elif 'workstation' in use_case:
-                categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
-            elif 'storage' in use_case:
-                categories = ['internal-hard-drive', 'external-hard-drive']
+            # Infer categories from the query content
+            query_lower = actual_query.lower()
+            if any(term in query_lower for term in ['i9', 'i7', 'i5', 'ryzen', 'cpu', 'processor']):
+                categories = ['cpu']
+            elif any(term in query_lower for term in ['rtx', 'gtx', 'graphics', 'video card', 'gpu']):
+                categories = ['video-card']
+            elif any(term in query_lower for term in ['ram', 'memory', 'ddr4', 'ddr5']):
+                categories = ['memory']
+            elif any(term in query_lower for term in ['monitor', 'display', '4k', '1440p']):
+                categories = ['monitor']
+            elif any(term in query_lower for term in ['ssd', 'hdd', 'storage', 'drive']):
+                categories = ['internal-hard-drive']
             else:
-                categories = ['cpu', 'memory', 'internal-hard-drive']
+                # Use default categories based on use case
+                use_case = requirements.get('use_case', '').lower()
+                if 'gaming' in use_case:
+                    categories = ['video-card', 'cpu', 'memory']
+                elif 'workstation' in use_case:
+                    categories = ['cpu', 'video-card', 'memory', 'internal-hard-drive']
+                elif 'storage' in use_case:
+                    categories = ['internal-hard-drive', 'external-hard-drive']
+                else:
+                    categories = ['cpu', 'memory', 'internal-hard-drive']
         
-        # Determine field priorities based on use case
+        # Determine field priorities based on query content
         field_priorities = {
             "name": 4.0,
             "description": 3.0,
@@ -1740,21 +1754,28 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
             "category": 1.5
         }
         
-        # Adjust priorities based on use case
-        use_case = requirements.get('use_case', '').lower()
-        if 'gaming' in use_case:
+        # Adjust priorities based on query content
+        query_lower = actual_query.lower()
+        if any(term in query_lower for term in ['i9', 'i7', 'i5', 'ryzen', 'cpu']):
+            field_priorities.update({
+                "name": 6.0,  # Higher boost for CPU queries
+                "core_count": 3.5,
+                "core_clock": 3.0,
+                "boost_clock": 2.5
+            })
+        elif any(term in query_lower for term in ['gaming', 'fps']):
             field_priorities.update({
                 "chipset": 3.5,
                 "core_clock": 3.0,
                 "memory": 2.5
             })
-        elif 'workstation' in use_case:
+        elif any(term in query_lower for term in ['workstation', 'professional']):
             field_priorities.update({
                 "core_count": 3.5,
                 "capacity": 3.0,
                 "speed": 2.5
             })
-        elif 'storage' in use_case:
+        elif any(term in query_lower for term in ['storage', 'drive']):
             field_priorities.update({
                 "capacity": 4.0,
                 "price_per_gb": 3.5,
@@ -1767,8 +1788,8 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
             category_filters=categories,
             field_priorities=field_priorities,
             search_strategy=search_type,
-            confidence=0.5,
-            reasoning="Fallback query generation - using standard field boosting with use case optimization",
+            confidence=0.7,  # Higher confidence since we're using exact query terms
+            reasoning=f"Using direct query terms '{actual_query}' with category-specific optimization",
             suggested_filters={}
         )
 
