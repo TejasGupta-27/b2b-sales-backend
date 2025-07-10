@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     use_hybrid_retriever: bool = os.getenv("USE_HYBRID_RETRIEVER", "true").lower() == "true"
     elasticsearch_weight: float = float(os.getenv("ELASTICSEARCH_WEIGHT", "0.4"))
     semantic_weight: float = float(os.getenv("SEMANTIC_WEIGHT", "0.6"))
+
+    # RRF (Reciprocal Rank Fusion) Configuration
+    enable_ai_enhanced_search: bool = os.getenv("ENABLE_AI_ENHANCED_SEARCH", "true").lower() == "true"
+    use_rrf_merging: bool = os.getenv("USE_RRF_MERGING", "true").lower() == "true"
+    rrf_k: float = float(os.getenv("RRF_K", "60"))
+    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.5"))
+    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.5"))
+    final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "20"))
     
     # Data Configuration
     data_dir: str = os.getenv("DATA_DIR", "Data/json")
