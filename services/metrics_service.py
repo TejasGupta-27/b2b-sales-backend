@@ -3,12 +3,13 @@ from fastapi import Request, Response
 import time
 from typing import Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 import json
 import os
 from pathlib import Path
 from datetime import datetime
+import logging
 
 # HTTP Metrics
 http_requests_total = Counter(
@@ -134,6 +135,15 @@ b2b_quotation_value_total = Gauge(
     'Total monetary value of all quotations generated',
     ['currency']
 )
+
+# Conversation Metrics
+b2b_conversation_duration_seconds = Histogram(
+    'b2b_conversation_duration_seconds',
+    'Conversation duration in seconds',
+    ['language', 'status']
+)
+
+logger = logging.getLogger(__name__)
 
 class MetricsService:
     def __init__(self):
@@ -347,7 +357,7 @@ class MetricsService:
         """Update database connection metrics with proper health check"""
         try:
             # Test database connection with a simple query
-            result = db.execute("SELECT 1")
+            result = db.execute(text("SELECT 1"))
             result.fetchone()
             
             # If we get here, database is healthy
@@ -356,7 +366,7 @@ class MetricsService:
             
             # Get active connections count
             try:
-                result = db.execute("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
+                result = db.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"))
                 active_connections = result.scalar()
                 b2b_db_connections_active.set(active_connections)
             except Exception as e:
@@ -389,6 +399,27 @@ class MetricsService:
         except Exception as e:
             print(f"❌ Error updating quotation metrics: {e}")
             self.record_error("quotation_metrics_update", "metrics_service")
+    
+    def record_conversation_duration(self, duration: float, language: str = 'en', status: str = 'completed'):
+        """
+        Record the duration of a conversation.
+        Args:
+            duration: Duration in seconds
+            language: Language code of the conversation
+            status: Status of the conversation (completed, abandoned, etc.)
+        """
+        try:
+            b2b_conversation_duration_seconds.labels(
+                language=language,
+                status=status
+            ).observe(duration)
+        except Exception as e:
+            print(f"Failed to record conversation duration: {e}")
+            # Increment error counter
+            b2b_errors_total.labels(
+                error_type='metrics_recording',
+                endpoint='conversation_duration'
+            ).inc()
 
 # Global metrics service instance
 metrics_service = MetricsService()
@@ -425,4 +456,4 @@ def metrics_endpoint():
     return Response(
         content=metrics_service.get_metrics(),
         media_type=CONTENT_TYPE_LATEST
-    ) 
+    )

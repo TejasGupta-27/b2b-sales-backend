@@ -79,7 +79,14 @@ class QuoteGenerationAgent(AIProvider):
         print(f"🌐 [DEBUG] QuoteGenerationAgent initialized with language: {self.language}")
         # Initialize metrics service
         self.metrics_service = get_metrics_service()
-        
+    
+    # Add the set_language method
+    def set_language(self, language: str):
+        """Explicitly set the agent's language."""
+        prev_language = self.language
+        self.language = language
+        logger.info(f"🌐 QuoteGenerationAgent: Manually setting language from {prev_language} to {language}")
+
     @property
     def provider_name(self) -> str:
         return "quote_generation_agent"
@@ -367,3 +374,11 @@ class QuoteGenerationAgent(AIProvider):
         """Format the quote response using translations."""
         t = get_translation("quote_prompt", language)
         return f"{t['intro']}\n{t['quote_number'].format(quote_number=quote['quote_number'])}"
+
+    def _safe_serialize_context(self, context):
+        """Safely serialize context for logging or prompt injection."""
+        import json
+        try:
+            return json.dumps(context, ensure_ascii=False, default=str)
+        except Exception as e:
+            return f"<Unserializable context: {e}>"

@@ -455,10 +455,24 @@ async def handle_voice_message(
             # Initialize if needed
             await simple_agent.initialize()
             
+            # Normalize and validate language
+            lang = language or primary_language or "en"
+            lang = lang.lower()
+            if lang in ["jp", "ja"]:
+                lang = "ja"
+            elif lang != "en":
+                logger.warning(f"Unsupported language: {lang}, defaulting to 'en'")
+                lang = "en"
+            
+            # Set agent's language
+            simple_agent.language = lang
+            logger.info(f"🌐 Setting agent language to: {simple_agent.language}")
+
             # Generate response with language context
             response = await simple_agent.generate_response(
                 messages, 
-                customer_context=customer_context
+                customer_context=customer_context,
+                language=simple_agent.language
             )
             logger.info(f"Generated response for detected language: {primary_language}")
             
@@ -474,10 +488,10 @@ async def handle_voice_message(
             response.metadata['agent_error'] = str(agent_error)
             response.metadata['fallback_used'] = True
         
-        # Generate speech for the response
+        # Generate speech for the response in the same language as the agent
         speech_result = await speech_service.text_to_speech(
             text=response.content,
-            language=language or "en"
+            language=simple_agent.language  # Use agent's current language
         )
         
         # Log TTS provider used
@@ -485,11 +499,12 @@ async def handle_voice_message(
         tts_fallback_used = speech_result.get('fallback_used', False)
         logger.info(f"🔊 Voice synthesis using {tts_provider} {'(fallback)' if tts_fallback_used else '(primary)'}")
         
-        # Save assistant response with enhanced multilingual metadata
+        # Save assistant response with enhanced multilingual metadata                
         response_metadata = {
             "model": response.model,
             "provider": response.provider,
             "usage": response.usage,
+            "language": simple_agent.language,  # Always include current agent language
             "enhanced_sales_agent": True,
             "is_voice_message": True,
             "transcription_metadata": transcription_result,

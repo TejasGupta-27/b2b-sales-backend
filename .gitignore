@@ -48,4 +48,14 @@ models/.locks
 models/models--guillaumekln--faster-whisper-base
 models/models--guillaumekln--faster-whisper-medium
 
+# Ignore Hugging Face models
+models/
+*.bin
+*.pt
+*.ckpt
+
+
 chroma_db/
+
+# Docker
+docker-compose.override.yml

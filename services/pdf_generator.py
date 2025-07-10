@@ -21,7 +21,7 @@ from reportlab.platypus import (PageBreak, Paragraph, SimpleDocTemplate,
 logger = logging.getLogger(__name__)
 
 # If you use 'font_url', define it or import it as well:
-font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Regular.otf"
+# Font URL removed - using local font files instead
 
 class PDFGenerator:
     def __init__(self):
@@ -36,18 +36,16 @@ class PDFGenerator:
         """Register Japanese fonts for use in PDF"""
         try:
             fonts_dir = Path("fonts")
-            fonts_dir.mkdir(exist_ok=True)
+            
+            # Use existing local font file - no need to download
             font_path = fonts_dir / "NotoSansJP-Regular.ttf"
             if not font_path.exists():
-                print("📥 Downloading Noto Sans CJK font...")
-                response = requests.get(font_url, timeout=30)
-                response.raise_for_status()
-                
-                with open(font_path, 'wb') as f:
-                    f.write(response.content)
-                print(f"✅ Font downloaded: {font_path}")
+                logger.error(f"❌ Japanese font file not found: {font_path}")
+                fonts_list = list(fonts_dir.glob("*.ttf"))
+                logger.info(f"Available fonts: {fonts_list}")
+                return
             
-            # Register the downloaded font
+            # Register the local font
             pdfmetrics.registerFont(TTFont('JapaneseFont', str(font_path)))
             self.japanese_font_registered = True
             print("✅ Japanese font registered successfully")
@@ -131,17 +129,37 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(
             name='JapaneseText',
             parent=self.styles['Normal'],
-            fontName=font_name,
+            fontName=font_name,  # Will be updated to JapaneseFont when needed
             fontSize=10,
             leading=14,
-            alignment=TA_LEFT
+            alignment=TA_LEFT,
+            wordWrap='CJK'  # Special word wrap for CJK characters
         ))
     
     def update_styles_for_language(self, language: str = "en"):
         """Update styles dynamically based on the language."""
+        # Ensure Japanese fonts are registered
         if language == "ja" and not self.japanese_font_registered:
             self._register_japanese_fonts()
+        
+        # Update label translations
         self._setup_localized_labels(language)
+        
+        # Update font names in all styles for Japanese
+        if language == "ja" and self.japanese_font_registered:
+            logger.info(f"🔤 Updating all styles to use Japanese font")
+            for style_name in self.styles.byName:
+                style = self.styles[style_name]
+                if hasattr(style, 'fontName'):
+                    style.fontName = 'JapaneseFont'
+            
+            # Specifically update custom styles
+            custom_styles = ['CompanyHeader', 'QuoteTitle', 'SectionHeader', 
+                           'TableCell', 'SmallText', 'CompanyTagline', 'JapaneseText']
+            for style_name in custom_styles:
+                if style_name in self.styles.byName:
+                    self.styles[style_name].fontName = 'JapaneseFont'
+                    logger.info(f"✅ Updated {style_name} to use JapaneseFont")
     
     def _format_japanese_text(self, text: str, max_width: int = 50) -> str:
         """Format Japanese text with proper line breaks and spacing"""
@@ -183,10 +201,36 @@ class PDFGenerator:
         
         return formatted_text
     
-    def _create_table_paragraph(self, text: str, style_name: str = 'TableCell') -> Paragraph:
+    def _create_table_paragraph(self, text: str, style_name: str = 'TableCell', language: str = None) -> Paragraph:
         """Create a paragraph with proper Japanese text formatting"""
+        
+        # Format text for better display
         formatted_text = self._format_japanese_text(text, max_width=40)
-        return Paragraph(formatted_text, self.styles[style_name])
+        
+        # Create a copy of the style to modify
+        style = self.styles[style_name]
+        
+        # If Japanese is detected or specified, ensure Japanese font is used
+        if (language == 'ja' or self._is_japanese_text(formatted_text)) and self.japanese_font_registered:
+            # Create a Japanese-specific style
+            japanese_style = self.styles[style_name].clone('JP_' + style_name, parent=self.styles[style_name])
+            japanese_style.fontName = 'JapaneseFont'
+            japanese_style.wordWrap = 'CJK'  # Special CJK word wrapping
+            return Paragraph(formatted_text, japanese_style)
+        
+        # Return with original style for non-Japanese text
+        return Paragraph(formatted_text, style)
+        
+    def _is_japanese_text(self, text: str) -> bool:
+        """Detect if text contains Japanese characters"""
+        if not text:
+            return False
+            
+        # Check if text contains Japanese characters
+        return any(
+            0x3000 <= ord(char) <= 0x9FAF  # Japanese character ranges
+            for char in text
+        )
     
     def _setup_localized_labels(self, language: str = "en"):
         """Setup localized labels for different languages"""
@@ -236,121 +280,6 @@ class PDFGenerator:
                 'implementation_notes': '実装ノート',
                 'next_steps': '次のステップ',
                 'currency_symbol': '¥'
-            },
-            'es': {
-                'quote_number': 'Número de Cotización:',
-                'date': 'Fecha:',
-                'valid_until': 'Válido Hasta:',
-                'customer_information': 'Información del Cliente',
-                'company': 'Empresa:',
-                'contact': 'Contacto:',
-                'email': 'Correo Electrónico:',
-                'phone': 'Teléfono:',
-                'quote_details': 'Detalles de la Cotización',
-                'item': 'Artículo',
-                'description': 'Descripción',
-                'qty': 'Cant.',
-                'unit_price': 'Precio Unitario',
-                'total': 'Total',
-                'subtotal': 'Subtotal:',
-                'tax': 'Impuesto:',
-                'total_amount': 'Total:',
-                'terms_and_conditions': 'Términos y Condiciones',
-                'implementation_notes': 'Notas de Implementación',
-                'next_steps': 'Próximos Pasos',
-                'currency_symbol': '$'
-            },
-            'fr': {
-                'quote_number': 'Numéro de Devis:',
-                'date': 'Date:',
-                'valid_until': 'Valide Jusqu\'au:',
-                'customer_information': 'Informations Client',
-                'company': 'Entreprise:',
-                'contact': 'Contact:',
-                'email': 'E-mail:',
-                'phone': 'Téléphone:',
-                'quote_details': 'Détails du Devis',
-                'item': 'Article',
-                'description': 'Description',
-                'qty': 'Qté',
-                'unit_price': 'Prix Unitaire',
-                'total': 'Total',
-                'subtotal': 'Sous-total:',
-                'tax': 'Taxe:',
-                'total_amount': 'Total:',
-                'terms_and_conditions': 'Termes et Conditions',
-                'implementation_notes': 'Notes d\'Implémentation',
-                'next_steps': 'Prochaines Étapes',
-                'currency_symbol': '€'
-            },
-            'de': {
-                'quote_number': 'Angebotsnummer:',
-                'date': 'Datum:',
-                'valid_until': 'Gültig bis:',
-                'customer_information': 'Kundeninformationen',
-                'company': 'Unternehmen:',
-                'contact': 'Kontakt:',
-                'email': 'E-Mail:',
-                'phone': 'Telefon:',
-                'quote_details': 'Angebotsdetails',
-                'item': 'Artikel',
-                'description': 'Beschreibung',
-                'qty': 'Menge',
-                'unit_price': 'Einzelpreis',
-                'total': 'Gesamt',
-                'subtotal': 'Zwischensumme:',
-                'tax': 'Steuer:',
-                'total_amount': 'Gesamt:',
-                'terms_and_conditions': 'Geschäftsbedingungen',
-                'implementation_notes': 'Implementierungshinweise',
-                'next_steps': 'Nächste Schritte',
-                'currency_symbol': '€'
-            },
-            'it': {
-                'quote_number': 'Numero Preventivo:',
-                'date': 'Data:',
-                'valid_until': 'Valido Fino al:',
-                'customer_information': 'Informazioni Cliente',
-                'company': 'Azienda:',
-                'contact': 'Contatto:',
-                'email': 'Email:',
-                'phone': 'Telefono:',
-                'quote_details': 'Dettagli Preventivo',
-                'item': 'Articolo',
-                'description': 'Descrizione',
-                'qty': 'Qtà',
-                'unit_price': 'Prezzo Unitario',
-                'total': 'Totale',
-                'subtotal': 'Subtotale:',
-                'tax': 'Tasse:',
-                'total_amount': 'Totale:',
-                'terms_and_conditions': 'Termini e Condizioni',
-                'implementation_notes': 'Note di Implementazione',
-                'next_steps': 'Prossimi Passi',
-                'currency_symbol': '€'
-            },
-            'pt': {
-                'quote_number': 'Número da Cotação:',
-                'date': 'Data:',
-                'valid_until': 'Válido Até:',
-                'customer_information': 'Informações do Cliente',
-                'company': 'Empresa:',
-                'contact': 'Contato:',
-                'email': 'E-mail:',
-                'phone': 'Telefone:',
-                'quote_details': 'Detalhes da Cotação',
-                'item': 'Item',
-                'description': 'Descrição',
-                'qty': 'Qtd',
-                'unit_price': 'Preço Unitário',
-                'total': 'Total',
-                'subtotal': 'Subtotal:',
-                'tax': 'Imposto:',
-                'total_amount': 'Total:',
-                'terms_and_conditions': 'Termos e Condições',
-                'implementation_notes': 'Notas de Implementação',
-                'next_steps': 'Próximos Passos',
-                'currency_symbol': 'R$'
             }
         }
 
@@ -530,10 +459,20 @@ class PDFGenerator:
             ]
             
             quote_table = Table(quote_info, colWidths=[2*inch, 3*inch])
+            
+            # Determine font to use
+            font_name = 'Helvetica'
+            bold_font_name = 'Helvetica-Bold'
+            
+            if language == 'ja' and self.japanese_font_registered:
+                font_name = 'JapaneseFont'
+                bold_font_name = 'JapaneseFont'
+                logger.info("✅ Using Japanese font for quote information")
+            
             quote_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
-                ('FONTNAME', (1, 0), (1, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
+                ('FONTNAME', (0, 0), (0, -1), bold_font_name),
+                ('FONTNAME', (1, 0), (1, -1), font_name),
                 ('FONTSIZE', (0, 0), (-1, -1), 10),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ]))
@@ -557,10 +496,20 @@ class PDFGenerator:
                 
                 if customer_data:
                     customer_table = Table(customer_data, colWidths=[2*inch, 3*inch])
+                    
+                    # Determine font to use
+                    font_name = 'Helvetica'
+                    bold_font_name = 'Helvetica-Bold'
+                    
+                    if language == 'ja' and self.japanese_font_registered:
+                        font_name = 'JapaneseFont'
+                        bold_font_name = 'JapaneseFont'
+                        logger.info("✅ Using Japanese font for customer information")
+                    
                     customer_table.setStyle(TableStyle([
                         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                        ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
-                        ('FONTNAME', (1, 0), (1, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
+                        ('FONTNAME', (0, 0), (0, -1), bold_font_name),
+                        ('FONTNAME', (1, 0), (1, -1), font_name),
                         ('FONTSIZE', (0, 0), (-1, -1), 10),
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
                     ]))
@@ -605,16 +554,26 @@ class PDFGenerator:
                 
                 # Create table with adjusted column widths
                 items_table = Table(table_data, colWidths=[1.2*inch, 3*inch, 0.6*inch, 0.8*inch, 0.9*inch])
+                
+                # Determine font to use
+                font_name = 'Helvetica'
+                bold_font_name = 'Helvetica-Bold'
+                
+                if language == 'ja' and self.japanese_font_registered:
+                    font_name = 'JapaneseFont'
+                    bold_font_name = 'JapaneseFont'
+                    logger.info("✅ Using Japanese font for table content")
+                
                 items_table.setStyle(TableStyle([
                     # Header styling
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 0), (-1, 0), bold_font_name),
                     ('FONTSIZE', (0, 0), (-1, 0), 10),
                     
                     # Data styling
-                    ('FONTNAME', (0, 1), (-1, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
+                    ('FONTNAME', (0, 1), (-1, -1), font_name),
                     ('FONTSIZE', (0, 1), (-1, -1), 9),
                     ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),  # Right align numbers
                     ('ALIGN', (0, 1), (1, -1), 'LEFT'),    # Left align text
@@ -652,11 +611,21 @@ class PDFGenerator:
             ]
             
             pricing_table = Table(pricing_data, colWidths=[4*inch, 2*inch])
+            
+            # Determine font to use
+            font_name = 'Helvetica'
+            bold_font_name = 'Helvetica-Bold'
+            
+            if language == 'ja' and self.japanese_font_registered:
+                font_name = 'JapaneseFont'
+                bold_font_name = 'JapaneseFont'
+                logger.info("✅ Using Japanese font for pricing information")
+            
             pricing_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-                ('FONTNAME', (0, 0), (0, -1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
-                ('FONTNAME', (1, 0), (1, 1), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica'),
-                ('FONTNAME', (1, 2), (1, 2), 'JapaneseFont' if (self.japanese_font_registered and quote_data.get('language') == 'ja') else 'Helvetica-Bold'),
+                ('FONTNAME', (0, 0), (0, -1), bold_font_name),
+                ('FONTNAME', (1, 0), (1, 1), font_name),
+                ('FONTNAME', (1, 2), (1, 2), bold_font_name),
                 ('FONTSIZE', (0, 0), (-1, -1), 11),
                 ('FONTSIZE', (1, 2), (1, 2), 12),  # Larger total
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
@@ -701,14 +670,31 @@ class PDFGenerator:
     
     def save_pdf_to_file(self, quote_data: Dict[str, Any], filename: str = None) -> str:
         """Save PDF to file and return the file path with multilingual support"""
+        # First detect language - do this before setting any styles
+        detected_language = self._detect_quote_language(quote_data)
+        logger.info(f"🔍 Detected quote language: {detected_language}")
+        
+        # Use detected language if no language is specified in the quote data
+        if 'language' not in quote_data:
+            quote_data['language'] = detected_language
+            logger.info(f"✅ Updated quote data with detected language: {detected_language}")
+        
+        # Set language for file naming
+        language = quote_data.get('language', 'en')
+        logger.info(f"🌐 Using language for PDF generation: {language}")
+        
+        # Generate filename if not provided
         if filename is None:
             quote_id = quote_data.get('quote_id', 'quote')
-            language = quote_data.get('language', 'en')
             filename = f"quote_{quote_id}_{language}.pdf"
         
-        # Update styles based on quote language
-        language = quote_data.get('language', 'en')
+        # Update styles based on quote language - this will now update all style fonts
         self.update_styles_for_language(language)
+        
+        # Double check that Japanese fonts are registered if needed
+        if language == 'ja' and not self.japanese_font_registered:
+            logger.warning("⚠️ Japanese language selected but fonts not registered, attempting again")
+            self._register_japanese_fonts()
         
         # Ensure the quotes directory exists
         quotes_dir = Path("Data/quotes")

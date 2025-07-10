@@ -45,31 +45,34 @@ TABLE_ROW_MARGIN = (Inches(0.1), Inches(0.1), Inches(0.1), Inches(0.1))
 
 class PitchDeckService:
     def __init__(self):
-        # Initialize Azure OpenAI client
+        # Initialize Azure OpenAI client - disabled for local testing
+        self.client_configured = False
+        self.deployment_name = "gpt-4"  # Default deployment name for when enabled
+        
+        # For production, uncomment this block:
+        
+        from config import settings
         try:
-            '''from config import settings
+            self.client_configured = True
             self.client = AzureOpenAI(
                 api_key=settings.azure_openai_api_key,
                 api_version=settings.azure_openai_api_version,
                 azure_endpoint=settings.azure_openai_endpoint
             )
             self.deployment_name = settings.azure_openai_deployment_name
-            self.client_configured = True'''
         except Exception as e:
-            logger.warning(f"Azure OpenAI client not configured: {e}")
-            self.client = None
-            self.deployment_name = None
+            logger.error(f"❌ Failed to initialize Azure OpenAI client: {e}")
             self.client_configured = False
+        
         
         # Font configuration for Japanese support
         self.japanese_fonts = [
-            "Yu Gothic UI",      # Windows 10/11 default
-            "Meiryo UI",         # Windows 7/8
-            "MS Gothic",         # Fallback Windows
-            "Hiragino Kaku Gothic ProN",  # macOS
-            "Hiragino Sans",     # macOS newer
-            "Noto Sans CJK JP",  # Linux/Cross-platform
-            "Arial Unicode MS",  # Cross-platform fallback
+            "Noto Sans CJK JP",  # Primary choice - commonly available
+            "Yu Gothic UI",       # Windows default
+            "MS Gothic",          # Common fallback
+            "Hiragino Kaku Gothic ProN",
+            "Hiragino Sans",
+            "Arial Unicode MS",   # Last resort fallback
         ]
         
         # Detect if system supports Japanese fonts
@@ -80,34 +83,22 @@ class PitchDeckService:
     
     def _get_available_font(self, bold=False):
         """Get the best available font for Japanese text"""
-        # For PowerPoint, we'll use fonts that are commonly available
-        # PowerPoint will fallback gracefully if the font isn't available
+        # For PowerPoint, prioritize Noto Sans CJK JP if available
+        preferred_fonts = []
         
         if bold:
-            # For titles/headers - prefer stronger fonts
+            # For titles, try bold variants first
             preferred_fonts = [
+                "Noto Sans CJK JP Bold",
                 "Yu Gothic UI Semibold",
-                "Yu Gothic UI",
-                "Meiryo UI",
-                "MS Gothic",
-                "Hiragino Kaku Gothic ProN",
-                "Arial Unicode MS",
-                "Segoe UI"  # Fallback
-            ]
+                "MS Gothic Bold",
+            ] + self.japanese_fonts
         else:
-            # For body text - prefer readable fonts
-            preferred_fonts = [
-                "Yu Gothic UI",
-                "Meiryo UI", 
-                "MS Gothic",
-                "Hiragino Sans",
-                "Noto Sans CJK JP",
-                "Arial Unicode MS",
-                "Segoe UI"  # Fallback
-            ]
+            # For body text, use regular variants
+            preferred_fonts = self.japanese_fonts
         
-        # Return the first font (PowerPoint will handle fallbacks)
-        return preferred_fonts[0]
+        # Return Noto Sans as our primary choice (we know it's available)
+        return "Noto Sans CJK JP"
     
     def _detect_japanese_text(self, text):
         """Detect if text contains Japanese characters"""
@@ -195,29 +186,56 @@ class PitchDeckService:
                 except:
                     pass
 
-    # ✅ UPDATED: added `language` param with fallback and hybrid detection
+    # ✅ UPDATED: improved language detection and hybrid fallback
     async def extract_ppt_structure(self, quotation: str, language: str = "en", include_comparison_table: bool = False) -> dict:
         """Generate a structured and persuasive sales pitch deck with hybrid language detection."""
         
+        # Initialize language resolution with explicit setting
+        resolved_language = language if language else "en"
+        detection_method = "explicit" if language else "default"
+        confidence = 1.0
+        
+        # If no explicit language provided, try to detect Japanese
+        if not language:
+            has_japanese = any(self._detect_japanese_text(line) for line in quotation.split('\n') if line.strip())
+            if has_japanese:
+                resolved_language = "ja"
+                detection_method = "character_detection"
+                confidence = 0.95
+                logger.info(f"🔍 Detected Japanese text in the quotation")
+        
+        # Package language resolution info
+        language_resolution = {
+            "language": resolved_language,
+            "method": detection_method,
+            "confidence": confidence
+        }
+        
+        logger.info(f"🌐 Language Resolution: {resolved_language} (method: {detection_method}, confidence: {confidence:.2f})")
+        
+        # Use Azure OpenAI if configured, otherwise use fallback
         if not self.client_configured:
-            logger.warning("Azure OpenAI client not configured, using fallback structure")
-            return self._get_fallback_structure(language)
+            return self._get_fallback_structure(resolved_language)
         
         # Hybrid language detection approach
         from services.language_service import LanguageService
         language_service = LanguageService()
         
-        # Resolve language using hybrid approach
-        language_resolution = language_service.resolve_language(
-            explicit_language=language,      # From frontend/initialization
-            text_content=quotation,         # Auto-detection from quote content
-            context=None                    # No additional context for quotes
-        )
-        
-        # Update language based on resolution
-        resolved_language = language_resolution['language']
-        detection_method = language_resolution['method']
-        confidence = language_resolution['confidence']
+        # Ensure we respect the input language first, then try detection
+        if language and language != "en":
+            resolved_language = language
+            detection_method = "explicit"
+            confidence = 1.0
+        else:
+            # Fallback to hybrid approach
+            language_resolution = language_service.resolve_language(
+                explicit_language=language,
+                text_content=quotation,
+                context=None
+            )
+            resolved_language = language_resolution['language']
+            detection_method = language_resolution['method']
+            confidence = language_resolution['confidence']
         
         logger.info(f"🌐 Pitch Deck Language Resolution:")
         logger.info(f"   Input Language: {language}")
@@ -228,17 +246,15 @@ class PitchDeckService:
         # Add language condition based on resolved language
         language_note = ""
         if resolved_language == "ja":
-            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in Japanese."
+            language_note = "Ensure output is in Japanese (日本語). Use natural and business-appropriate Japanese expressions."
         elif resolved_language == "es":
-            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in Spanish."
+            language_note = "Ensure output is in Spanish. Use natural and business-appropriate Spanish expressions."
         elif resolved_language == "fr":
-            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in French."
+            language_note = "Ensure output is in French. Use natural and business-appropriate French expressions."
         elif resolved_language == "de":
-            language_note = "\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in German."
+            language_note = "Ensure output is in German. Use natural and business-appropriate German expressions."
         elif resolved_language != "en":
-            language_service_info = language_service.supported_languages.get(resolved_language, {})
-            language_name = language_service_info.get('name', resolved_language)
-            language_note = f"\n\n### LANGUAGE\nPlease write ALL slide titles, bullet points, and table headers in {language_name}."
+            language_note = f"Ensure output is in {language_service.get_language_name(resolved_language)}."
 
         prompt = f"""
 You are a business assistant. Based on the product quotation below, generate a structured and persuasive PowerPoint sales pitch deck in **valid JSON** format.
@@ -340,6 +356,13 @@ Note: The comparison table will be populated with real competitor data separatel
     
     def _get_fallback_structure(self, language: str = "en") -> dict:
         """Provide a fallback structure when OpenAI is not available with language support"""
+        
+        # Create language resolution metadata
+        language_resolution = {
+            "language": language,
+            "method": "fallback",
+            "confidence": 1.0
+        }
         
         # Get localized fallback content
         if language == "ja":
@@ -563,73 +586,63 @@ Note: The comparison table will be populated with real competitor data separatel
                     cell.fill.fore_color.rgb = RGBColor(255, 255, 255)
                 cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom = TABLE_ROW_MARGIN
 
-    def create_comparison_table_from_products(self, similar_products: List[Dict[str, Any]], title: str = "Product Comparison") -> Dict[str, Any]:
-        """Create a comparison table using real similar products from hybrid retriever"""
-        
+    def create_comparison_table_from_products(self, similar_products: List[Dict[str, Any]], title: str = "Product Comparison", language: str = "en") -> Dict[str, Any]:
+        """Create a comparison table with proper localization"""
         if not similar_products:
             logger.warning("No similar products provided for comparison table")
-            return {
-                "title": title,
-                "columns": ["Product Name", "Key Features", "Price", "Vendor"],
-                "rows": [
-                    ["No similar products found", "N/A", "N/A", "N/A"]
-                ]
-            }
+            return None
+        
+        # Localized headers
+        headers = {
+            "ja": ["製品名", "主な機能", "価格", "販売元"],
+            "en": ["Product Name", "Key Features", "Price", "Vendor"]
+        }.get(language, ["Product Name", "Key Features", "Price", "Vendor"])
+        
+        # Currency symbols
+        currency_symbols = {
+            "ja": "¥",
+            "en": "$"
+        }
+        currency_symbol = currency_symbols.get(language, "$")
         
         # Define table structure
         comparison_table = {
             "title": title,
-            "columns": ["Product Name", "Key Features", "Price", "Vendor"],
+            "columns": headers,
             "rows": []
         }
         
-        # Process up to 3 similar products
+        # Process up to 3 products
         for i, product in enumerate(similar_products[:3]):
-            if not product:
-                continue
-                
-            # Extract product information with fallbacks
-            name = product.get('name', f'Product {i+1}')
-            description = product.get('description', product.get('summary', 'N/A'))
-            
-            # Truncate description to fit in table
-            if description and len(description) > 100:
-                description = description[:97] + "..."
-            
-            # Handle price formatting
-            price = product.get('price', 'N/A')
-            if isinstance(price, (int, float)) and price > 0:
-                price = f"${price:,.2f}"
-            elif isinstance(price, str) and price.replace('.', '').replace(',', '').isdigit():
-                try:
-                    price_num = float(price.replace(',', ''))
-                    price = f"${price_num:,.2f}"
-                except:
-                    price = str(price)
+            # Format price based on language
+            price = product.get('price', 0)
+            if language == "ja":
+                price_str = f"{currency_symbol}{int(price * 150):,}"  # Rough USD to JPY conversion
             else:
-                price = "Contact for pricing"
+                price_str = f"{currency_symbol}{price:,.2f}"
             
-            # Get vendor/brand
-            vendor = product.get('brand', product.get('vendor', product.get('manufacturer', 'N/A')))
+            # Get localized name if available
+            name = product.get(f'name_{language}', product.get('name', 'Unknown'))
             
-            comparison_table["rows"].append([
-                name,
-                description,
-                price,
-                vendor
-            ])
+            # Get localized features
+            features = product.get(f'features_{language}', product.get('features', []))
+            if isinstance(features, list):
+                feature_text = " • ".join(features[:3])  # Top 3 features
+            else:
+                feature_text = str(features)
+            
+            # Get localized vendor
+            vendor = product.get(f'vendor_{language}', product.get('vendor', 'Unknown'))
+            
+            row = [name, feature_text, price_str, vendor]
+            comparison_table["rows"].append(row)
         
         # Ensure we have at least 3 rows for better presentation
         while len(comparison_table["rows"]) < 3:
-            row_num = len(comparison_table["rows"]) + 1
-            comparison_table["rows"].append([
-                f"Alternative Solution {row_num}",
-                "Contact us for additional product options",
-                "Quote on request",
-                "Various vendors"
-            ])
+            empty_row = ["--"] * len(headers)
+            comparison_table["rows"].append(empty_row)
         
-        logger.info(f"Created comparison table with {len(comparison_table['rows'])} products")
+        logger.info(f"Created comparison table with {len(comparison_table['rows'])} products in {language}")
         return comparison_table
 
     def get_product_category(self, product_category: str, language: str = "en") -> dict:
@@ -684,95 +697,207 @@ Note: The comparison table will be populated with real competitor data separatel
             logger.warning(f"Could not add logo: {e}")
 
     def _add_contextual_image(self, slide, product_type_en: str, cover=False):
-        """Add a contextual product image to the slide based on the ENGLISH product_type/category name. On cover, make it prominent and always centered below subtitle."""
+        """Add a contextual product image to the slide based on product type with dynamic sizing."""
         from PIL import Image
         base_dir = os.path.dirname(os.path.abspath(__file__))
         assets_dir = os.path.abspath(os.path.join(base_dir, "..", "Data", "assets"))
-        image_filename = f"{product_type_en.lower()}.jpg"
-        image_path = os.path.join(assets_dir, image_filename)
-        if not os.path.exists(image_path):
-            image_path = os.path.join(assets_dir, "general.jpg")
-            if not os.path.exists(image_path):
+        
+        # Convert product type to match our image naming convention
+        image_name = product_type_en.lower().replace(" ", "-")
+        
+        # Try multiple image formats and variations
+        possible_filenames = [
+            f"{image_name}.jpg",
+            f"{image_name}.png",
+            "default_product.jpg",  # Fallback
+        ]
+        
+        image_path = None
+        for filename in possible_filenames:
+            path = os.path.join(assets_dir, filename)
+            if os.path.exists(path):
+                logger.info(f"Found image: {filename}")
+                image_path = path
+                break
+                
+        if not image_path:
+            logger.warning(f"No product image found for {product_type_en}")
+            # Try general category images as fallback
+            general_images = [
+                "workstation.jpg",
+                "computer.jpg",
+                "laptop.jpg",
+                "server.jpg"
+            ]
+            for gen_img in general_images:
+                path = os.path.join(assets_dir, gen_img)
+                if os.path.exists(path):
+                    image_path = path
+                    logger.info(f"Using fallback image: {gen_img}")
+                    break
+            
+            if not image_path:
                 return
-        if cover:
-            # --- DYNAMIC CENTERED IMAGE LOGIC ---
-            # Slide dimensions (inches)
-            SLIDE_WIDTH = 13.33  # 1280px/96
-            SLIDE_HEIGHT = 7.5   # 720px/96
-            # Subtitle bottom Y (inches)
-            SUBTITLE_BOTTOM = 3.2 + 1  # COVER_SUBTITLE_BOX top + height
-            BOTTOM_MARGIN = 0.4
-            available_height = SLIDE_HEIGHT - SUBTITLE_BOTTOM - BOTTOM_MARGIN
-            available_width = SLIDE_WIDTH - 2 * 1.0  # 1 inch margin left/right
-            # Get image size and aspect ratio
-            try:
-                with Image.open(image_path) as img:
-                    img_width, img_height = img.size
-                    aspect = img_width / img_height
-            except Exception:
-                aspect = 4/3  # fallback
-            # Fit image to available area
-            max_width = available_width
-            max_height = available_height
-            if aspect >= 1:
-                width = min(max_width, max_height * aspect)
-                height = width / aspect
+        
+        try:
+            # Get image dimensions for aspect ratio preservation
+            img = Image.open(image_path)
+            img_width, img_height = img.size
+            aspect_ratio = img_width / img_height
+            
+            if cover:
+                # Cover image - larger and centered
+                available_width = Inches(5)  # Wider for cover
+                available_height = Inches(3)  # Taller for cover
+                
+                # Calculate dimensions preserving aspect ratio
+                if aspect_ratio > 1:  # Wider than tall
+                    width = available_width
+                    height = width / aspect_ratio
+                else:  # Taller than wide
+                    height = available_height
+                    width = height * aspect_ratio
+                
+                # Center the image horizontally
+                left = Inches(4.25) - (width / 2)  # Center point is at 4.25 inches
+                top = COVER_IMAGE_COVER[1]  # Use the original top position
+                
+                pic = slide.shapes.add_picture(image_path, left, top, width=width)
+                logger.info(f"Added cover image: {os.path.basename(image_path)} ({width/Inches(1):.2f}\"x{height/Inches(1):.2f}\")")
             else:
-                height = min(max_height, max_width / aspect)
-                width = height * aspect
-            # Center horizontally, place just below subtitle
-            left = (SLIDE_WIDTH - width) / 2
-            top = SUBTITLE_BOTTOM + ((available_height - height) / 2)
-            left = Inches(left - 2)
-            top = Inches(top)
-            width = Inches(width)
-            try:
-                slide.shapes.add_picture(image_path, left, top, width=width)
-            except Exception as e:
-                logger.warning(f"Could not add contextual image: {e}")
-        else:
-            left, top, width = COVER_IMAGE_NORMAL
-            try:
-                slide.shapes.add_picture(image_path, left, top, width=width)
-            except Exception as e:
-                logger.warning(f"Could not add contextual image: {e}")
+                # Regular slide image - smaller and right-aligned
+                # Check available vertical space by looking at the content
+                content_shapes = [s for s in slide.shapes if hasattr(s, 'text_frame') and s.text_frame is not None]
+                
+                # Find bottom of content area
+                bottom_of_content = 0
+                for shape in content_shapes:
+                    shape_bottom = shape.top + shape.height
+                    if shape_bottom > bottom_of_content:
+                        bottom_of_content = shape_bottom
+                
+                # Available height is from bottom of content to bottom of slide with margin
+                slide_height = prs.slide_height if hasattr(slide, 'prs') and hasattr(slide.prs, 'slide_height') else Inches(7.5)
+                available_height = slide_height - bottom_of_content - Inches(0.5)  # 0.5" margin
+                
+                # Available width for the image (typically on the right side)
+                available_width = Inches(2.5)
+                
+                # Calculate dimensions preserving aspect ratio
+                if aspect_ratio > 1:  # Wider than tall
+                    if available_height * aspect_ratio <= available_width:
+                        height = available_height
+                        width = height * aspect_ratio
+                    else:
+                        width = available_width
+                        height = width / aspect_ratio
+                else:  # Taller than wide
+                    if available_width / aspect_ratio <= available_height:
+                        width = available_width
+                        height = width / aspect_ratio
+                    else:
+                        height = available_height
+                        width = height * aspect_ratio
+                
+                # Position in the bottom right
+                left = prs.slide_width - width - Inches(0.5) if hasattr(slide, 'prs') else Inches(8) - width
+                top = slide_height - height - Inches(0.5) if hasattr(slide, 'prs') else Inches(7) - height
+                
+                pic = slide.shapes.add_picture(image_path, left, top, width=width)
+                logger.info(f"Added slide image: {os.path.basename(image_path)} ({width/Inches(1):.2f}\"x{height/Inches(1):.2f}\")")
+        except Exception as e:
+            logger.error(f"Failed to add image {image_path}: {e}", exc_info=True)
 
     async def generate_ppt(self, data: dict, output_path: str = "Sales_Pitch_Deck.pptx", similar_products: List[Dict[str, Any]] = None, product_name: str = None):
-        """Generate a PowerPoint presentation from the structured data with hybrid language support and optional similar products, with improved design."""
+        """Generate a PowerPoint presentation with proper font handling"""
         resolved_language = data.get('resolved_language', 'en')
         language_resolution = data.get('language_resolution', {})
         logger.info(f"🌐 Generating presentation in resolved language: {resolved_language}")
-        if language_resolution:
-            logger.info(f"   Detection method: {language_resolution.get('method', 'unknown')}")
-            logger.info(f"   Confidence: {language_resolution.get('confidence', 0):.2f}")
+        
+        # Set fonts based on language
+        if resolved_language == "ja":
+            # Use Noto Sans CJK JP since we know it's available
+            self.title_font = "Noto Sans CJK JP"
+            self.body_font = "Noto Sans CJK JP"
+            logger.info("🈁 Using Noto Sans CJK JP for Japanese text")
+        else:
+            self.title_font = "Calibri"
+            self.body_font = "Calibri"
+        
+        # Get template path
         base_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(base_dir, "..", "Data", "assets", "template.pptx")
         template_path = os.path.abspath(template_path)
+        logger.info(f"Using template.pptx at {os.path.abspath(template_path)}")
+        
         if os.path.exists(template_path):
-            logger.info(f"Using template.pptx at {template_path}")
             prs = Presentation(template_path)
+            logger.info("✅ Template loaded successfully")
         else:
-            logger.info("Creating new presentation (no template found)")
+            logger.warning("⚠️ Template not found, using default presentation")
             prs = Presentation()
+        
         # --- RED THEME ---
         TITLE_COLOR = RGBColor(192, 57, 43)      # Red
         ACCENT_COLOR = RGBColor(231, 76, 60)     # Lighter red
-        BODY_COLOR = RGBColor(80, 80, 80)
-        # Cover slide
+        BODY_COLOR = RGBColor(80, 80, 80)        # Dark gray for better readability
+        
+        # Cover slide with proper font handling
         cover_slide = prs.slides.add_slide(prs.slide_layouts[0])
         self.hide_placeholders(cover_slide)
-        # Main title
+        
+        # Add cover title with improved Japanese font support
         title_box = cover_slide.shapes.add_textbox(*COVER_TITLE_BOX)
         tf = title_box.text_frame
         tf.clear()
         tf.margin_left, tf.margin_right, tf.margin_top, tf.margin_bottom = COVER_TITLE_MARGIN
-        main_title = get_category_translation("main_title", resolved_language)
-        title_p = tf.paragraphs[0]
-        self._apply_font_to_paragraph(title_p, main_title, is_title=True)
-        title_p.font.size = COVER_TITLE_FONT_SIZE
-        title_p.font.bold = True
-        title_p.font.color.rgb = TITLE_COLOR
-        title_p.alignment = PP_ALIGN.CENTER
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        
+        # Default title text for when we haven't set it yet
+        temp_title = "Sales Pitch Deck" if resolved_language != "ja" else "営業用プレゼンテーション"
+        
+        # Get first slide title from deck data if available
+        if data.get("slides") and len(data["slides"]) > 0:
+            if isinstance(data["slides"][0], dict) and "title" in data["slides"][0]:
+                temp_title = data["slides"][0]["title"]
+        
+        # Add the text first
+        p.text = temp_title
+        p.font.size = COVER_TITLE_FONT_SIZE
+        p.font.color.rgb = TITLE_COLOR
+        
+        # Apply Japanese font with multiple fallback methods
+        if resolved_language == "ja":
+            logger.info(f"🈁 Setting Japanese title font: {self.title_font}")
+            
+            # Method 1: Set font directly on the run
+            for run in p.runs:
+                run.font.name = self.title_font
+            
+            # Method 2: Set East Asian font using XML
+            try:
+                from pptx.oxml.ns import qn
+                p.font._element.set(qn('a:eastAsiaTheme'), 'minor')
+                
+                # Set the font directly on each run's XML element
+                for run in p.runs:
+                    run_element = run._r
+                    run_props = run_element.get_or_add_rPr()
+                    run_props.set(qn('a:ea'), self.title_font)
+            except Exception as e:
+                logger.warning(f"Could not set East Asian font properties: {e}")
+            
+            # Method 3: Try another approach for setting font
+            try:
+                rPr = p._element.get_or_add_rPr()
+                rPr.set('eastAsia', self.title_font)
+            except Exception as e2:
+                logger.warning(f"Alternative font setting also failed: {e2}")
+        else:
+            # For non-Japanese, simply set the font name
+            p.font.name = self.title_font
+        
         # Top accent line (red)
         top_line = cover_slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE, *COVER_TOP_LINE
@@ -823,17 +948,43 @@ Note: The comparison table will be populated with real competitor data separatel
             content = slide_data.get("content", [])
             slide = prs.slides.add_slide(prs.slide_layouts[1])
             self.hide_placeholders(slide)
-            # Title
+            # Title with improved Japanese font handling
             title_box = slide.shapes.add_textbox(*CONTENT_TITLE_BOX)
             tf = title_box.text_frame
             tf.clear()
             tf.margin_left, tf.margin_right, tf.margin_top, tf.margin_bottom = CONTENT_TITLE_MARGIN
             title_p = tf.paragraphs[0]
-            self._apply_font_to_paragraph(title_p, title, is_title=True)
+            
+            # Add the text first
+            title_p.text = title
             title_p.font.size = CONTENT_TITLE_FONT_SIZE
             title_p.font.bold = True
             title_p.font.color.rgb = TITLE_COLOR
             title_p.alignment = PP_ALIGN.CENTER
+            
+            # Apply appropriate font with better Japanese support
+            if resolved_language == "ja":
+                logger.info(f"🈁 Setting Japanese content title font: {self.title_font}")
+                
+                # Method 1: Set font directly on the runs
+                for run in title_p.runs:
+                    run.font.name = self.title_font
+                
+                # Method 2: Set East Asian font using XML
+                try:
+                    from pptx.oxml.ns import qn
+                    title_p.font._element.set(qn('a:eastAsiaTheme'), 'minor')
+                    
+                    # Set the font directly on each run's XML element
+                    for run in title_p.runs:
+                        run_element = run._r
+                        run_props = run_element.get_or_add_rPr()
+                        run_props.set(qn('a:ea'), self.title_font)
+                except Exception as e:
+                    logger.warning(f"Could not set East Asian font properties for content title: {e}")
+            else:
+                # For non-Japanese, simply set the font name
+                title_p.font.name = self.title_font
             # Decorative underline (red)
             underline_shape = slide.shapes.add_shape(
                 MSO_SHAPE.RECTANGLE, *CONTENT_UNDERLINE
@@ -882,15 +1033,21 @@ Note: The comparison table will be populated with real competitor data separatel
             )
         if similar_products or not any(is_comparison_table(t) for t in tables_to_process):
             # Always add a competitor slide if not present
-            comparison_table = self.create_comparison_table_from_products(similar_products or [], comparison_title_localized)
-            found = False
-            for i, table_data in enumerate(tables_to_process):
-                if is_comparison_table(table_data):
-                    tables_to_process[i] = comparison_table
-                    found = True
-                    break
-            if not found:
-                tables_to_process.append(comparison_table)
+            comparison_table = self.create_comparison_table_from_products(
+                similar_products or [], 
+                title=comparison_title_localized,
+                language=resolved_language
+            )
+            
+            if comparison_table:  # Only proceed if we got a valid table
+                found = False
+                for i, table_data in enumerate(tables_to_process):
+                    if is_comparison_table(table_data):
+                        tables_to_process[i] = comparison_table
+                        found = True
+                        break
+                if not found:
+                    tables_to_process.append(comparison_table)
         for table_data in tables_to_process:
             if not isinstance(table_data, dict):
                 logger.warning(f"Table data is not a dict: {table_data}")

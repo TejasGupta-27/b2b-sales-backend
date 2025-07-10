@@ -57,27 +57,9 @@ from services.pdf_generator import PDFGenerator
 # Import pitch deck service
 from services.pitch_deck_service import PitchDeckService
 
-import sys
-import logging
-
-# 🔁 Redirect print to logger so it shows up in Docker logs
-class PrintLogger:
-    def __init__(self, logger, level=logging.INFO):
-        self.logger = logger
-        self.level = level
-    def write(self, message):
-        message = message.strip()
-        if message:
-            self.logger.log(self.level, message)
-    def flush(self):
-        pass  # Required for file-like compatibility
-
-# 🔧 Apply redirection
+# Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("PrintLogger")
-sys.stdout = PrintLogger(logger)
-sys.stderr = PrintLogger(logger, level=logging.ERROR)
-
+logger = logging.getLogger(__name__)
 
 # Add file handler for main application logs
 log_dir = Path("logs")
@@ -209,20 +191,24 @@ def get_cached_ai_provider():
         ai_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
     return ai_provider
 
-def get_cached_conversational_agent():
+def get_cached_conversational_agent(language: str = "en"):
     """Get cached conversational agent instance"""
     global conversational_agent
     if conversational_agent is None:
         base_provider = get_cached_ai_provider()
-        conversational_agent = SimpleConversationalAgent(base_provider)
+        conversational_agent = SimpleConversationalAgent(base_provider, language=language)
+    elif language != getattr(conversational_agent, 'language', 'en'):
+        conversational_agent.set_language(language)
     return conversational_agent
 
-def get_cached_quote_agent():
+def get_cached_quote_agent(language: str = "en"):
     """Get cached quote generation agent instance"""
     global quote_agent
     if quote_agent is None:
         base_provider = get_cached_ai_provider()
-        quote_agent = QuoteGenerationAgent(base_provider)
+        quote_agent = QuoteGenerationAgent(base_provider, language=language)
+    elif language != getattr(quote_agent, 'language', 'en'):
+        quote_agent.set_language(language)
     return quote_agent
 
 def get_cached_speech_service():
@@ -261,6 +247,72 @@ def should_disable_speech_service():
             return True
     
     return False
+
+def save_quote_to_database(quote: Dict[str, Any], lead_id: str = None, db: Session = None) -> str:
+    """Save quote to database for persistence"""
+    try:
+        from db.models import Quote
+        from datetime import datetime, timedelta
+        
+        # Extract quote data
+        quote_id = quote.get('quote_id', str(uuid.uuid4()))
+        quote_number = quote.get('quote_number', f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        
+        # Extract customer info
+        customer_info = quote.get('customer_info', {})
+        customer_name = customer_info.get('contact_name', 'Unknown Customer')
+        customer_email = customer_info.get('email', 'unknown@example.com')
+        company_name = customer_info.get('company_name', 'Unknown Company')
+        
+        # Extract financial data
+        financials = quote.get('financials', {})
+        subtotal = financials.get('subtotal', 0.0)
+        tax_rate = financials.get('tax_rate', 0.0)
+        tax_amount = financials.get('tax_amount', 0.0)
+        total = financials.get('total', 0.0)
+        currency = financials.get('currency', 'USD')
+        
+        # Extract line items
+        line_items = quote.get('line_items', [])
+        
+        # Set valid until date (30 days from now)
+        valid_until = datetime.now() + timedelta(days=30)
+        
+        # Create quote object
+        db_quote = Quote(
+            id=quote_id,
+            quote_number=quote_number,
+            lead_id=lead_id or "unknown",
+            customer_name=customer_name,
+            customer_email=customer_email,
+            company_name=company_name,
+            items=line_items,
+            subtotal=subtotal,
+            tax_rate=tax_rate,
+            tax_amount=tax_amount,
+            total=total,
+            currency=currency,
+            valid_until=valid_until,
+            terms=quote.get('terms_and_conditions', []),
+            notes=quote.get('implementation_notes', []),
+            pdf_filename=quote.get('pdf_path'),
+            pdf_url=quote.get('pdf_url'),
+            status="draft"
+        )
+        
+        if db:
+            db.add(db_quote)
+            db.commit()
+            db.refresh(db_quote)
+            logger.info(f"✅ Quote saved to database: {quote_id} - ${total} {currency}")
+            return quote_id
+        else:
+            logger.warning("⚠️ No database session provided, quote not saved to database")
+            return quote_id
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to save quote to database: {e}")
+        return quote.get('quote_id', str(uuid.uuid4()))
 
 @app.on_event("startup")
 async def startup_event():
@@ -437,17 +489,6 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
             for msg in reversed(existing_messages):
                 role = "user" if msg.message_type == MessageType.USER.value else "assistant"
                 messages.append(AIMessage(role=role, content=msg.content))
-
-            # 📌 Capture language from request or fallback
-            lang = getattr(request, "language", None)
-            if lang == "jp":
-                lang = "ja"
-            if not lang:
-                logger.warning("⚠️ No language provided in request. Defaulting to English.")
-                lang = "en"
-            elif lang not in ["en", "ja"]:
-                logger.warning(f"⚠️ Unsupported language '{lang}' provided. Defaulting to English.")
-                lang = "en"
             
             # Get customer context from the lead
             customer_context = None
@@ -477,8 +518,9 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 # Record cache miss
                 metrics_service.record_cache_miss()
                 
-                # Use cached conversational agent
-                conversational_agent = get_cached_conversational_agent()
+                # Use cached conversational agent with language support
+                language = request.language or "en"
+                conversational_agent = get_cached_conversational_agent(language=language)
                 
                 # Initialize the agent if needed (should be pre-initialized)
                 if not hasattr(conversational_agent, '_initialized'):
@@ -489,7 +531,7 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                 # No hardcoded phrase detection - let the AI determine the best response
                 ai_start_time = time.time()
                 response = await conversational_agent.generate_response(
-                    messages, customer_context, language=lang
+                    messages, customer_context
                 )
                 ai_duration = time.time() - ai_start_time
                 
@@ -500,14 +542,97 @@ async def sales_chat(request: SalesChatMessage, db: Session = Depends(get_db)):
                     model=response.model
                 )
                 
+                # Record comprehensive sales metrics from response metadata
+                try:
+                    if hasattr(response, 'metadata') and response.metadata:
+                        metadata = response.metadata
+                        
+                        # Record product recommendations if any were generated
+                        if metadata.get('product_inquiry') and metadata.get('products_recommended', 0) > 0:
+                            # Extract product data from metadata
+                            product_data = metadata.get('product_data', {})
+                            products = product_data.get('products', [])
+                            
+                            for product in products:
+                                category = product.get('category', 'unknown')
+                                product_id = product.get('product_id', 'unknown')
+                                product_name = product.get('name', 'Unknown Product')
+                                
+                                metrics_service.record_product_recommendation(
+                                    category=category,
+                                    product_id=product_id,
+                                    product_name=product_name,
+                                    status="generated"
+                                )
+                            
+                            # Record recommendation quality if available
+                            if product_data.get('retrieval_confidence'):
+                                metrics_service.record_recommendation_quality(
+                                    category="general",
+                                    recommendation_set_id=lead_id,
+                                    quality_score=product_data.get('retrieval_confidence', 0.0)
+                                )
+                        
+                        # Record quote generation metrics
+                        if metadata.get('quote_generated'):
+                            metrics_service.record_quote_generation(status="success")
+                        
+                        # Record conversation duration
+                        if lead_id:
+                            # Estimate conversation duration (simplified)
+                            conversation_duration = len(messages) * 2  # Rough estimate: 2 minutes per message
+                            metrics_service.record_conversation_duration(
+                                lead_id=lead_id,
+                                duration_minutes=conversation_duration,
+                                outcome="ongoing"
+                            )
+                        
+                        # Record customer engagement
+                        if lead_id:
+                            engagement_score = 0.7  # Base engagement for active conversation
+                            if metadata.get('product_inquiry'):
+                                engagement_score = 0.8  # Higher engagement for product inquiries
+                            elif metadata.get('quote_generated'):
+                                engagement_score = 0.9  # Highest engagement for quote requests
+                            
+                            metrics_service.record_customer_engagement(
+                                lead_id=lead_id,
+                                engagement_type="conversation",
+                                score=engagement_score
+                            )
+                        
+                        # Record sales funnel stage
+                        if metadata.get('product_inquiry'):
+                            metrics_service.record_sales_funnel_stage(
+                                stage="solution_presentation",
+                                status="active",
+                                count=1
+                            )
+                        elif metadata.get('quote_generated'):
+                            metrics_service.record_sales_funnel_stage(
+                                stage="quote_generation",
+                                status="active",
+                                count=1
+                            )
+                        else:
+                            metrics_service.record_sales_funnel_stage(
+                                stage="discovery",
+                                status="active",
+                                count=1
+                            )
+                        
+                        logger.info(f"📊 Recorded comprehensive sales metrics for lead: {lead_id}")
+                        
+                except Exception as metrics_error:
+                    logger.warning(f"⚠️ Failed to record sales metrics: {metrics_error}")
+                
                 response_content = response.content
                 response_metadata = {
                     "provider": response.provider,
                     "model": response.model,
                     "usage": response.usage,
                     "agent_type": "simple_conversational",
-                    "cached": False,
-                    "language": lang
+                    "cached": False
                 }
                 
                 # Cache the response for 2 minutes
@@ -629,12 +754,86 @@ async def generate_quote(quote_request: Dict[str, Any]):
             metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
         
+        # Record comprehensive quote metrics
+        try:
+            # Extract quote details for metrics
+            quote_data = {
+                'total_value': quote.get('financials', {}).get('total', 0.0) if quote.get('financials') else quote.get('total_amount', 0.0),
+                'currency': quote.get('financials', {}).get('currency', 'USD') if quote.get('financials') else quote.get('currency', 'USD'),
+                'line_items': quote.get('line_items', []),
+                'quote_requested_at': quote.get('created_at', datetime.now().isoformat()),
+                'generated_at': datetime.now().isoformat()
+            }
+            
+            # Record detailed quote metrics
+            metrics_service.record_quote_with_details(quote_data)
+            
+            # Record sales velocity metrics
+            metrics_service.record_sales_velocity(
+                metric_type="quote_generation_rate",
+                value=1.0  # Increment counter
+            )
+            
+            # Record average quote value
+            if quote_data['total_value'] > 0:
+                metrics_service.record_average_quote_value(
+                    category="general",
+                    period="daily",
+                    average_value=quote_data['total_value']
+                )
+            
+            # Record quote request to generation time
+            if 'quote_requested_at' in quote_data:
+                try:
+                    request_time = datetime.fromisoformat(quote_data['quote_requested_at'])
+                    generation_time = datetime.fromisoformat(quote_data['generated_at'])
+                    duration_seconds = (generation_time - request_time).total_seconds()
+                    metrics_service.record_quote_request_to_generation(
+                        lead_id="quote_generation",
+                        duration_seconds=duration_seconds
+                    )
+                except:
+                    pass  # Skip if timestamp parsing fails
+            
+            # Record cross-sell and upsell opportunities if detected
+            line_items = quote_data.get('line_items', [])
+            categories = [item.get('category', 'unknown') for item in line_items]
+            
+            if len(set(categories)) > 1:
+                # Multiple categories indicate cross-sell opportunity
+                for i, category1 in enumerate(categories):
+                    for category2 in categories[i+1:]:
+                        if category1 != category2:
+                            metrics_service.record_cross_sell_opportunity(
+                                primary_category=category1,
+                                cross_sell_category=category2
+                            )
+            
+            # Record customer satisfaction (estimated based on quote generation success)
+            if quote.get('pdf_generated'):
+                metrics_service.record_customer_satisfaction(
+                    lead_id="quote_generation",
+                    interaction_type="quote_generation",
+                    satisfaction_score=0.8  # High satisfaction for successful quote generation
+                )
+            
+            logger.info(f"📊 Recorded comprehensive quote metrics: {len(line_items)} line items, ${quote_data['total_value']} {quote_data['currency']}")
+            
+        except Exception as quote_metrics_error:
+            logger.warning(f"⚠️ Failed to record quote metrics: {quote_metrics_error}")
+        
         if 'error' in quote:
             metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail=quote['error'])
         
         # Record successful quote generation
         metrics_service.record_quote_generation(status="success")
+        
+        # Save quote to database for persistence
+        try:
+            save_quote_to_database(quote, lead_id=None, db=None)
+        except Exception as db_error:
+            logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
         
         # Generate unique IDs
         quote_id = quote.get('quote_id', str(uuid.uuid4()))
@@ -1507,6 +1706,139 @@ async def generate_quote_from_conversation(lead_id: str, db: Session = Depends(g
         # Record successful quote generation
         metrics_service.record_quote_generation(status="success")
         
+        # Record comprehensive sales metrics for quote from conversation
+        try:
+            # Extract quote details for metrics
+            quote_data = {
+                'total_value': quote.get('financials', {}).get('total', 0.0) if quote.get('financials') else quote.get('total_amount', 0.0),
+                'currency': quote.get('financials', {}).get('currency', 'USD') if quote.get('financials') else quote.get('currency', 'USD'),
+                'line_items': quote.get('line_items', []),
+                'quote_requested_at': quote.get('created_at', datetime.now().isoformat()),
+                'generated_at': datetime.now().isoformat()
+            }
+            
+            # Record detailed quote metrics
+            metrics_service.record_quote_with_details(quote_data, lead_id=lead_id)
+            
+            # Record sales funnel stage progression
+            metrics_service.record_sales_funnel_stage(
+                stage="quote_generation",
+                status="completed",
+                count=1
+            )
+            
+            # Record conversion metrics
+            metrics_service.record_conversion_by_category(
+                category="general",
+                from_stage="conversation",
+                to_stage="quote_generated"
+            )
+            
+            # Record customer engagement (high engagement for quote generation)
+            metrics_service.record_customer_engagement(
+                lead_id=lead_id,
+                engagement_type="quote_generation",
+                score=0.9  # High engagement for quote generation
+            )
+            
+            # Record conversation duration
+            conversation_duration = len(conversation_messages) * 2  # Rough estimate
+            metrics_service.record_conversation_duration(
+                lead_id=lead_id,
+                duration_minutes=conversation_duration,
+                outcome="quote_generated"
+            )
+            
+            # Record sales velocity
+            metrics_service.record_sales_velocity(
+                metric_type="conversation_to_quote_rate",
+                value=1.0
+            )
+            
+            # Record average quote value
+            if quote_data['total_value'] > 0:
+                metrics_service.record_average_quote_value(
+                    category="conversation_based",
+                    period="daily",
+                    average_value=quote_data['total_value']
+                )
+            
+            # Record quote request to generation time
+            if 'quote_requested_at' in quote_data:
+                try:
+                    request_time = datetime.fromisoformat(quote_data['quote_requested_at'])
+                    generation_time = datetime.fromisoformat(quote_data['generated_at'])
+                    duration_seconds = (generation_time - request_time).total_seconds()
+                    metrics_service.record_quote_request_to_generation(
+                        lead_id=lead_id,
+                        duration_seconds=duration_seconds
+                    )
+                except:
+                    pass  # Skip if timestamp parsing fails
+            
+            # Record cross-sell and upsell opportunities
+            line_items = quote_data.get('line_items', [])
+            categories = [item.get('category', 'unknown') for item in line_items]
+            
+            # Record product selections from quote line items
+            for line_item in line_items:
+                product_id = line_item.get('product_id', 'unknown')
+                product_name = line_item.get('name', 'Unknown Product')
+                category = line_item.get('category', 'unknown')
+                quantity = line_item.get('quantity', 1)
+                
+                # Record product selection
+                metrics_service.record_product_selection(
+                    category=category,
+                    product_id=product_id,
+                    product_name=product_name,
+                    quantity=quantity
+                )
+                
+                # Record quotation line item
+                metrics_service.record_quotation_line_item(
+                    category=category,
+                    status="added"
+                )
+            
+            if len(set(categories)) > 1:
+                # Multiple categories indicate cross-sell opportunity
+                for i, category1 in enumerate(categories):
+                    for category2 in categories[i+1:]:
+                        if category1 != category2:
+                            metrics_service.record_cross_sell_opportunity(
+                                primary_category=category1,
+                                cross_sell_category=category2
+                            )
+            
+            # Record customer satisfaction
+            if quote.get('pdf_generated'):
+                metrics_service.record_customer_satisfaction(
+                    lead_id=lead_id,
+                    interaction_type="quote_generation_from_conversation",
+                    satisfaction_score=0.85  # High satisfaction for successful quote generation
+                )
+            
+            # Record sales cycle duration (estimated)
+            if lead_record and lead_record.created_at:
+                cycle_duration = (datetime.now() - lead_record.created_at).days
+                metrics_service.record_sales_cycle_duration(
+                    category="conversation_based",
+                    deal_size_range="medium" if quote_data['total_value'] < 10000 else "large",
+                    duration_days=cycle_duration
+                )
+            
+            logger.info(f"📊 Recorded comprehensive sales metrics for conversation-based quote: {len(line_items)} line items, ${quote_data['total_value']} {quote_data['currency']}")
+            
+        except Exception as quote_metrics_error:
+            logger.warning(f"⚠️ Failed to record conversation quote metrics: {quote_metrics_error}")
+        
+        # Save quote to database for persistence
+        try:
+            save_quote_to_database(quote, lead_id=lead_id, db=db)
+        except Exception as db_error:
+            logger.warning(f"⚠️ Failed to save quote to database: {db_error}")
+        
         # Generate pitch deck if quote was successful
         deck_id = str(uuid.uuid4())
         pitch_deck_path = None
@@ -1587,6 +1919,129 @@ async def get_system_performance():
     except Exception as e:
         logger.error(f"Error getting system performance: {e}")
         return {"error": str(e)}
+
+@app.get("/api/admin/sales-metrics")
+async def get_sales_metrics():
+    """Get comprehensive sales metrics for dashboard and analytics"""
+    try:
+        metrics_service = get_metrics_service()
+        
+        # Get current metrics from Prometheus
+        metrics_data = metrics_service.get_metrics()
+        
+        # Parse metrics string to extract values
+        lines = metrics_data.split('\n')
+        for line in lines:
+            if line.startswith('b2b_product_recommendations_total'):
+                # Extract total recommendations
+                if 'status="generated"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["product_recommendations"]["total_generated"] += value
+                    except:
+                        pass
+            
+            elif line.startswith('b2b_quotes_generated_total'):
+                # Extract total quotes
+                try:
+                    value = int(line.split(' ')[-1])
+                    sales_metrics["quotations"]["total_generated"] += value
+                except:
+                    pass
+            
+            elif line.startswith('b2b_quotation_value_total'):
+                # Extract quotation value
+                if 'currency="USD"' in line:
+                    try:
+                        value = float(line.split(' ')[-1])
+                        sales_metrics["quotations"]["total_value_usd"] = value
+                    except:
+                        pass
+            
+            elif line.startswith('b2b_sales_funnel_stage'):
+                # Extract sales funnel stages
+                if 'stage="discovery"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["sales_funnel"]["discovery"] = value
+                    except:
+                        pass
+                elif 'stage="solution_presentation"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["sales_funnel"]["solution_presentation"] = value
+                    except:
+                        pass
+                elif 'stage="quote_generation"' in line:
+                    try:
+                        value = int(line.split(' ')[-1])
+                        sales_metrics["sales_funnel"]["quote_generation"] = value
+                    except:
+                        pass
+        
+        # Calculate derived metrics
+        if sales_metrics["product_recommendations"]["total_generated"] > 0:
+            # Estimate selection rate (this would need more detailed tracking)
+            sales_metrics["product_recommendations"]["selection_rate"] = 0.25  # Placeholder
+        
+        if sales_metrics["quotations"]["total_generated"] > 0:
+            sales_metrics["quotations"]["average_value"] = (
+                sales_metrics["quotations"]["total_value_usd"] / 
+                sales_metrics["quotations"]["total_generated"]
+            )
+            sales_metrics["quotations"]["success_rate"] = 0.85  # Placeholder
+        
+        # Add performance recommendations
+        sales_metrics["recommendations"] = []
+        
+        if sales_metrics["product_recommendations"]["selection_rate"] < 0.2:
+            sales_metrics["recommendations"].append("Low product selection rate - improve recommendation quality")
+        
+        if sales_metrics["quotations"]["success_rate"] < 0.8:
+            sales_metrics["recommendations"].append("Low quote success rate - review quote generation process")
+        
+        if sales_metrics["sales_funnel"]["discovery"] > sales_metrics["sales_funnel"]["quote_generation"] * 3:
+            sales_metrics["recommendations"].append("High discovery to quote ratio - optimize conversion process")
+        
+        return sales_metrics
+        
+    except Exception as e:
+        logger.error(f"Error getting sales metrics: {e}")
+        return {"error": str(e)}
+
+@app.post("/api/chat/language")
+async def update_chat_language(request: dict, db: Session = Depends(get_db)):
+    """Update the language for a chat conversation"""
+    try:
+        lead_id = request.get('lead_id')
+        language = request.get('language', 'en')
+        
+        if not lead_id:
+            raise HTTPException(status_code=400, detail="lead_id is required")
+            
+        # Normalize language code
+        from services.language_service import LanguageService
+        language_service = LanguageService()
+        normalized_language = language_service.normalize_language_code(language)
+        
+        # Get and update conversational agent
+        conversational_agent = get_cached_conversational_agent(language=normalized_language)
+        
+        # Update quote agent as well
+        quote_agent = get_cached_quote_agent(language=normalized_language)
+        
+        # Log language update
+        logger.info(f"🌐 Updated language for lead {lead_id} to {normalized_language}")
+        
+        return {
+            "status": "success",
+            "language": normalized_language,
+            "lead_id": lead_id
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating chat language: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

@@ -102,15 +102,17 @@ class LanguageService:
         
         try:
             # PRIORITY 1: Explicit language from frontend/user
-            if explicit_language and explicit_language in self.supported_languages:
-                result.update({
-                    'language': explicit_language,
-                    'method': 'explicit',
-                    'confidence': 1.0,
-                    'fallback_used': False
-                })
-                logger.info(f"🎯 Using explicit language: {explicit_language}")
-                return result
+            if explicit_language:
+                normalized_lang = self.normalize_language_code(explicit_language)
+                if normalized_lang in self.supported_languages:
+                    result.update({
+                        'language': normalized_lang,
+                        'method': 'explicit',
+                        'confidence': 1.0,
+                        'fallback_used': False
+                    })
+                    logger.info(f"🎯 Using explicit normalized language: {normalized_lang} (from {explicit_language})")
+                    return result
             
             # PRIORITY 2: Auto-detection from text content
             if text_content and self.auto_detection_enabled:
@@ -150,3 +152,21 @@ class LanguageService:
         except Exception as e:
             logger.error(f"❌ Language resolution failed: {e}, using default")
             return result
+        
+    def normalize_language_code(self, language_code: str) -> str:
+        """
+        Normalize language code to a standard format.
+        Returns the normalized language code or default language if not supported.
+        """
+        if not language_code:
+            return self.default_language
+            
+        # Convert to lowercase and take first two chars for ISO 639-1
+        normalized = language_code.lower()[:2]
+        
+        # Special handling for Chinese variants
+        if normalized in ['zh', 'cn']:
+            normalized = 'zh'
+            
+        # Return normalized code if supported, otherwise default
+        return normalized if self.is_supported_language(normalized) else self.default_language
