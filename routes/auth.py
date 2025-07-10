@@ -179,6 +179,15 @@ async def get_usage_stats(
         token_usage_percentage=(monthly_ai_tokens / current_user.ai_token_limit) * 100
     )
 
+# Public endpoint for organization listing (for registration)
+@router.get("/organizations/public", response_model=List[Organization])
+async def list_public_organizations(db: Session = Depends(get_db)):
+    """List active organizations available for registration (public endpoint)"""
+    organizations = db.query(DBOrganization).filter(
+        DBOrganization.is_active == True
+    ).all()
+    return [Organization.from_orm(org) for org in organizations]
+
 # Organization routes
 @router.post("/organizations", response_model=Organization)
 async def create_organization(
