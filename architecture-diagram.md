@@ -273,4 +273,146 @@ flowchart LR
 
 ## Data Flow Analysis
 
-### 1. **Intent Analysis Flow** 
+### 1. **Intent Analysis Flow**
+```
+User Input → Simple Conversational Agent → ConversationIntent Analysis (Pydantic) → Intent Router → Response Path Selection
+```
+
+**Detailed Steps:**
+1. **Message Reception**: User message received with conversation context
+2. **Intent Analysis**: Pydantic model analyzes last 3 messages for intent
+3. **Confidence Assessment**: System evaluates confidence level (0.0-1.0)
+4. **Missing Info Detection**: Identifies gaps in requirements/context
+5. **Route Selection**: Router directs to appropriate response generation path
+
+### 2. **Quote Generation Flow**
+```
+Quote Intent → Missing Info Check → Quote Generation Agent → PDF + Pitch Deck Generation → Language-Aware Enhancement → Response
+```
+
+**Detailed Process:**
+1. **Quote Intent Detection**: High confidence quote request identified
+2. **Requirements Validation**: Check for complete customer information
+3. **Quote Agent Activation**: QuoteGenerationAgent processes conversation history
+4. **Document Generation**: PDF quote and PowerPoint pitch deck created
+5. **Response Enhancement**: Original response enhanced with quote details
+6. **Localization**: Language detection applies appropriate formatting
+7. **Metrics Recording**: Success/failure tracked for analytics
+
+### 3. **Product Recommendation Flow**
+```
+Product Intent → Requirements Analysis → Hybrid Retriever → (Elasticsearch + ChromaDB) → Category Grouping → Full Build Recommendation → Response
+```
+
+**Detailed Process:**
+1. **Product Intent Verification**: Conservative check for genuine product need
+2. **Context Extraction**: LLM analyzes conversation for requirements
+3. **Hybrid Search**: Elasticsearch (keyword) + ChromaDB (semantic) search
+4. **Category Organization**: Products grouped by type (CPU, GPU, Memory, etc.)
+5. **Build Recommendation**: AI suggests complete system configurations
+6. **Confidence Assessment**: Search confidence and relevance scoring
+
+### 4. **General Conversation Flow**
+```
+General Intent → Discovery Mode → Natural Response Generation → Follow-up Questions → Relationship Building
+```
+
+**Detailed Process:**
+1. **Discovery Activation**: Focus on learning customer needs
+2. **Context Building**: Gather industry, budget, timeline information
+3. **Natural Response**: Conversational, helpful responses without sales pressure
+4. **Question Generation**: Intelligent follow-up questions suggested
+5. **Relationship Development**: Build trust through knowledgeable assistance
+
+### 5. **Language Detection & Localization Flow**
+```
+Response Generated → Language Detection → Localization Rules → Currency/Date Formatting → Cultural Adaptation → Final Response
+```
+
+**Supported Features:**
+- **Automatic Detection**: Uses `langdetect` library for language identification
+- **Bilingual Support**: English and Japanese localization
+- **Cultural Adaptation**: Appropriate tone and formatting for each language
+- **Currency Formatting**: Localized pricing display
+- **Date Formatting**: Region-appropriate date representations
+
+## Intelligence Layers
+
+### **L1: FastAPI Routes (HTTP Interface)**
+- **Responsibility**: HTTP request/response handling, authentication, validation
+- **Components**: LEADS, QUOTES, CHAT, ADMIN_API, SPEECH, RECOMMENDATIONS routes
+- **Features**: CORS, authentication middleware, request logging
+
+### **L2: Simple Conversational Agent (Orchestration)**
+- **Responsibility**: Conversation orchestration, intent analysis, response routing
+- **Components**: Intent Analysis, Language Detection, Response Path Routing
+- **Features**: Pydantic-based structured analysis, conversation memory management
+
+### **L3: Response Generation Paths (Specialized Handling)**
+- **Responsibility**: Domain-specific response generation and enhancement
+- **Components**: Quote Path, Product Path, General Path generators
+- **Features**: Context-aware responses, missing information detection
+
+### **L4: AI Components (Domain Expertise)**
+- **Responsibility**: Specialized AI capabilities and business logic
+- **Components**: HybridProductRetriever, QuoteGenerationAgent, Conversation Memory
+- **Features**: Hybrid search, document generation, context preservation
+
+### **L5: Base AI Provider & External Services**
+- **Responsibility**: Core AI capabilities and external integrations
+- **Components**: Azure OpenAI, Embeddings API, Whisper Models
+- **Features**: Language models, embeddings, speech processing
+
+## Key Architectural Differentiators
+
+### 1. **Conversation-First Design**
+- **Philosophy**: Natural, helpful conversations over rigid sales processes
+- **Implementation**: Discovery-focused interactions with progressive information gathering
+- **Benefits**: Higher customer engagement, better relationship building
+
+### 2. **Conservative Product Retrieval**
+- **Philosophy**: Only retrieve products when genuinely helpful and appropriate
+- **Implementation**: Strict requirements for triggering product searches
+- **Benefits**: Avoids pushy sales tactics, focuses on customer needs
+
+### 3. **Intent-Based Architecture**
+- **Philosophy**: Structured decision-making using Pydantic models
+- **Implementation**: ConversationIntent model with confidence scoring
+- **Benefits**: Reliable routing, explainable AI decisions, consistent behavior
+
+### 4. **Multi-Modal Enhancement**
+- **Philosophy**: Rich, comprehensive responses beyond text
+- **Implementation**: Automatic PDF generation, pitch deck creation, localization
+- **Benefits**: Professional presentation, multi-format accessibility
+
+### 5. **Language-Aware Intelligence**
+- **Philosophy**: Culturally appropriate, localized interactions
+- **Implementation**: Automatic language detection with cultural adaptation
+- **Benefits**: Global accessibility, cultural sensitivity
+
+### 6. **Provider Abstraction Pattern**
+- **Philosophy**: Flexibility in AI service providers
+- **Implementation**: Base provider interface with multiple implementations
+- **Benefits**: Vendor independence, cost optimization, redundancy
+
+## Performance Characteristics
+
+### **Scalability Features**
+- **Stateless Design**: Each conversation turn is independent
+- **Caching Strategy**: Product recommendations cached for efficiency
+- **Memory Management**: Conversation history limited to recent messages
+- **Provider Failover**: Graceful handling of AI service failures
+
+### **Quality Assurance**
+- **Confidence Scoring**: All AI decisions include confidence metrics
+- **Fallback Mechanisms**: Graceful degradation when services fail
+- **Error Tracking**: Comprehensive error logging and metrics
+- **Usage Monitoring**: Token consumption and cost tracking
+
+### **Business Intelligence**
+- **Conversion Tracking**: Quote generation success rates
+- **Conversation Analytics**: Intent distribution and success patterns
+- **Performance Metrics**: Response times and service health
+- **Customer Insights**: Interaction patterns and preferences
+
+This architecture represents a sophisticated, conversation-first B2B sales assistant that prioritizes natural customer interactions while providing intelligent product recommendations and automated quote generation when appropriate. The system is designed for scalability, maintainability, and excellent customer experience.
