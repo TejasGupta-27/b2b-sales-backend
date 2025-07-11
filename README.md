@@ -37,7 +37,7 @@ An intelligent, multi-user B2B sales assistant powered by AI that helps sales te
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐
 │   Frontend      │    │   Nginx Proxy    │    │   FastAPI Backend   │
-│   Application   │◄───┤   Load Balancer  │◄───┤   (Multi-tenant)    │
+│   Application   │◄───┤   Reverse Proxy  │◄───┤   (Multi-tenant)    │
 └─────────────────┘    └──────────────────┘    └─────────────────────┘
                                                            │
                        ┌─────────────────────────────────────┼─────────────────────────────────────┐
