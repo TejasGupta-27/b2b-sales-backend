@@ -46,7 +46,7 @@ from services.elasticsearch_vector_service import get_elasticsearch_vector_servi
 from services.metrics_service import metrics_middleware, metrics_endpoint, get_metrics_service
 
 # Import authentication
-from services.auth_service import get_current_active_user, auth_service
+from services.auth_service import get_current_active_user, auth_service, check_lead_access, get_lead_access_filter
 
 # Import configuration
 from config import settings
@@ -473,16 +473,8 @@ async def sales_chat(
                 # Update lead metrics immediately after creation
                 metrics_service.update_lead_metrics(db)
             else:
-                # Verify user owns this lead or has access to it
-                existing_lead = db.query(DBLead).filter(
-                    DBLead.id == lead_id,
-                    DBLead.organization_id == current_user.organization_id  # Organization-level access
-                ).first()
-                if not existing_lead:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Access denied: Lead not found or not accessible"
-                    )
+                # Verify user has access to this lead using role-based access control
+                existing_lead = check_lead_access(lead_id, current_user, db)
             
             # Save user message with user association
             user_message = DBChatMessage(
@@ -502,11 +494,13 @@ async def sales_chat(
             # Record AI token usage for the user
             auth_service.record_api_usage(current_user.id, ai_tokens=0, db=db)
             
-            # Get conversation history with organization filtering
+            # Get conversation history with role-based filtering
+            lead_filters = get_lead_access_filter(current_user)
+            
             messages = []
             existing_messages = db.query(DBChatMessage).join(DBLead).filter(
                 DBChatMessage.lead_id == lead_id,
-                DBLead.organization_id == current_user.organization_id  # Organization isolation
+                *lead_filters  # Apply role-based filtering
             ).order_by(DBChatMessage.created_at.desc()).limit(10).all()  # Reduced to last 10 messages
             
             # Reverse to get chronological order
@@ -518,7 +512,7 @@ async def sales_chat(
             customer_context = None
             lead_record = db.query(DBLead).filter(
                 DBLead.id == lead_id,
-                DBLead.organization_id == current_user.organization_id  # Organization isolation
+                *lead_filters  # Apply role-based filtering
             ).first()
             if lead_record:
                 customer_context = {
@@ -858,16 +852,8 @@ async def send_message(
                 # Update lead metrics immediately after creation
                 metrics_service.update_lead_metrics(db)
             else:
-                # Verify user owns this lead or has access to it
-                existing_lead = db.query(DBLead).filter(
-                    DBLead.id == lead_id,
-                    DBLead.organization_id == current_user.organization_id  # Organization-level access
-                ).first()
-                if not existing_lead:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Access denied: Lead not found or not accessible"
-                    )
+                # Verify user has access to this lead using role-based access control
+                existing_lead = check_lead_access(lead_id, current_user, db)
             
             # Save user message with user association
             user_message = DBChatMessage(
@@ -884,11 +870,13 @@ async def send_message(
             # Record user message metric
             metrics_service.record_chat_message(lead_id=lead_id, message_type="user")
             
-            # Get conversation history with organization filtering
+            # Get conversation history with role-based filtering
+            lead_filters = get_lead_access_filter(current_user)
+            
             messages = []
             existing_messages = db.query(DBChatMessage).join(DBLead).filter(
                 DBChatMessage.lead_id == lead_id,
-                DBLead.organization_id == current_user.organization_id  # Organization isolation
+                *lead_filters  # Apply role-based filtering
             ).order_by(DBChatMessage.created_at).limit(20).all()  # Limit to last 20 messages
             
             for msg in existing_messages:
@@ -1023,21 +1011,12 @@ async def get_chat_history(
     current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get chat history for a specific lead with organization isolation"""
+    """Get chat history for a specific lead with role-based access control"""
     try:
         logger.info(f"Fetching chat history for lead: {lead_id} (User: {current_user.id})")
         
-        # Verify user has access to this lead
-        lead = db.query(DBLead).filter(
-            DBLead.id == lead_id,
-            DBLead.organization_id == current_user.organization_id  # Organization isolation
-        ).first()
-        
-        if not lead:
-            raise HTTPException(
-                status_code=404,
-                detail="Lead not found or access denied"
-            )
+        # Verify user has access to this lead using role-based access control
+        lead = check_lead_access(lead_id, current_user, db)
         
         # Get messages for this lead
         messages = db.query(DBChatMessage).filter(
@@ -1101,10 +1080,13 @@ async def get_leads(
     current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get all leads for current user's organization with their latest message - optimized with JOIN query"""
+    """Get leads based on user role - sales agents see only their assigned leads, managers see all organization leads"""
     try:
         # Use a single JOIN query instead of N+1 individual queries
         from sqlalchemy import func, and_
+        
+        # Get role-based filters
+        lead_filters = get_lead_access_filter(current_user)
         
         # Subquery to get the latest message timestamp for each lead
         latest_message_subquery = db.query(
@@ -1112,13 +1094,13 @@ async def get_leads(
             func.max(DBChatMessage.created_at).label('latest_time')
         ).group_by(DBChatMessage.lead_id).subquery()
         
-        # Main query with JOIN to get leads and their latest messages - filtered by organization
+        # Main query with JOIN to get leads and their latest messages - filtered by role
         results = db.query(
             DBLead,
             DBChatMessage.content.label('last_message_content'),
             DBChatMessage.created_at.label('last_message_time')
         ).filter(
-            DBLead.organization_id == current_user.organization_id  # Organization isolation
+            *lead_filters  # Apply role-based filtering
         ).outerjoin(
             latest_message_subquery,
             DBLead.id == latest_message_subquery.c.lead_id
@@ -1250,19 +1232,10 @@ async def get_conversation(
     current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get conversation history for a lead with organization isolation"""
+    """Get conversation history for a lead with role-based access control"""
     try:
-        # Verify user has access to this lead
-        lead = db.query(DBLead).filter(
-            DBLead.id == lead_id,
-            DBLead.organization_id == current_user.organization_id  # Organization isolation
-        ).first()
-        
-        if not lead:
-            raise HTTPException(
-                status_code=404,
-                detail="Lead not found or access denied"
-            )
+        # Verify user has access to this lead using role-based access control
+        lead = check_lead_access(lead_id, current_user, db)
         
         messages = db.query(DBChatMessage).filter(
             DBChatMessage.lead_id == lead_id
@@ -1530,25 +1503,20 @@ async def search_chat_messages(
     current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Search chat messages by content with optional fuzzy search and organization isolation"""
+    """Search chat messages by content with optional fuzzy search and role-based access control"""
     try:
-        # Build the base query with organization filtering
+        # Get role-based filters for leads
+        lead_filters = get_lead_access_filter(current_user)
+        
+        # Build the base query with role-based filtering
         query = db.query(DBChatMessage).join(DBLead).filter(
-            DBLead.organization_id == current_user.organization_id  # Organization isolation
+            *lead_filters  # Apply role-based filtering instead of just organization
         )
         
         # Add lead_id filter if provided (and verify access)
         if request.lead_id:
-            # Verify user has access to this lead
-            lead = db.query(DBLead).filter(
-                DBLead.id == request.lead_id,
-                DBLead.organization_id == current_user.organization_id
-            ).first()
-            if not lead:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Lead not found or access denied"
-                )
+            # Verify user has access to this lead using role-based access control
+            lead = check_lead_access(request.lead_id, current_user, db)
             query = query.filter(DBChatMessage.lead_id == request.lead_id)
         
         if request.use_fuzzy:
@@ -1689,24 +1657,15 @@ async def generate_quote_from_conversation(
     current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Generate a quote from existing conversation history with user authentication"""
+    """Generate a quote from existing conversation history with role-based access control"""
     metrics_service = get_metrics_service()
     start_time = time.time()
     
     try:
-        # Verify user has access to this lead
-        lead = db.query(DBLead).filter(
-            DBLead.id == lead_id,
-            DBLead.organization_id == current_user.organization_id  # Organization isolation
-        ).first()
+        # Verify user has access to this lead using role-based access control
+        lead = check_lead_access(lead_id, current_user, db)
         
-        if not lead:
-            raise HTTPException(
-                status_code=404,
-                detail="Lead not found or access denied"
-            )
-        
-        # Get conversation history for the lead (only from same organization)
+        # Get conversation history for the lead (only from accessible leads)
         messages = db.query(DBChatMessage).filter(
             DBChatMessage.lead_id == lead_id
         ).order_by(DBChatMessage.created_at).all()
@@ -1721,11 +1680,8 @@ async def generate_quote_from_conversation(
             role = "user" if msg.message_type == MessageType.USER.value else "assistant"
             conversation_messages.append(AIMessage(role=role, content=msg.content))
         
-        # Get customer context from lead
-        lead_record = db.query(DBLead).filter(
-            DBLead.id == lead_id,
-            DBLead.organization_id == current_user.organization_id  # Organization isolation
-        ).first()
+        # Get customer context from lead (already verified accessible)
+        lead_record = lead  # We already have the lead from check_lead_access
         customer_context = None
         if lead_record:
             customer_context = {

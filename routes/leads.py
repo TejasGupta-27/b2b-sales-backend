@@ -9,8 +9,9 @@ from sqlalchemy import and_
 
 from models.lead import Lead, LeadCreate, LeadUpdate, LeadStatus
 from db.database import get_db
-from db.models import Lead as DBLead
+from db.models import Lead as DBLead, User as DBUser
 from ai_services.factory import AIServiceFactory
+from services.auth_service import get_current_active_user, get_lead_access_filter, check_lead_access
 
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
@@ -20,10 +21,14 @@ async def get_leads(
     status: Optional[LeadStatus] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get all leads with optional filtering - optimized with database queries"""
-    query = db.query(DBLead)
+    """Get leads with role-based filtering - sales agents see only their assigned leads, managers see all organization leads"""
+    # Get role-based filters
+    lead_filters = get_lead_access_filter(current_user)
+    
+    query = db.query(DBLead).filter(*lead_filters)
     
     if status:
         query = query.filter(DBLead.status == status.value)
@@ -34,17 +39,27 @@ async def get_leads(
     return [Lead.from_orm(lead) for lead in leads]
 
 @router.post("/", response_model=Lead)
-async def create_lead(lead_data: LeadCreate, db: Session = Depends(get_db)):
-    """Create a new lead - optimized database operation"""
+async def create_lead(
+    lead_data: LeadCreate, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new lead - associated with current user and organization"""
     # Check if lead already exists using database query
     existing_lead = db.query(DBLead).filter(DBLead.email == lead_data.email).first()
     if existing_lead:
         raise HTTPException(status_code=400, detail="Lead with this email already exists")
     
-    # Create new lead
+    # Create new lead associated with current user and organization
+    lead_dict = lead_data.dict()
+    lead_dict.update({
+        "assigned_user_id": current_user.id,
+        "organization_id": current_user.organization_id
+    })
+    
     db_lead = DBLead(
         id=str(uuid.uuid4()),
-        **lead_data.dict()
+        **lead_dict
     )
     
     db.add(db_lead)
@@ -54,22 +69,27 @@ async def create_lead(lead_data: LeadCreate, db: Session = Depends(get_db)):
     return Lead.from_orm(db_lead)
 
 @router.get("/{lead_id}", response_model=Lead)
-async def get_lead(lead_id: str, db: Session = Depends(get_db)):
-    """Get a specific lead - database optimized"""
-    lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
-    
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
+async def get_lead(
+    lead_id: str, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific lead with role-based access control"""
+    # Verify user has access to this lead
+    lead = check_lead_access(lead_id, current_user, db)
     
     return Lead.from_orm(lead)
 
 @router.put("/{lead_id}", response_model=Lead)
-async def update_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_db)):
-    """Update a lead - database optimized"""
-    lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
-    
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
+async def update_lead(
+    lead_id: str, 
+    lead_update: LeadUpdate, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update a lead with role-based access control"""
+    # Verify user has access to this lead
+    lead = check_lead_access(lead_id, current_user, db)
     
     # Update lead
     update_data = lead_update.dict(exclude_unset=True)
@@ -85,12 +105,14 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depen
     return Lead.from_orm(lead)
 
 @router.delete("/{lead_id}")
-async def delete_lead(lead_id: str, db: Session = Depends(get_db)):
-    """Delete a lead - database optimized"""
-    lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
-    
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
+async def delete_lead(
+    lead_id: str, 
+    current_user: DBUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a lead with role-based access control"""
+    # Verify user has access to this lead
+    lead = check_lead_access(lead_id, current_user, db)
     
     db.delete(lead)
     db.commit()
