@@ -276,6 +276,48 @@ def require_role(*allowed_roles: str):
         return current_user
     return role_checker
 
+# Helper function for role-based lead access
+def get_lead_access_filter(current_user: DBUser):
+    """
+    Get the appropriate database filter for lead access based on user role.
+    
+    - SALES_AGENT: Can only access leads assigned to them
+    - SALES_MANAGER, ADMIN: Can access all leads in their organization
+    - VIEWER: Can access all leads in their organization (read-only)
+    """
+    from db.models import Lead as DBLead
+    
+    # Base filter: always filter by organization
+    base_filter = DBLead.organization_id == current_user.organization_id
+    
+    # Sales agents can only see their assigned leads
+    if current_user.role.value == "SALES_AGENT":
+        return (base_filter, DBLead.assigned_user_id == current_user.id)
+    
+    # Sales managers, admins, and viewers can see all organization leads
+    return (base_filter,)
+
+def check_lead_access(lead_id: str, current_user: DBUser, db: Session):
+    """
+    Check if the current user has access to a specific lead.
+    Returns the lead if accessible, raises HTTPException if not.
+    """
+    from db.models import Lead as DBLead
+    
+    # Get the appropriate filters for this user's role
+    filters = get_lead_access_filter(current_user)
+    
+    # Query the lead with role-based filtering
+    lead = db.query(DBLead).filter(*filters, DBLead.id == lead_id).first()
+    
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found or access denied"
+        )
+    
+    return lead
+
 # Admin access dependency
 def get_admin_user(current_user: DBUser = Depends(get_current_active_user)) -> DBUser:
     """Dependency to ensure admin access"""
