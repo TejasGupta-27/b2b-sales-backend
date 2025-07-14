@@ -34,28 +34,38 @@ graph TB
         end
     end
 
-    %% Enhanced B2B Sales Agent (Main Orchestrator)
-    subgraph "Enhanced B2B Sales Agent"
-        ENHANCED_SALES[Enhanced B2B Sales Agent<br/>Main Orchestrator]
+    %% Simple Conversational Agent (Main Orchestrator)
+    subgraph "Simple Conversational Agent"
+        SIMPLE_AGENT[Simple Conversational Agent<br/>Main Orchestrator]
         
-        subgraph "Specialized AI Agents"
-            CONVERSATION_FLOW[Conversation Flow Manager]
+        subgraph "Intent Analysis & Routing"
+            INTENT_ANALYSIS[Conversation Intent Analysis<br/>Pydantic Model]
+            LANG_DETECT[Language Detection<br/>& Localization]
+            INTENT_ROUTER{Intent-Based Router}
+        end
+        
+        subgraph "Response Generation Paths"
+            QUOTE_PATH[Quote Response Generator]
+            PRODUCT_PATH[Product Response Generator]
+            GENERAL_PATH[General Response Generator]
+        end
+        
+        subgraph "Specialized AI Components"
+            HYBRID_RETRIEVER[Hybrid Product Retriever Agent]
             QUOTE_AGENT[Quote Generation Agent]
-            QUICK_RESPONSE[Quick Response Generator]
-            HYBRID_RETRIEVER[Hybrid Product Retriever]
-            STANDARD_RETRIEVER[Standard Product Retriever]
-            DYNAMIC_EXTRACTOR[Dynamic Extraction Agent]
+            CONVERSATION_MEMORY[Conversation Memory]
         end
     end
 
     %% AI Service Factory
     subgraph "AI Service Factory"
         AI_FACTORY[AI Service Factory]
+        BASE_PROVIDER[Base AI Provider]
         
         subgraph "AI Providers"
             AZURE_PROVIDER[Azure OpenAI Provider]
             HF_PROVIDER[HuggingFace Provider]
-            TOKEN_TRACKER[Token Tracker]
+            TOKEN_TRACKER[Token Tracker & Usage]
         end
     end
 
@@ -74,6 +84,7 @@ graph TB
         PITCH_SVC[Pitch Deck Service]
         SPEECH_SVC[Speech Service]
         PROMPT_MGR[Prompt Manager]
+        METRICS_SVC[Metrics Service]
     end
 
     %% Data Storage
@@ -110,48 +121,52 @@ graph TB
     APP --> SPEECH
     APP --> RECOMMENDATIONS
 
-    %% Main Route to Enhanced Sales Agent
-    LEADS --> ENHANCED_SALES
-    CHAT --> ENHANCED_SALES
-    RECOMMENDATIONS --> ENHANCED_SALES
+    %% Main Route to Simple Conversational Agent
+    LEADS --> SIMPLE_AGENT
+    CHAT --> SIMPLE_AGENT
+    RECOMMENDATIONS --> SIMPLE_AGENT
 
-    %% Enhanced Sales Agent Internal Flow
-    ENHANCED_SALES --> CONVERSATION_FLOW
-    ENHANCED_SALES --> QUOTE_AGENT
-    ENHANCED_SALES --> QUICK_RESPONSE
-    ENHANCED_SALES --> HYBRID_RETRIEVER
-    ENHANCED_SALES --> STANDARD_RETRIEVER
-    ENHANCED_SALES --> DYNAMIC_EXTRACTOR
+    %% Simple Conversational Agent Internal Flow
+    SIMPLE_AGENT --> INTENT_ANALYSIS
+    INTENT_ANALYSIS --> LANG_DETECT
+    LANG_DETECT --> INTENT_ROUTER
+    
+    %% Intent-Based Routing
+    INTENT_ROUTER -->|Quote Intent| QUOTE_PATH
+    INTENT_ROUTER -->|Product Intent| PRODUCT_PATH
+    INTENT_ROUTER -->|General Intent| GENERAL_PATH
+    
+    %% Response Path Dependencies
+    QUOTE_PATH --> QUOTE_AGENT
+    QUOTE_PATH --> HYBRID_RETRIEVER
+    PRODUCT_PATH --> HYBRID_RETRIEVER
+    GENERAL_PATH --> CONVERSATION_MEMORY
+    
+    %% Component Interactions
+    SIMPLE_AGENT --> CONVERSATION_MEMORY
+    SIMPLE_AGENT --> BASE_PROVIDER
+    HYBRID_RETRIEVER --> BASE_PROVIDER
+    QUOTE_AGENT --> BASE_PROVIDER
 
-    %% AI Agent to AI Factory
-    ENHANCED_SALES --> AI_FACTORY
-    CONVERSATION_FLOW --> AI_FACTORY
-    QUOTE_AGENT --> AI_FACTORY
-    QUICK_RESPONSE --> AI_FACTORY
-    HYBRID_RETRIEVER --> AI_FACTORY
-    STANDARD_RETRIEVER --> AI_FACTORY
-    DYNAMIC_EXTRACTOR --> AI_FACTORY
-
-    %% AI Factory to Providers
+    %% AI Factory Integration
+    BASE_PROVIDER --> AI_FACTORY
     AI_FACTORY --> AZURE_PROVIDER
     AI_FACTORY --> HF_PROVIDER
     AI_FACTORY --> TOKEN_TRACKER
 
-    %% Providers to External AI
+    %% External AI Connections
     AZURE_PROVIDER --> AZURE_OPENAI
-    CHROMA_SVC --> AZURE_EMBED
+    HYBRID_RETRIEVER --> AZURE_EMBED
     SPEECH_SVC --> WHISPER_MODELS
 
     %% Business Service Integration
-    ENHANCED_SALES --> ELASTICSEARCH_SVC
-    ENHANCED_SALES --> CHROMA_SVC
+    SIMPLE_AGENT --> PROMPT_MGR
+    SIMPLE_AGENT --> METRICS_SVC
     HYBRID_RETRIEVER --> ELASTICSEARCH_SVC
     HYBRID_RETRIEVER --> CHROMA_SVC
-    STANDARD_RETRIEVER --> ELASTICSEARCH_SVC
     QUOTE_AGENT --> PDF_SVC
     QUOTE_AGENT --> PITCH_SVC
     SPEECH --> SPEECH_SVC
-    ENHANCED_SALES --> PROMPT_MGR
 
     %% Direct API Routes
     QUOTES --> QUOTE_AGENT
@@ -165,6 +180,7 @@ graph TB
     PDF_SVC --> FILES
     PITCH_SVC --> FILES
     APP --> FILES
+    METRICS_SVC --> POSTGRES
 
     %% Monitoring Connections
     ELASTICSEARCH --> KIBANA
@@ -175,8 +191,10 @@ graph TB
     classDef client fill:#e3f2fd
     classDef gateway fill:#bbdefb
     classDef app fill:#e1bee7
-    classDef enhanced_agent fill:#ffecb3
-    classDef ai_agent fill:#fff9c4
+    classDef simple_agent fill:#ffecb3
+    classDef intent_analysis fill:#fff3e0
+    classDef response_path fill:#f3e5f5
+    classDef ai_component fill:#fff9c4
     classDef ai_factory fill:#f0f4c3
     classDef external_ai fill:#e8f5e8
     classDef service fill:#c8e6c9
@@ -186,86 +204,215 @@ graph TB
     class CLIENT,ADMIN,API_CLIENT client
     class NGINX gateway
     class APP,LEADS,QUOTES,CHAT,ADMIN_API,SPEECH,RECOMMENDATIONS,CORS,AUTH,LOG app
-    class ENHANCED_SALES enhanced_agent
-    class CONVERSATION_FLOW,QUOTE_AGENT,QUICK_RESPONSE,HYBRID_RETRIEVER,STANDARD_RETRIEVER,DYNAMIC_EXTRACTOR ai_agent
-    class AI_FACTORY,AZURE_PROVIDER,HF_PROVIDER,TOKEN_TRACKER ai_factory
+    class SIMPLE_AGENT simple_agent
+    class INTENT_ANALYSIS,LANG_DETECT,INTENT_ROUTER intent_analysis
+    class QUOTE_PATH,PRODUCT_PATH,GENERAL_PATH response_path
+    class HYBRID_RETRIEVER,QUOTE_AGENT,CONVERSATION_MEMORY ai_component
+    class AI_FACTORY,BASE_PROVIDER,AZURE_PROVIDER,HF_PROVIDER,TOKEN_TRACKER ai_factory
     class AZURE_OPENAI,AZURE_EMBED,WHISPER_MODELS external_ai
-    class ELASTICSEARCH_SVC,CHROMA_SVC,PDF_SVC,PITCH_SVC,SPEECH_SVC,PROMPT_MGR service
+    class ELASTICSEARCH_SVC,CHROMA_SVC,PDF_SVC,PITCH_SVC,SPEECH_SVC,PROMPT_MGR,METRICS_SVC service
     class POSTGRES,ELASTICSEARCH,CHROMA,FILES storage
     class KIBANA,ADMINER,HEALTH monitor
 ```
 
-## Enhanced Architecture Analysis
+## Simple Conversational Agent Architecture Analysis
 
-### Key Architectural Components from `enhanced_b2b_sales_agent.py`:
+### Key Architectural Components from `simple_conversational_agent.py`:
 
-#### 1. **Enhanced B2B Sales Agent (Main Orchestrator)**
-- **Central Intelligence Hub**: Manages entire conversation flow and decision-making
-- **Multi-Agent Coordinator**: Orchestrates specialized AI agents based on conversation stage
-- **Caching System**: Maintains product recommendations cache for efficiency
-- **Lazy User Detection**: Adapts conversation style based on user interaction patterns
+#### 1. **Simple Conversational Agent (Main Orchestrator)**
+- **Conversation Orchestrator**: Manages entire conversation flow and response generation
+- **Intent-Based Routing**: Uses Pydantic models to analyze and route conversations
+- **Language-Aware Responses**: Detects language and provides localized responses
+- **Memory Management**: Maintains conversation context and memory
+- **Provider Abstraction**: Works with any base AI provider
 
-#### 2. **Specialized AI Agent Hierarchy**
-- **Conversation Flow Manager**: AI-powered conversation state analysis and flow control
-- **Quote Generation Agent**: Handles complex quote generation with PDF/pitch deck creation
-- **Quick Response Generator**: Provides fast contextual responses
-- **Hybrid Product Retriever**: Combines Elasticsearch (keyword) + ChromaDB (semantic) search
-- **Standard Product Retriever**: Fallback to Elasticsearch-only search
-- **Dynamic Extraction Agent**: Extracts requirements and context from conversations
+#### 2. **Conversation Intent Analysis**
+- **ConversationIntent Pydantic Model**: Structured analysis of user intent
+- **Intent Types**: 'product_inquiry', 'quote_request', 'general_chat', 'technical_question', 'pricing_inquiry'
+- **Confidence Scoring**: Provides confidence levels for decision-making
+- **Missing Information Detection**: Identifies what information is needed
+- **Conservative Product Retrieval**: Only retrieves products when explicitly needed
 
-#### 3. **AI Service Factory Pattern**
-- **Provider Abstraction**: Supports multiple AI providers (Azure OpenAI, HuggingFace)
-- **Token Tracking**: Monitors AI service usage and costs
-- **Configuration Management**: Handles API keys, endpoints, and model configurations
+#### 3. **Three-Path Response Generation**
+- **Quote Response Path**: Handles quote requests with missing info gathering
+- **Product Response Path**: Manages product recommendations and full build suggestions
+- **General Response Path**: Focuses on discovery and natural conversation flow
+- **Dynamic Language Support**: Automatically detects and responds in appropriate language
 
-#### 4. **Intelligent Flow Management**
+#### 4. **Specialized AI Components**
+- **HybridProductRetrieverAgent**: Combines Elasticsearch + ChromaDB for intelligent search
+- **QuoteGenerationAgent**: Handles complex quote generation with PDF/pitch deck creation
+- **Conversation Memory**: Maintains context across conversation turns
+
+#### 5. **Intelligence Flow Management**
 ```mermaid
 flowchart LR
-    A[User Message] --> B[Enhanced Sales Agent]
-    B --> C[Conversation Flow Analysis]
-    C --> D{Stage Decision}
-    D -->|Discovery| E[Discovery Handler]
-    D -->|Recommendation| F[Product Retrieval]
-    D -->|Quote Ready| G[Quote Generation]
-    F --> H[Recommendation Presentation]
-    G --> I[PDF + Pitch Deck Generation]
+    A[User Message] --> B[Simple Conversational Agent]
+    B --> C[Intent Analysis<br/>Pydantic Model]
+    C --> D{Intent Router}
+    D -->|Quote Request| E[Quote Response Path]
+    D -->|Product Inquiry| F[Product Response Path]
+    D -->|General Chat| G[General Response Path]
+    E --> H[Quote Generation + Enhancement]
+    F --> I[Product Retrieval + Recommendation]
+    G --> J[Discovery + Natural Flow]
 ```
 
-#### 5. **Hybrid Search Intelligence**
-- **Elasticsearch**: Fast keyword matching for exact product specifications
-- **ChromaDB**: Semantic similarity for understanding intent and context
-- **Intelligent Merging**: Combines results with weighted scoring
-- **Confidence Assessment**: Provides search confidence metrics
-
 #### 6. **Advanced Features**
-- **Multi-Modal Support**: Text and speech processing
-- **Conversation Caching**: Prevents redundant processing
-- **Progressive Discovery**: Stage-based information gathering
-- **Quote Readiness Detection**: AI-powered decision making for quote timing
-- **Pitch Deck Generation**: Automated presentation creation
+- **Language Detection & Localization**: Supports Japanese and English responses
+- **Conservative Discovery Approach**: Focuses on information gathering before product recommendations
+- **Quote Enhancement**: Automatically adds quote details, PDFs, and pitch decks to responses
+- **Metrics Integration**: Tracks quote generation success/failure rates
+- **Error Handling**: Graceful fallbacks for AI service failures
+
+#### 7. **Conversation Flow Strategy**
+- **Natural Conversation**: Prioritizes human-like, helpful interactions
+- **Discovery-First Approach**: Gathers information before making recommendations
+- **Context-Aware**: Uses conversation history and customer context
+- **Requirements Completion**: Tracks missing information for quotes/recommendations
 
 ## Data Flow Analysis
 
-### 1. **Conversation Processing Flow**
+### 1. **Intent Analysis Flow**
 ```
-User Input → Enhanced Sales Agent → Conversation Flow Analysis → Stage Routing → Specialized Agent → AI Provider → Response Generation
-```
-
-### 2. **Product Recommendation Flow**
-```
-Requirements Analysis → Hybrid Retriever → (Elasticsearch + ChromaDB) → Result Merging → Recommendation Ranking → Presentation
+User Input → Simple Conversational Agent → ConversationIntent Analysis (Pydantic) → Intent Router → Response Path Selection
 ```
 
-### 3. **Quote Generation Flow**
+**Detailed Steps:**
+1. **Message Reception**: User message received with conversation context
+2. **Intent Analysis**: Pydantic model analyzes last 3 messages for intent
+3. **Confidence Assessment**: System evaluates confidence level (0.0-1.0)
+4. **Missing Info Detection**: Identifies gaps in requirements/context
+5. **Route Selection**: Router directs to appropriate response generation path
+
+### 2. **Quote Generation Flow**
 ```
-Quote Request → Enhanced Sales Agent → Quote Agent → PDF Generation → Pitch Deck Generation → Response Enhancement
+Quote Intent → Missing Info Check → Quote Generation Agent → PDF + Pitch Deck Generation → Language-Aware Enhancement → Response
 ```
 
-### 4. **Intelligence Layers**
-- **L1**: FastAPI Routes (HTTP handling)
-- **L2**: Enhanced Sales Agent (orchestration)
-- **L3**: Specialized Agents (domain expertise)  
-- **L4**: AI Service Factory (provider abstraction)
-- **L5**: External AI Services (Azure OpenAI, embeddings)
+**Detailed Process:**
+1. **Quote Intent Detection**: High confidence quote request identified
+2. **Requirements Validation**: Check for complete customer information
+3. **Quote Agent Activation**: QuoteGenerationAgent processes conversation history
+4. **Document Generation**: PDF quote and PowerPoint pitch deck created
+5. **Response Enhancement**: Original response enhanced with quote details
+6. **Localization**: Language detection applies appropriate formatting
+7. **Metrics Recording**: Success/failure tracked for analytics
 
-This architecture demonstrates a sophisticated multi-agent AI system with intelligent conversation flow management, hybrid search capabilities, and automated document generation - all orchestrated through the Enhanced B2B Sales Agent as the central intelligence hub. 
+### 3. **Product Recommendation Flow**
+```
+Product Intent → Requirements Analysis → Hybrid Retriever → (Elasticsearch + ChromaDB) → Category Grouping → Full Build Recommendation → Response
+```
+
+**Detailed Process:**
+1. **Product Intent Verification**: Conservative check for genuine product need
+2. **Context Extraction**: LLM analyzes conversation for requirements
+3. **Hybrid Search**: Elasticsearch (keyword) + ChromaDB (semantic) search
+4. **Category Organization**: Products grouped by type (CPU, GPU, Memory, etc.)
+5. **Build Recommendation**: AI suggests complete system configurations
+6. **Confidence Assessment**: Search confidence and relevance scoring
+
+### 4. **General Conversation Flow**
+```
+General Intent → Discovery Mode → Natural Response Generation → Follow-up Questions → Relationship Building
+```
+
+**Detailed Process:**
+1. **Discovery Activation**: Focus on learning customer needs
+2. **Context Building**: Gather industry, budget, timeline information
+3. **Natural Response**: Conversational, helpful responses without sales pressure
+4. **Question Generation**: Intelligent follow-up questions suggested
+5. **Relationship Development**: Build trust through knowledgeable assistance
+
+### 5. **Language Detection & Localization Flow**
+```
+Response Generated → Language Detection → Localization Rules → Currency/Date Formatting → Cultural Adaptation → Final Response
+```
+
+**Supported Features:**
+- **Automatic Detection**: Uses `langdetect` library for language identification
+- **Bilingual Support**: English and Japanese localization
+- **Cultural Adaptation**: Appropriate tone and formatting for each language
+- **Currency Formatting**: Localized pricing display
+- **Date Formatting**: Region-appropriate date representations
+
+## Intelligence Layers
+
+### **L1: FastAPI Routes (HTTP Interface)**
+- **Responsibility**: HTTP request/response handling, authentication, validation
+- **Components**: LEADS, QUOTES, CHAT, ADMIN_API, SPEECH, RECOMMENDATIONS routes
+- **Features**: CORS, authentication middleware, request logging
+
+### **L2: Simple Conversational Agent (Orchestration)**
+- **Responsibility**: Conversation orchestration, intent analysis, response routing
+- **Components**: Intent Analysis, Language Detection, Response Path Routing
+- **Features**: Pydantic-based structured analysis, conversation memory management
+
+### **L3: Response Generation Paths (Specialized Handling)**
+- **Responsibility**: Domain-specific response generation and enhancement
+- **Components**: Quote Path, Product Path, General Path generators
+- **Features**: Context-aware responses, missing information detection
+
+### **L4: AI Components (Domain Expertise)**
+- **Responsibility**: Specialized AI capabilities and business logic
+- **Components**: HybridProductRetriever, QuoteGenerationAgent, Conversation Memory
+- **Features**: Hybrid search, document generation, context preservation
+
+### **L5: Base AI Provider & External Services**
+- **Responsibility**: Core AI capabilities and external integrations
+- **Components**: Azure OpenAI, Embeddings API, Whisper Models
+- **Features**: Language models, embeddings, speech processing
+
+## Key Architectural Differentiators
+
+### 1. **Conversation-First Design**
+- **Philosophy**: Natural, helpful conversations over rigid sales processes
+- **Implementation**: Discovery-focused interactions with progressive information gathering
+- **Benefits**: Higher customer engagement, better relationship building
+
+### 2. **Conservative Product Retrieval**
+- **Philosophy**: Only retrieve products when genuinely helpful and appropriate
+- **Implementation**: Strict requirements for triggering product searches
+- **Benefits**: Avoids pushy sales tactics, focuses on customer needs
+
+### 3. **Intent-Based Architecture**
+- **Philosophy**: Structured decision-making using Pydantic models
+- **Implementation**: ConversationIntent model with confidence scoring
+- **Benefits**: Reliable routing, explainable AI decisions, consistent behavior
+
+### 4. **Multi-Modal Enhancement**
+- **Philosophy**: Rich, comprehensive responses beyond text
+- **Implementation**: Automatic PDF generation, pitch deck creation, localization
+- **Benefits**: Professional presentation, multi-format accessibility
+
+### 5. **Language-Aware Intelligence**
+- **Philosophy**: Culturally appropriate, localized interactions
+- **Implementation**: Automatic language detection with cultural adaptation
+- **Benefits**: Global accessibility, cultural sensitivity
+
+### 6. **Provider Abstraction Pattern**
+- **Philosophy**: Flexibility in AI service providers
+- **Implementation**: Base provider interface with multiple implementations
+- **Benefits**: Vendor independence, cost optimization, redundancy
+
+## Performance Characteristics
+
+### **Scalability Features**
+- **Stateless Design**: Each conversation turn is independent
+- **Caching Strategy**: Product recommendations cached for efficiency
+- **Memory Management**: Conversation history limited to recent messages
+- **Provider Failover**: Graceful handling of AI service failures
+
+### **Quality Assurance**
+- **Confidence Scoring**: All AI decisions include confidence metrics
+- **Fallback Mechanisms**: Graceful degradation when services fail
+- **Error Tracking**: Comprehensive error logging and metrics
+- **Usage Monitoring**: Token consumption and cost tracking
+
+### **Business Intelligence**
+- **Conversion Tracking**: Quote generation success rates
+- **Conversation Analytics**: Intent distribution and success patterns
+- **Performance Metrics**: Response times and service health
+- **Customer Insights**: Interaction patterns and preferences
+
+This architecture represents a sophisticated, conversation-first B2B sales assistant that prioritizes natural customer interactions while providing intelligent product recommendations and automated quote generation when appropriate. The system is designed for scalability, maintainability, and excellent customer experience.

@@ -16,6 +16,7 @@ from dependencies import get_speech_service
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from config import settings
 from services.language_service import LanguageService
+from services.auth_service import get_current_active_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -302,6 +303,7 @@ async def handle_voice_message(
     lead_id: Optional[str] = Form(None),
     conversation_stage: Optional[str] = Form("discovery"),
     language: Optional[str] = Form(None),
+    current_user = Depends(get_current_active_user),
     db: Session = Depends(get_db),
     speech_service: SpeechService = Depends(get_speech_service)
 ):
@@ -309,8 +311,12 @@ async def handle_voice_message(
     Handle voice input just like text input, with an extra transcription step.
     The transcribed text is processed through the enhanced sales chat pipeline.
     Also includes text-to-speech for the response.
+    Requires authentication and uses role-based access control.
     """
     try:
+        # Import required dependencies
+        from services.auth_service import get_current_active_user, check_lead_access, get_lead_access_filter
+        
         # Validate audio file
         if not audio.content_type.startswith(('audio/', 'video/')):
             raise HTTPException(
@@ -343,36 +349,40 @@ async def handle_voice_message(
                     detail="Failed to transcribe audio. Please check audio format and quality."
                 )
         
-        # Get the transcribed text
         text_message = transcription_result['text'].strip()
+        logger.info(f"🗣️ Transcribed voice message: '{text_message}' (Language: {transcription_result.get('language', 'auto')})")
         
-        # Enhanced language detection from transcribed text
-        transcribed_language_info = None
-        detected_language = language or "en"  # Default fallback
-        primary_language = language or "en"   # Default fallback
-        language_confidence = 1.0             # Default confidence
-        
-        if text_message:
-            # Detect language from transcribed text
-            transcribed_language_info = language_service.detect_language(text_message)
-            detected_language = transcribed_language_info['primary_language']
-            primary_language = detected_language
-            language_confidence = transcribed_language_info['primary_confidence']
-            
-            logger.info(f"🌐 Voice message language detection: {detected_language} "
-                       f"(confidence: {language_confidence:.2f})")
-        
-        # Additional validation for very short transcriptions that might be noise
-        if len(text_message) < 2:
-            logger.warning(f"Very short transcription detected: '{text_message}' - might be noise")
+        if not text_message:
             raise HTTPException(
                 status_code=400,
-                detail="Transcription too short - please speak more clearly or check audio quality."
+                detail="Empty transcription - no speech detected"
             )
-            
-        logger.info(f"Transcribed text: {text_message}")
         
-        # Handle lead management
+        # Automatic language detection and response language setting
+        detected_language = None
+        response_language = "en"  # Default fallback
+        
+        # Check detected language from transcription
+        if transcription_result.get('language'):
+            detected_language = transcription_result['language']
+            response_language = detected_language if detected_language in settings.SUPPORTED_LANGUAGES else "en"
+        # If language was explicitly provided
+        elif language and language in settings.SUPPORTED_LANGUAGES:
+            response_language = language
+        # Use language service for detection if available and confidence is high
+        elif hasattr(language_service, 'detect_language'):
+            try:
+                detection_result = language_service.detect_language(text_message)
+                if (detection_result.get('confidence', 0) >= settings.LANGUAGE_DETECTION_CONFIDENCE_THRESHOLD
+                    and detection_result.get('language') in settings.SUPPORTED_LANGUAGES):
+                    detected_language = detection_result['language']
+                    response_language = detected_language
+            except Exception as e:
+                logger.warning(f"Language detection failed: {e}")
+        
+        logger.info(f"🌐 Language - Detected: {detected_language}, Response: {response_language}")
+        
+        # Handle lead management with role-based access control
         if not lead_id:
             lead_id = str(uuid.uuid4())
             lead = DBLead(
@@ -381,32 +391,22 @@ async def handle_voice_message(
                 contact_name="Unknown",
                 email="unknown@example.com",
                 status=LeadStatus.NEW,
+                assigned_user_id=current_user.id,  # Associate with current user
+                organization_id=current_user.organization_id,  # Associate with user's organization
                 created_at=datetime.now()
             )
             db.add(lead)
             db.commit()
-            logger.info(f"Created new lead: {lead_id}")
+            logger.info(f"Created new lead: {lead_id} for user: {current_user.id}")
         else:
-            # Check if lead exists
-            lead = db.query(DBLead).filter(DBLead.id == lead_id).first()
-            if not lead:
-                # Create new lead with the provided ID
-                lead = DBLead(
-                    id=lead_id,
-                    company_name="Unknown",
-                    contact_name="Unknown",
-                    email="unknown@example.com",
-                    status=LeadStatus.NEW,
-                    created_at=datetime.now()
-                )
-                db.add(lead)
-                db.commit()
-                logger.info(f"Created new lead with provided ID: {lead_id}")
+            # Verify user has access to this lead using role-based access control
+            lead = check_lead_access(lead_id, current_user, db)
         
-        # Save user message
+        # Save user message with user association
         user_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
+            user_id=current_user.id,  # Associate with current user
             message_type=MessageType.USER.value,
             content=text_message,
             stage=conversation_stage,
@@ -420,28 +420,30 @@ async def handle_voice_message(
         db.add(user_message)
         db.commit()
         
-        # Get conversation history
+        # Get conversation history with role-based filtering
+        lead_filters = get_lead_access_filter(current_user)
         messages = []
-        existing_messages = db.query(DBChatMessage).filter(
-            DBChatMessage.lead_id == lead_id
+        existing_messages = db.query(DBChatMessage).join(DBLead).filter(
+            DBChatMessage.lead_id == lead_id,
+            *lead_filters  # Apply role-based filtering
         ).order_by(DBChatMessage.created_at).all()
         
         for msg in existing_messages:
             role = "user" if msg.message_type == MessageType.USER.value else "assistant"
             messages.append(AIMessage(role=role, content=msg.content))
         
-        # Get customer context
+        # Get customer context from the lead (already verified accessible)
         customer_context = None
-        lead_record = db.query(DBLead).filter(DBLead.id == lead_id).first()
-        if lead_record:
+        if lead:
             customer_context = {
-                "company_name": lead_record.company_name,
-                "contact_name": lead_record.contact_name,
-                "email": lead_record.email,
-                "company_size": getattr(lead_record, 'company_size', None),
-                "industry": getattr(lead_record, 'industry', None),
-                "budget_range": getattr(lead_record, 'budget_range', None),
-                "timeline": getattr(lead_record, 'decision_timeline', None)
+                "company_name": lead.company_name,
+                "contact_name": lead.contact_name,
+                "email": lead.email,
+                "company_size": getattr(lead, 'company_size', None),
+                "industry": getattr(lead, 'industry', None),
+                "budget_range": getattr(lead, 'budget_range', None),
+                "timeline": getattr(lead, 'decision_timeline', None),
+                "user_organization": current_user.organization.name if current_user.organization else "Unknown"
             }
         
         # Create Simple Conversational Agent with multilingual support

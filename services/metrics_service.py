@@ -3,7 +3,7 @@ from fastapi import Request, Response
 import time
 from typing import Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus
 import json
 import os
@@ -724,7 +724,7 @@ class MetricsService:
         """Update database connection metrics with proper health check"""
         try:
             # Test database connection with a simple query
-            result = db.execute("SELECT 1")
+            result = db.execute(text("SELECT 1"))
             result.fetchone()
             
             # If we get here, database is healthy
@@ -733,7 +733,7 @@ class MetricsService:
             
             # Get active connections count
             try:
-                result = db.execute("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
+                result = db.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"))
                 active_connections = result.scalar()
                 b2b_db_connections_active.set(active_connections)
             except Exception as e:
