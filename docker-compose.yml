@@ -3,6 +3,7 @@ version: '3.8'
 services:
   # Main B2B Sales Backend Application
   b2b-sales-backend:
+    user: root
     build: 
       context: .
       dockerfile: Dockerfile
