@@ -464,6 +464,11 @@ class SpeechService:
         """
         if self.model is None:
             await self.initialize()
+
+        if isinstance(audio_data, bytes):
+            audio_bytes = audio_data
+        else:
+            audio_bytes = audio_data.read()
             
         max_retries = 3
         retry_delay = 1  # seconds
