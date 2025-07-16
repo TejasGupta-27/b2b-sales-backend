@@ -1671,10 +1671,12 @@ EXAMPLE KEYWORD_QUERY STRUCTURE FOR "i9 CPU":
       "should": [
         {{"match_phrase": {{"name": {{"query": "i9 CPU", "boost": 8.0}}}}}},
         {{"match_phrase": {{"description": {{"query": "i9 CPU", "boost": 6.0}}}}}},
-        {{"match": {{"name": {{"query": "i9", "boost": 4.0}}}}}},
-        {{"match": {{"name": {{"query": "CPU", "boost": 4.0}}}}}},
-        {{"match": {{"description": {{"query": "i9", "boost": 3.0}}}}}},
-        {{"match": {{"description": {{"query": "CPU", "boost": 3.0}}}}}},
+        {{"match": {{"name": {{"query": "i9", "boost": 6.0}}}}}},
+        {{"match": {{"name": {{"query": "CPU", "boost": 6.0}}}}}},
+        {{"match": {{"description": {{"query": "i9", "boost": 4.0}}}}}},
+        {{"match": {{"description": {{"query": "CPU", "boost": 4.0}}}}}},
+        {{"match": {{"features": {{"query": "i9", "boost": 3.0}}}}}},
+        {{"match": {{"features": {{"query": "CPU", "boost": 3.0}}}}}},
         {{"match": {{"category": {{"query": "cpu", "boost": 2.0}}}}}}
       ],
       "minimum_should_match": 1
@@ -1682,6 +1684,8 @@ EXAMPLE KEYWORD_QUERY STRUCTURE FOR "i9 CPU":
   }},
   "size": 20
 }}
+
+IMPORTANT: Replace ALL instances of "product" in the default query with the actual search terms from the requirements. Use the exact terms like "i9", "CPU", "Intel", etc.
 
 IMPORTANT: 
 - Use the actual search terms from the requirements, not generic terms
@@ -1981,6 +1985,15 @@ IMPORTANT:
             # Use the AI-generated keyword query
             query = dynamic_query.keyword_query
             query["size"] = size
+            
+            # Debug: Log the actual query being used
+            logger.info(f"🔍 AI-Generated Keyword Query:")
+            try:
+                logger.info(f"   Query Structure: {json.dumps(query, indent=2)}")
+            except (TypeError, ValueError):
+                logger.info(f"   Query Structure: {str(query)}")
+            logger.info(f"   Search Terms Used: {dynamic_query.semantic_query}")
+            logger.info(f"   Field Priorities: {dynamic_query.field_priorities}")
             
             # Add filters if suggested by AI
             if dynamic_query.suggested_filters:
