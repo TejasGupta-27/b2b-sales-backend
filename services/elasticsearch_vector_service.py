@@ -1703,6 +1703,12 @@ IMPORTANT:
                     DynamicQueryGeneration
                 )
                 
+                print(f"🧠 AI Query Generation SUCCESS:")
+                print(f"   Search Strategy: {dynamic_query.search_strategy}")
+                print(f"   Categories: {dynamic_query.category_filters}")
+                print(f"   Confidence: {dynamic_query.confidence:.1%}")
+                print(f"   Reasoning: {dynamic_query.reasoning}")
+                print(f"   Keyword Query: {dynamic_query.keyword_query}")
                 logger.info(f"🧠 AI Query Generation SUCCESS:")
                 logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
                 logger.info(f"   Categories: {dynamic_query.category_filters}")
@@ -1729,6 +1735,8 @@ IMPORTANT:
         search_type: str
     ) -> DynamicQueryGeneration:
         """Fallback query generation when AI is not available"""
+        print("🔄 Using fallback query generation (AI not available or failed)")
+        print(f"🔄 Fallback requirements: {requirements}")
         logger.info("🔄 Using fallback query generation (AI not available or failed)")
         logger.info(f"🔄 Fallback requirements: {requirements}")
         
@@ -1987,6 +1995,13 @@ IMPORTANT:
             query["size"] = size
             
             # Debug: Log the actual query being used
+            print(f"🔍 AI-Generated Keyword Query:")
+            print(f"   Search Terms Used: {dynamic_query.semantic_query}")
+            print(f"   Field Priorities: {dynamic_query.field_priorities}")
+            try:
+                print(f"   Query Structure: {json.dumps(query, indent=2)}")
+            except (TypeError, ValueError):
+                print(f"   Query Structure: {str(query)}")
             logger.info(f"🔍 AI-Generated Keyword Query:")
             try:
                 logger.info(f"   Query Structure: {json.dumps(query, indent=2)}")

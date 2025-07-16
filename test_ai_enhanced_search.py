@@ -6,6 +6,7 @@ Interactive test script for AI-enhanced search functionality
 import asyncio
 import sys
 import os
+import json
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -64,6 +65,10 @@ async def interactive_test():
                 print_config()
                 continue
                 
+            if user_input.lower() == 'debug':
+                await run_debug_tests(hybrid_retriever)
+                continue
+                
             # Test the user's query
             await test_custom_query(hybrid_retriever, user_input)
             
@@ -78,6 +83,7 @@ def print_help():
     print("\n📋 Available Commands:")
     print("  help     - Show this help message")
     print("  demo     - Run predefined demo queries")
+    print("  debug    - Run debug tests for AI-enhanced search")
     print("  config   - Show current configuration")
     print("  quit/exit/q - Exit the test")
     print("\n📝 Query Examples:")
@@ -86,6 +92,8 @@ def print_help():
     print("  - 'Need storage solution for small business'")
     print("  - 'High-performance CPU for AI development'")
     print("  - 'Monitor for professional color work'")
+    print("  - 'i9 CPU for high-performance computing'")
+    print("  - 'RTX 4080 graphics card for gaming'")
     print()
 
 def print_config():
@@ -154,7 +162,7 @@ async def test_custom_query(hybrid_retriever, query: str):
             print(f"   AI Enhanced: {result.get('ai_enhanced', False)}")
             print(f"   Retrieval Confidence: {result.get('retrieval_confidence', 0):.1%}")
             
-            # Show top products
+            # Show top products with enhanced details
             products = result.get('products', [])
             if products:
                 print(f"\n🏆 Top Products Found:")
@@ -165,6 +173,8 @@ async def test_custom_query(hybrid_retriever, query: str):
                     print(f"      Source: {product.get('search_source', 'Unknown')}")
                     if product.get('ai_query_generated'):
                         print(f"      AI Generated: Yes (Confidence: {product.get('ai_confidence', 0):.1%})")
+                    if product.get('rrf_score'):
+                        print(f"      RRF Score: {product.get('rrf_score', 0):.4f}")
                     print()
             
             # Show search methods used
@@ -185,6 +195,73 @@ async def test_custom_query(hybrid_retriever, query: str):
         import traceback
         print(traceback.format_exc())
 
+async def run_debug_tests(hybrid_retriever):
+    """Run specific debug tests for AI-enhanced search improvements"""
+    
+    print("\n🔧 Running Debug Tests for AI-Enhanced Search...")
+    print("=" * 60)
+    
+    debug_queries = [
+        "i9 CPU for high-performance computing",
+        "RTX 4080 graphics card for gaming",
+        "32GB DDR5 memory for workstation",
+        "1TB NVMe SSD for fast storage",
+        "850W power supply for gaming PC"
+    ]
+    
+    for i, query in enumerate(debug_queries, 1):
+        print(f"\n🔧 Debug Test {i}: '{query}'")
+        print("-" * 50)
+        
+        # Create specific test requirements
+        test_requirements = {
+            "technical_requirements": [query],
+            "search_keywords": query.split(),
+            "semantic_queries": [query],
+            "semantic_query": query,
+            "use_case": query
+        }
+        
+        try:
+            # Test AI-enhanced search with detailed output
+            test_result = await hybrid_retriever.test_ai_enhanced_search(test_requirements)
+            
+            if test_result['success']:
+                dynamic_query = test_result['dynamic_query']
+                print(f"✅ AI Query Generation:")
+                print(f"   Semantic Query: {dynamic_query['semantic_query']}")
+                print(f"   Search Strategy: {dynamic_query['search_strategy']}")
+                print(f"   Categories: {dynamic_query['category_filters']}")
+                print(f"   Confidence: {dynamic_query['confidence']:.1%}")
+                print(f"   Reasoning: {dynamic_query['reasoning']}")
+                
+                # Test individual search methods
+                print(f"\n🔍 Testing Individual Search Methods...")
+                
+                # Test vector search
+                if hybrid_retriever.vector_service:
+                    vector_results = await hybrid_retriever.vector_service.vector_search_products_with_ai_query(
+                        test_requirements, size=5
+                    )
+                    print(f"   Vector Search Results: {len(vector_results)} products")
+                    for j, product in enumerate(vector_results[:3]):
+                        print(f"     {j+1}. {product.get('name', 'Unknown')} (Score: {product.get('_similarity_score', 0):.3f})")
+                
+                # Test Elasticsearch search
+                if hybrid_retriever.vector_service:
+                    es_results = await hybrid_retriever.vector_service.elasticsearch_search_with_ai_query(
+                        test_requirements, size=5
+                    )
+                    print(f"   Elasticsearch Results: {len(es_results)} products")
+                    for j, product in enumerate(es_results[:3]):
+                        print(f"     {j+1}. {product.get('name', 'Unknown')} (Score: {product.get('_score', 0):.3f})")
+                
+            else:
+                print(f"❌ Debug test failed: {test_result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            print(f"❌ Debug test error: {e}")
+
 async def run_demo_queries(hybrid_retriever):
     """Run predefined demo queries"""
     
@@ -196,7 +273,9 @@ async def run_demo_queries(hybrid_retriever):
         "Looking for a professional workstation for video editing and 3D rendering. Need something that can handle 4K video.",
         "Need a storage solution for our small business. We need to backup important files and share them across the network.",
         "Looking for a high-end CPU for AI and machine learning development. Need something with lots of cores.",
-        "Need a professional monitor for color-accurate work. Something suitable for photo and video editing."
+        "Need a professional monitor for color-accurate work. Something suitable for photo and video editing.",
+        "i9 CPU for high-performance computing tasks",
+        "RTX 4080 graphics card for gaming and content creation"
     ]
     
     for i, query in enumerate(demo_queries, 1):
