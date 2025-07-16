@@ -127,7 +127,7 @@ class SimpleConversationalAgent(AIProvider):
         elif intent_analysis.should_retrieve_products and product_data:
             response = await self._generate_product_response(messages, customer_context, product_data, intent_analysis)
         else:
-            response = await self._generate_conversational_response(messages, customer_context, intent_analysis)
+            response = await self._generate_general_response(messages, customer_context, intent_analysis)
         
         # Step 4: Add metadata
         if not hasattr(response, 'metadata') or response.metadata is None:
@@ -155,6 +155,18 @@ class SimpleConversationalAgent(AIProvider):
         
         return response
     
+    async def _retrieve_relevant_products(
+        self, 
+        messages: List[AIMessage], 
+        customer_context: Optional[Dict[str, Any]], 
+        intent_analysis: ConversationIntent
+    ) -> Dict[str, Any]:
+        """Retrieve relevant products using the hybrid retriever"""
+        if self.hybrid_retriever:
+            return await self.hybrid_retriever.retrieve_products(messages, customer_context)
+        else:
+            return {'products': [], 'solutions': [], 'error': 'Hybrid retriever not available'}
+
     async def _analyze_conversation_intent(
         self, 
         messages: List[AIMessage], 
@@ -306,6 +318,8 @@ Note: You might want to learn more about their needs as the conversation progres
                     response = self._enhance_response_with_quote_info(response, quote)
                     
                     # Update metadata with quote information
+                    if not hasattr(response, 'metadata') or response.metadata is None:
+                        response.metadata = {}
                     response.metadata.update({
                         'quote_generated': True,
                         'quote_id': quote.get('quote_id'),
@@ -322,6 +336,8 @@ Note: You might want to learn more about their needs as the conversation progres
                     
             except Exception as e:
                 print(f"❌ Quote generation failed: {e}")
+                if not hasattr(response, 'metadata') or response.metadata is None:
+                    response.metadata = {}
                 response.metadata['quote_generation_error'] = str(e)
         else:
             print(f"⚠️ Not generating quote yet - missing info: {intent_analysis.missing_info}")
