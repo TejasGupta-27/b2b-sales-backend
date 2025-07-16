@@ -204,7 +204,21 @@ class ElasticsearchVectorService:
             await self._wait_for_elasticsearch_ready()
             await self.test_connection()
             await self.create_vector_indices()
-            logger.info("Elasticsearch Vector Service initialized successfully")
+            
+            # Get current stats to show product count
+            stats = await self.get_collection_stats()
+            logger.info(f"📊 Elasticsearch Status:")
+            logger.info(f"   Total Products: {stats['products_count']}")
+            logger.info(f"   Total Solutions: {stats['solutions_count']}")
+            
+            # Show category breakdown if there are products
+            if stats['products_count'] > 0 and 'category_breakdown' in stats:
+                logger.info(f"   Products by Category:")
+                for category, count in stats['category_breakdown'].items():
+                    if count > 0:
+                        logger.info(f"     {category}: {count} products")
+            
+            logger.info("✅ Elasticsearch Vector Service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Elasticsearch Vector Service: {e}")
             raise
@@ -466,8 +480,8 @@ class ElasticsearchVectorService:
             # Fallback to general field extraction
             text_parts.append(f"Type: {item_type}")
             
-            # Add common fields
-            common_fields = ['name', 'description', 'category', 'type', 'price', 'features', 'tags']
+            # Add common fields (including laptop-specific fields)
+            common_fields = ['name', 'title', 'description', 'category', 'type', 'price', 'features', 'tags', 'brand', 'processor', 'ram', 'hard drive', 'operating system']
             for field in common_fields:
                 value = item.get(field)
                 if value is not None:
@@ -1063,7 +1077,7 @@ class ElasticsearchVectorService:
     
     def _is_product_data(self, item: Dict[str, Any]) -> bool:
         """Check if item is product data"""
-        product_indicators = ['product_name', 'category', 'price', 'specifications']
+        product_indicators = ['product_name', 'category', 'price', 'specifications', 'title', 'brand']
         return any(key in item for key in product_indicators)
     
     def _is_solution_data(self, item: Dict[str, Any]) -> bool:
@@ -1073,7 +1087,7 @@ class ElasticsearchVectorService:
     
     def _is_valid_product(self, product: Dict[str, Any]) -> bool:
         """Validate product data"""
-        return bool(product.get('name') or product.get('product_name'))
+        return bool(product.get('name') or product.get('product_name') or product.get('title'))
     
     def _is_valid_solution(self, solution: Dict[str, Any]) -> bool:
         """Validate solution data"""
