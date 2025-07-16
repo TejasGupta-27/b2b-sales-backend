@@ -513,6 +513,9 @@ class ElasticsearchVectorService:
             if not doc.get("id"):
                 doc["id"] = f"product_{hash(str(product))}"
             
+            # Clean up document - remove empty field names and invalid fields
+            doc = {k: v for k, v in doc.items() if k and k.strip() and not k.startswith("__")}
+            
             # Clean up price field - convert string prices to float
             if "price" in doc and isinstance(doc["price"], str):
                 try:
