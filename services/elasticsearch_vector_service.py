@@ -1692,21 +1692,25 @@ IMPORTANT:
             try:
                 # Use Pydantic function calling for structured response
                 logger.info("🧠 Using AI for dynamic query generation...")
+                logger.info(f"🧠 Requirements passed to AI: {requirements}")
+                
                 dynamic_query = await self.llm_provider.generate_structured_response(
                     [AIMessage(role="user", content=query_generation_prompt)],
                     DynamicQueryGeneration
                 )
                 
-                logger.info(f"🧠 AI Query Generation:")
+                logger.info(f"🧠 AI Query Generation SUCCESS:")
                 logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
                 logger.info(f"   Categories: {dynamic_query.category_filters}")
                 logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
                 logger.info(f"   Reasoning: {dynamic_query.reasoning}")
+                logger.info(f"   Keyword Query: {dynamic_query.keyword_query}")
                 
                 return dynamic_query
                     
             except Exception as e:
                 logger.warning(f"AI query generation failed: {e}")
+                logger.warning(f"AI query generation error details: {type(e).__name__}: {str(e)}")
                 logger.info("🔄 Falling back to standard query generation...")
                 return self._fallback_query_generation(requirements, search_type)
                 
@@ -1721,6 +1725,8 @@ IMPORTANT:
         search_type: str
     ) -> DynamicQueryGeneration:
         """Fallback query generation when AI is not available"""
+        logger.info("🔄 Using fallback query generation (AI not available or failed)")
+        logger.info(f"🔄 Fallback requirements: {requirements}")
         
         # Extract the actual search terms from multiple sources
         search_terms = []
