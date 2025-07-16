@@ -11,6 +11,13 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+def get_product_name(product: Dict[str, Any]) -> str:
+    """Get product name, handling both 'name' and 'title' fields"""
+    return (product.get('name') or 
+            product.get('title') or 
+            product.get('product_name') or 
+            'Unknown Product')
+
 class ContextAnalysis(BaseModel):
     """LLM-powered context analysis for better product retrieval"""
     primary_need: str = Field(description="The main problem or need the customer is trying to solve")
@@ -36,7 +43,7 @@ class SimilarProductSearch(BaseModel):
 class RRFHybridFusion:
     """Reciprocal Rank Fusion (RRF) implementation for hybrid search results"""
     
-    def __init__(self, k: float = None):
+    def __init__(self, k: Optional[float] = None):
         """
         Initialize RRF with parameter k
         
@@ -65,7 +72,7 @@ class RRFHybridFusion:
         self, 
         elasticsearch_products: List[Dict], 
         vector_products: List[Dict],
-        max_results: int = None
+        max_results: Optional[int] = None
     ) -> List[Dict]:
         """
         Fuse product rankings using RRF with requirement-based diversity selection
@@ -164,7 +171,7 @@ class RRFHybridFusion:
         print(f"🎯 RRF Fusion complete: {len(fused_products)} unique products")
         print(f"   Top 5 RRF results:")
         for i, product in enumerate(fused_products[:5]):
-            print(f"     {i+1}. {product.get('name', 'Unknown')} (RRF: {product['rrf_score']:.4f}, Source: {product['search_source']})")
+            print(f"     {i+1}. {get_product_name(product)} (RRF: {product['rrf_score']:.4f}, Source: {product['search_source']})")
         
         return fused_products
     
@@ -235,6 +242,7 @@ class RRFHybridFusion:
             'networking': [],           # Important for connectivity
             'cases_accessories': [],    # Nice to have (cases, cables)
             'audio_video': [],          # Nice to have (speakers, webcams)
+            'laptops': [],              # Dedicated group for laptops
             'other': []                 # Catch-all
         }
         
@@ -264,7 +272,8 @@ class RRFHybridFusion:
             'os': 'other',
             'sound-card': 'audio_video',
             'thermal-paste': 'cases_accessories',
-            'fan-controller': 'power_cooling'
+            'fan-controller': 'power_cooling',
+            'laptop': 'laptops', 
         }
         
         # Track categories found for logging
@@ -334,6 +343,7 @@ class RRFHybridFusion:
             'networking': 1,           # Important for connectivity
             'cases_accessories': 1,    # Nice to have (cases, cables)
             'audio_video': 1,          # Nice to have (speakers, webcams)
+            'laptops': 1,               # Dedicated group for laptops
             'other': 1                 # Catch-all
         }
         
@@ -391,7 +401,7 @@ class RRFHybridFusion:
         elasticsearch_products: List[Dict],
         vector_products: List[Dict],
         categories: List[str],
-        max_results: int = None
+        max_results: Optional[int] = None
     ) -> List[Dict]:
         """
         Apply RRF fusion within each category and return balanced results.
@@ -467,9 +477,9 @@ class HybridProductRetrieverAgent(AIProvider):
     def __init__(
         self, 
         base_provider: AIProvider,
-        azure_embedding_endpoint: str = None,
-        azure_embedding_key: str = None,
-        rrf_k: float = None,
+        azure_embedding_endpoint: Optional[str] = None,
+        azure_embedding_key: Optional[str] = None,
+        rrf_k: Optional[float] = None,
         **kwargs
     ):
         super().__init__(**kwargs)

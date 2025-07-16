@@ -66,7 +66,8 @@ services:
 
   # PostgreSQL Database
   postgres:
-    image: postgres:15
+    user: root
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: b2b_sales
       POSTGRES_USER: postgres
@@ -74,7 +75,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+
+      - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
@@ -136,7 +138,8 @@ services:
       - monitoring
 
 volumes:
-
+  postgres_data:
+    driver: local
 
   elasticsearch_data:
     driver: local

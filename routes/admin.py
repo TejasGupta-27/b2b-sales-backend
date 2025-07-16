@@ -789,6 +789,34 @@ async def force_reindex_data():
         logger.error(f"Error in force reindex: {e}")
         raise HTTPException(status_code=500, detail=f"Error in force reindex: {str(e)}")
 
+@router.post("/reindex/laptop")
+async def reindex_laptop_data():
+    """Reindex only laptop data from laptop.json"""
+    try:
+        logger.info("Starting laptop data reindexing...")
+        elasticsearch_service = get_elasticsearch_service()
+        
+        # Health check
+        health_check = await elasticsearch_service.test_connection()
+        if not health_check:
+            raise HTTPException(
+                status_code=503, 
+                detail="Elasticsearch is not available."
+            )
+        
+        # Load and index only laptop data
+        result = await elasticsearch_service.load_laptop_data()
+        logger.info("Laptop reindex completed successfully")
+        return {
+            "status": "success", 
+            "message": "Laptop data reindexed successfully",
+            "result": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in laptop reindex: {e}")
+        raise HTTPException(status_code=500, detail=f"Error in laptop reindex: {str(e)}")
+
 @router.post("/sync-chroma")
 async def sync_chroma_data(clear_existing: bool = False):
     """Sync ChromaDB data with duplicate prevention"""

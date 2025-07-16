@@ -114,7 +114,8 @@ class QuoteGenerationAgent(AIProvider):
     async def generate_quote_from_conversation(
         self,
         conversation_messages: List[AIMessage],
-        customer_context: Optional[Dict[str, Any]] = None
+        customer_context: Optional[Dict[str, Any]] = None,
+        current_user: Optional[Any] = None  # Add user parameter
     ) -> Optional[Dict[str, Any]]:
         """Generate quote using simplified workflow with conversation messages directly"""
         
@@ -124,6 +125,8 @@ class QuoteGenerationAgent(AIProvider):
         print(f"   conversation_messages length: {len(conversation_messages) if conversation_messages else 0}")
         print(f"   customer_context type: {type(customer_context)}")
         print(f"   customer_context keys: {list(customer_context.keys()) if customer_context else 'None'}")
+        print(f"   current_user type: {type(current_user)}")
+        print(f"   current_user available: {current_user is not None}")
         
         try:
             # Use conversation_messages directly instead of extracting from recommendation_context
@@ -135,6 +138,10 @@ class QuoteGenerationAgent(AIProvider):
             
             logger.info(f"✅ Found {len(conversation_messages)} conversation messages")
             print(f"🔍 Debug - Processing conversation messages...")
+            
+            # Extract user information to use as customer details
+            user_customer_info = self._extract_user_as_customer_info(current_user)
+            print(f"🔍 Debug - User customer info extracted: {list(user_customer_info.keys()) if user_customer_info else 'None'}")
             
             # Prepare conversation text for AI analysis - handle both AIMessage objects and dicts
             conversation_parts = []
@@ -177,7 +184,9 @@ class QuoteGenerationAgent(AIProvider):
             # Create prompt for structured quote generation - no product retrieval required
             print("🔍 Debug - Preparing quote prompt...")
             safe_context = self._safe_serialize_context(customer_context)
+            safe_customer_info = self._safe_serialize_user_customer_info(user_customer_info)
             print(f"🔍 Debug - Safe context length: {len(safe_context)}")
+            print(f"🔍 Debug - Safe customer info length: {len(safe_customer_info)}")
                         
 
             if primary_lang == "ja":
@@ -186,11 +195,14 @@ class QuoteGenerationAgent(AIProvider):
 会話内容:
 {conversation_text}
 
-顧客情報:
+追加の顧客情報:
 {safe_context}
 
+現在の顧客詳細（見積書の宛先）:
+{safe_customer_info}
+
 見積書には以下を含めてください:
-1. 会話から抽出された顧客情報
+1. 現在の顧客詳細を使用した顧客情報（customer_info）
 2. 会話で具体的に議論された製品やサービス
 3. 小計・税・合計を含むプロフェッショナルな価格情報
 4. 顧客ニーズにマッチするビジネス背景
@@ -199,6 +211,7 @@ class QuoteGenerationAgent(AIProvider):
 7. プロフェッショナルな見積書タイトルと会社のキャッチコピー
 
 重要事項:
+- customer_infoには現在の顧客詳細を必ず使用してください
 - 会話で言及された製品/サービスのみに基づいてください
 - 話題にされていない製品やソリューションを追加しないでください
 - 現実的な価格設定を心がけてください
@@ -210,11 +223,14 @@ class QuoteGenerationAgent(AIProvider):
 CONVERSATION:
 {conversation_text}
 
-CUSTOMER CONTEXT:
+ADDITIONAL CUSTOMER CONTEXT:
 {safe_context}
 
+CURRENT CUSTOMER DETAILS (Quote Recipient):
+{safe_customer_info}
+
 Generate a complete quote with:
-1. Customer information extracted from conversation
+1. Customer information (customer_info) using the current customer details provided
 2. Products/services that match exactly what was discussed in the conversation
 3. Professional pricing with subtotal, tax, and total
 4. Business context explaining why these products fit their needs
@@ -223,6 +239,7 @@ Generate a complete quote with:
 7. Professional quote title and company tagline
 
 IMPORTANT GUIDELINES:
+- MUST use the current customer details for customer_info in the quote
 - Use ONLY the specific products/services mentioned in the conversation
 - If the conversation is about PC components, quote PC components
 - If the conversation is about software, quote software
@@ -259,7 +276,9 @@ Make sure the quote accurately represents what was discussed in the conversation
             quote_dict.update({
                 'quote_id': quote_id,
                 'generation_method': 'pydantic_structured_simplified',
-                'data_source': 'conversation_only'
+                'data_source': 'conversation_only',
+                'generated_for_user_id': user_customer_info.get('user_id') if user_customer_info else None,
+                'generated_for_organization_id': user_customer_info.get('organization_id') if user_customer_info else None
             })
             
             print("🔍 Debug - Starting PDF generation...")
@@ -302,7 +321,87 @@ Make sure the quote accurately represents what was discussed in the conversation
             # Record failed quote generation
             self.metrics_service.record_quote_generation(status="failed")
             return None
-    
+
+    def _extract_user_as_customer_info(self, current_user: Optional[Any]) -> Dict[str, Any]:
+        """Extract user information to use as customer details in the quote"""
+        customer_info = {}
+        
+        if current_user is None:
+            print("⚠️ Debug - No current_user provided, using defaults")
+            return {
+                'user_id': 'unknown',
+                'company_name': 'Your Company',
+                'contact_name': 'Valued Customer',
+                'email': 'customer@company.com',
+                'organization_id': 'unknown'
+            }
+        
+        try:
+            # Extract user information to use as customer
+            customer_info['user_id'] = getattr(current_user, 'id', 'unknown')
+            
+            # Build full name from first_name and last_name for contact_name
+            first_name = getattr(current_user, 'first_name', '')
+            last_name = getattr(current_user, 'last_name', '')
+            if first_name and last_name:
+                customer_info['contact_name'] = f"{first_name} {last_name}"
+            elif first_name:
+                customer_info['contact_name'] = first_name
+            else:
+                customer_info['contact_name'] = 'Valued Customer'
+                
+            customer_info['email'] = getattr(current_user, 'email', 'customer@company.com')
+            customer_info['organization_id'] = getattr(current_user, 'organization_id', 'unknown')
+            
+            # Extract organization information for company_name
+            organization = getattr(current_user, 'organization', None)
+            if organization:
+                customer_info['company_name'] = getattr(organization, 'name', 'Your Company')
+                customer_info['company_domain'] = getattr(organization, 'domain', 'company.com')
+                
+                org_type = getattr(organization, 'org_type', None)
+                if org_type:
+                    if hasattr(org_type, 'value'):
+                        customer_info['company_type'] = org_type.value
+                    else:
+                        customer_info['company_type'] = str(org_type)
+                else:
+                    customer_info['company_type'] = 'enterprise'
+            else:
+                customer_info['company_name'] = 'Your Company'
+                customer_info['company_domain'] = 'company.com'
+                customer_info['company_type'] = 'enterprise'
+            
+            print(f"✅ Debug - User customer info successfully extracted:")
+            print(f"   Company: {customer_info['company_name']}")
+            print(f"   Contact: {customer_info['contact_name']} ({customer_info['email']})")
+            print(f"   Organization ID: {customer_info['organization_id']}")
+            
+            return customer_info
+            
+        except Exception as e:
+            print(f"⚠️ Debug - Failed to extract user customer info: {e}")
+            # Return safe defaults
+            return {
+                'user_id': 'unknown',
+                'company_name': 'Your Company',
+                'contact_name': 'Valued Customer',
+                'email': 'customer@company.com',
+                'organization_id': 'unknown'
+            }
+
+    def _safe_serialize_user_customer_info(self, customer_info: Dict[str, Any]) -> str:
+        """Serialize user customer info safely for AI prompt"""
+        try:
+            return json.dumps(customer_info, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to serialize user customer info: {e}")
+            return json.dumps({
+                'company_name': 'Your Company',
+                'contact_name': 'Valued Customer',
+                'email': 'customer@company.com'
+            }, indent=2)
+
     async def _generate_quote_pdf(self, quote_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Generate PDF for the quote with comprehensive debugging"""
         try:

@@ -7,10 +7,11 @@ from io import BytesIO
 import logging
 import langdetect
 from pydantic import BaseModel, Field
+import time
 
 from .base import AIProvider, AIMessage, AIResponse
 from services.prompt_manager import get_prompt_manager
-from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
+from .hybrid_product_retriever_agent import HybridProductRetrieverAgent, get_product_name
 from .quote_generation_agent import QuoteGenerationAgent
 from config import settings
 from services.metrics_service import get_metrics_service
@@ -88,25 +89,23 @@ class SimpleConversationalAgent(AIProvider):
     ) -> AIResponse:
         """Generate intelligent responses with product retrieval and quote generation capabilities"""
         
-        print("🤖 SimpleConversationalAgent: Analyzing conversation intent...")
+        # Extract current_user from kwargs if provided
+        current_user = kwargs.get('current_user', None)
         
-        # Step 1: Analyze conversation intent using Pydantic function calling
+        print(f"🤖 SimpleConversationalAgent: Processing {len(messages)} messages...")
+        
+        # Step 1: Analyze conversation intent
         intent_analysis = await self._analyze_conversation_intent(messages, customer_context)
+        print(f"   Intent: {intent_analysis.intent_type}, Confidence: {intent_analysis.confidence:.2f}")
         
-        print(f"🎯 Intent Analysis:")
-        print(f"   Intent: {intent_analysis.intent_type}")
-        print(f"   Retrieve Products: {intent_analysis.should_retrieve_products}")
-        print(f"   Generate Quote: {intent_analysis.should_generate_quote}")
-        print(f"   Confidence: {intent_analysis.confidence:.1%}")
-        print(f"   Reasoning: {intent_analysis.reasoning}")
-        
-        # Step 2: Retrieve products if needed
+        # Step 2: Retrieve products/solutions only if needed
         product_data = None
-        if intent_analysis.should_retrieve_products and self.hybrid_retriever:
-            print("🔍 Retrieving products using LLM-enhanced hybrid search...")
+        if intent_analysis.should_retrieve_products:
             try:
-                # Use the enhanced LLM-powered context analysis
-                product_data = await self.hybrid_retriever.retrieve_products(messages, customer_context)
+                retrieval_start_time = time.time()
+                product_data = await self._retrieve_relevant_products(messages, customer_context, intent_analysis)
+                retrieval_duration = time.time() - retrieval_start_time
+                
                 print(f"✅ Retrieved {len(product_data.get('products', []))} products, {len(product_data.get('solutions', []))} solutions")
                 print(f"   LLM Context: {product_data.get('requirements', {}).get('llm_context', {}).get('primary_need', 'Unknown')}")
                 print(f"   Similar Products Analysis: {product_data.get('similar_products_analysis', False)}")
@@ -124,7 +123,7 @@ class SimpleConversationalAgent(AIProvider):
         
         # Step 3: Generate appropriate response based on intent
         if intent_analysis.should_generate_quote:
-            response = await self._generate_quote_response(messages, customer_context, product_data, intent_analysis)
+            response = await self._generate_quote_response(messages, customer_context, product_data, intent_analysis, current_user)
         elif intent_analysis.should_retrieve_products and product_data:
             response = await self._generate_product_response(messages, customer_context, product_data, intent_analysis)
         else:
@@ -156,6 +155,18 @@ class SimpleConversationalAgent(AIProvider):
         
         return response
     
+    async def _retrieve_relevant_products(
+        self, 
+        messages: List[AIMessage], 
+        customer_context: Optional[Dict[str, Any]], 
+        intent_analysis: ConversationIntent
+    ) -> Dict[str, Any]:
+        """Retrieve relevant products using the hybrid retriever"""
+        if self.hybrid_retriever:
+            return await self.hybrid_retriever.retrieve_products(messages, customer_context)
+        else:
+            return {'products': [], 'solutions': [], 'error': 'Hybrid retriever not available'}
+
     async def _analyze_conversation_intent(
         self, 
         messages: List[AIMessage], 
@@ -225,7 +236,8 @@ Remember: This is a natural conversation, not a sales process checklist. Do what
         messages: List[AIMessage], 
         customer_context: Optional[Dict[str, Any]],
         product_data: Optional[Dict[str, Any]],
-        intent_analysis: ConversationIntent
+        intent_analysis: ConversationIntent,
+        current_user: Optional[Any]
     ) -> AIResponse:
         """Generate quote response with focus on gathering missing information first"""
         
@@ -297,7 +309,8 @@ Note: You might want to learn more about their needs as the conversation progres
                 
                 quote = await self.generate_quote({
                     'conversation_messages': messages,
-                    'customer_context': customer_context
+                    'customer_context': customer_context,
+                    'current_user': current_user
                 })
                 
                 if quote and not quote.get('error'):
@@ -305,6 +318,8 @@ Note: You might want to learn more about their needs as the conversation progres
                     response = self._enhance_response_with_quote_info(response, quote)
                     
                     # Update metadata with quote information
+                    if not hasattr(response, 'metadata') or response.metadata is None:
+                        response.metadata = {}
                     response.metadata.update({
                         'quote_generated': True,
                         'quote_id': quote.get('quote_id'),
@@ -321,6 +336,8 @@ Note: You might want to learn more about their needs as the conversation progres
                     
             except Exception as e:
                 print(f"❌ Quote generation failed: {e}")
+                if not hasattr(response, 'metadata') or response.metadata is None:
+                    response.metadata = {}
                 response.metadata['quote_generation_error'] = str(e)
         else:
             print(f"⚠️ Not generating quote yet - missing info: {intent_analysis.missing_info}")
@@ -575,7 +592,7 @@ Here are the top recommended products by category for your needs:
         for cat, plist in cat_map.items():
             context += f"\n{cat.title()}:\n"
             for i, p in enumerate(plist[:2]):  # Top 2 per category
-                context += f"  {i+1}. {p.get('name', 'Unknown')} (${p.get('price', 'N/A')})\n"
+                context += f"  {i+1}. {get_product_name(p)} (${p.get('price', 'N/A')})\n"
                 context += f"     Description: {p.get('description', 'No description')[:100]}...\n"
         context += "\nPlease recommend a full build using the best available products from each category above. If a category is missing, note that as well."
 
@@ -722,7 +739,7 @@ Remember: You're having a conversation with a real person, not following a rigid
         
         return guidelines_text
     
-    async def generate_quote(self, quote_request: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_quote(self, quote_request: Dict[str, Any], current_user: Optional[Any] = None) -> Dict[str, Any]:
         """Generate a detailed quote using the QuoteGenerationAgent with PDF and pitch deck"""
         
         print("💰 SimpleConversationalAgent: Generating quote using QuoteGenerationAgent...")
@@ -749,7 +766,8 @@ Remember: You're having a conversation with a real person, not following a rigid
             # Use the QuoteGenerationAgent to generate the quote
             quote = await self.quote_agent.generate_quote_from_conversation(
                 conversation_messages=conversation_messages,
-                customer_context=customer_context
+                customer_context=customer_context,
+                current_user=current_user  # Pass the current user
             )
             
             if quote:

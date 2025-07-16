@@ -68,8 +68,8 @@ class Settings(BaseSettings):
     enable_ai_enhanced_search: bool = os.getenv("ENABLE_AI_ENHANCED_SEARCH", "true").lower() == "true"
     use_rrf_merging: bool = os.getenv("USE_RRF_MERGING", "true").lower() == "true"
     rrf_k: float = float(os.getenv("RRF_K", "60"))
-    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.5"))
-    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.5"))
+    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.2"))
+    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.8"))
     final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "20"))
     
     # Data Configuration
@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")
     elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "eleven_multilingual_v1")
+    elevenlabs_stability: float = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    elevenlabs_similarity_boost: float = float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.5"))
+    elevenlabs_style: float = float(os.getenv("ELEVENLABS_STYLE", "0.0"))
+    elevenlabs_use_speaker_boost: bool = os.getenv("ELEVENLABS_USE_SPEAKER_BOOST", "true").lower() == "true"
+    
+    # Speech Service Configuration
+    speech_primary_provider: str = os.getenv("SPEECH_PRIMARY_PROVIDER", "elevenlabs")
+    speech_fallback_enabled: bool = os.getenv("SPEECH_FALLBACK_ENABLED", "true").lower() == "true"
+    speech_tts_primary_retries: int = int(os.getenv("SPEECH_TTS_PRIMARY_RETRIES", "1"))
     
     # Debug Configuration
     enable_debug_vector_endpoints: bool = os.getenv("ENABLE_DEBUG_VECTOR_ENDPOINTS", "false").lower() == "true"

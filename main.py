@@ -413,6 +413,12 @@ async def periodic_metrics_update():
                 # Update token usage metrics
                 metrics_service.update_token_usage_metrics()
                 
+                # Update organization metrics
+                metrics_service.update_organization_metrics(db)
+                
+                # Update user metrics
+                metrics_service.update_user_metrics(db)
+                
             finally:
                 db.close()
                 
@@ -551,7 +557,7 @@ async def sales_chat(
                 # Let the conversational agent handle all types of requests naturally
                 ai_start_time = time.time()
                 response = await conversational_agent.generate_response(
-                    messages, customer_context
+                    messages, customer_context, current_user=current_user
                 )
                 ai_duration = time.time() - ai_start_time
                 
@@ -660,7 +666,10 @@ async def get_products():
         return []
 
 @app.post("/api/generate-quote")
-async def generate_quote(quote_request: Dict[str, Any]):
+async def generate_quote(
+    quote_request: Dict[str, Any],
+    current_user: DBUser = Depends(get_current_active_user)  # Add user authentication
+):
     """Generate a detailed quotation and pitch deck using QuoteGenerationAgent"""
     metrics_service = get_metrics_service()
     start_time = time.time()
@@ -687,10 +696,11 @@ async def generate_quote(quote_request: Dict[str, Any]):
             
             conversation_messages = [AIMessage(role="user", content=basic_message)]
         
-        # Generate the quote using the QuoteGenerationAgent
+        # Generate the quote using the QuoteGenerationAgent with user information
         quote = await quote_agent.generate_quote_from_conversation(
             conversation_messages=conversation_messages,
-            customer_context=customer_context
+            customer_context=customer_context,
+            current_user=current_user  # Pass the authenticated user
         )
         
         # Check if quote generation was successful
@@ -1701,7 +1711,8 @@ async def generate_quote_from_conversation(
         # Generate the quote using the QuoteGenerationAgent
         quote = await quote_agent.generate_quote_from_conversation(
             conversation_messages=conversation_messages,
-            customer_context=customer_context
+            customer_context=customer_context,
+            current_user=current_user  
         )
         
         # Check if quote generation was successful

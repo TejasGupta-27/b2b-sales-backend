@@ -42,7 +42,9 @@ FIELD_MAP = {
     "webcam": ["name", "price", "resolutions", "connection", "focus_type", "os", "fov"],
     "wired-network-card": ["name", "price", "interface", "color"],
     "wireless-network-card": ["name", "price", "protocol", "interface", "color"],
-   
+    "laptop": [
+        "title", "brand", "series", "item model number", "price", "ram", "computer memory type", "hard drive", "operating system", "processor", "chipset brand", "graphics coprocessor", "screen resolution", "max screen resolution", "standing screen display size", "item weight", "item dimensions  lxwxh", "color", "number of processors", "number of usb 3.0 ports", "wireless type", "tags", "url", "images", "customer reviews", "best sellers rank", "hard drive interface", "processor brand", "product dimensions"
+    ],
 }
 
 # Category to index mapping for per-category indices
@@ -72,6 +74,7 @@ CATEGORY_INDEX_MAP = {
     "webcam": "webcam_vector",
     "wired-network-card": "network_wired_vector",
     "wireless-network-card": "network_wireless_vector",
+    "laptop": "laptop_vector",
 }
 
 # Default index for uncategorized products
@@ -201,7 +204,21 @@ class ElasticsearchVectorService:
             await self._wait_for_elasticsearch_ready()
             await self.test_connection()
             await self.create_vector_indices()
-            logger.info("Elasticsearch Vector Service initialized successfully")
+            
+            # Get current stats to show product count
+            stats = await self.get_collection_stats()
+            logger.info(f"📊 Elasticsearch Status:")
+            logger.info(f"   Total Products: {stats['products_count']}")
+            logger.info(f"   Total Solutions: {stats['solutions_count']}")
+            
+            # Show category breakdown if there are products
+            if stats['products_count'] > 0 and 'category_breakdown' in stats:
+                logger.info(f"   Products by Category:")
+                for category, count in stats['category_breakdown'].items():
+                    if count > 0:
+                        logger.info(f"     {category}: {count} products")
+            
+            logger.info("✅ Elasticsearch Vector Service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Elasticsearch Vector Service: {e}")
             raise
@@ -258,112 +275,61 @@ class ElasticsearchVectorService:
     async def create_vector_indices(self):
         """Create Elasticsearch indices with vector search mappings - one per category"""
         
-        # Products index with vector mapping
+        # Dynamically generate products mapping from FIELD_MAP
+        all_fields = set()
+        for fields in FIELD_MAP.values():
+            all_fields.update(fields)
+        
+        # Add standard fields that all products should have
+        standard_fields = {
+            "id", "name", "title", "category", "subcategory", "description", 
+            "specifications", "price", "currency", "availability", "tags", 
+            "features", "use_cases", "target_industries", "compatibility", 
+            "warranty", "support_level", "content_vector", "searchable_content"
+        }
+        all_fields.update(standard_fields)
+        
+        # Build dynamic properties mapping
+        properties = {
+            "id": {"type": "keyword"},
+            "name": {"type": "text", "analyzer": "standard"},
+            "title": {"type": "text", "analyzer": "standard"},
+            "category": {"type": "keyword"},
+            "subcategory": {"type": "keyword"},
+            "description": {"type": "text", "analyzer": "standard"},
+            "specifications": {"type": "object"},
+            "price": {"type": "float"},
+            "currency": {"type": "keyword"},
+            "availability": {"type": "boolean"},
+            "tags": {"type": "keyword"},
+            "features": {"type": "text", "analyzer": "standard"},
+            "use_cases": {"type": "text", "analyzer": "standard"},
+            "target_industries": {"type": "keyword"},
+            "compatibility": {"type": "text"},
+            "warranty": {"type": "text"},
+            "support_level": {"type": "keyword"},
+            
+            # Vector fields
+            "content_vector": {
+                "type": "dense_vector",
+                "dims": self.embedding_dimension,
+                "index": True,
+                "similarity": "cosine"
+            },
+            "searchable_content": {"type": "text", "analyzer": "standard"}
+        }
+        
+        # Add all fields from FIELD_MAP as text fields
+        for field in all_fields:
+            if field not in properties:
+                # Normalize field names (replace spaces with underscores)
+                normalized_field = field.replace(" ", "_").replace("-", "_")
+                properties[normalized_field] = {"type": "text", "analyzer": "standard"}
+        
+        # Products index with dynamic vector mapping
         products_mapping = {
             "mappings": {
-                "properties": {
-                    "id": {"type": "keyword"},
-                    "name": {"type": "text", "analyzer": "standard"},
-                    "category": {"type": "keyword"},
-                    "subcategory": {"type": "keyword"},
-                    "description": {"type": "text", "analyzer": "standard"},
-                    "specifications": {"type": "object"},
-                    "price": {"type": "float"},
-                    "currency": {"type": "keyword"},
-                    "availability": {"type": "boolean"},
-                    "tags": {"type": "keyword"},
-                    "features": {"type": "text", "analyzer": "standard"},
-                    "use_cases": {"type": "text", "analyzer": "standard"},
-                    "target_industries": {"type": "keyword"},
-                    "compatibility": {"type": "text"},
-                    "warranty": {"type": "text"},
-                    "support_level": {"type": "keyword"},
-                    
-                    # Dynamic fields that can be strings, numbers, or arrays
-                    "form_factor": {"type": "text"},
-                    "airflow": {"type": "text"},
-                    "noise_level": {"type": "text"},
-                    "rpm": {"type": "text"},
-                    "size": {"type": "text"},
-                    "capacity": {"type": "text"},
-                    "speed": {"type": "text"},
-                    "modules": {"type": "text"},
-                    "core_count": {"type": "text"},
-                    "core_clock": {"type": "text"},
-                    "boost_clock": {"type": "text"},
-                    "tdp": {"type": "text"},
-                    "memory": {"type": "text"},
-                    "wattage": {"type": "text"},
-                    "screen_size": {"type": "text"},
-                    "resolution": {"type": "text"},
-                    "refresh_rate": {"type": "text"},
-                    "response_time": {"type": "text"},
-                    "panel_type": {"type": "text"},
-                    "aspect_ratio": {"type": "text"},
-                    "type": {"type": "text"},
-                    "color": {"type": "text"},
-                    "interface": {"type": "text"},
-                    "efficiency": {"type": "text"},
-                    "modular": {"type": "text"},
-                    "socket": {"type": "text"},
-                    "max_memory": {"type": "text"},
-                    "memory_slots": {"type": "text"},
-                    "side_panel": {"type": "text"},
-                    "external_volume": {"type": "text"},
-                    "internal_35_bays": {"type": "text"},
-                    "channels": {"type": "text"},
-                    "channel_wattage": {"type": "text"},
-                    "pwm": {"type": "text"},
-                    "frequency_response": {"type": "text"},
-                    "microphone": {"type": "text"},
-                    "wireless": {"type": "text"},
-                    "enclosure_type": {"type": "text"},
-                    "style": {"type": "text"},
-                    "switches": {"type": "text"},
-                    "backlit": {"type": "text"},
-                    "tenkeyless": {"type": "text"},
-                    "connection_type": {"type": "text"},
-                    "tracking_method": {"type": "text"},
-                    "max_dpi": {"type": "text"},
-                    "hand_orientation": {"type": "text"},
-                    "bd": {"type": "text"},
-                    "dvd": {"type": "text"},
-                    "cd": {"type": "text"},
-                    "bd_write": {"type": "text"},
-                    "dvd_write": {"type": "text"},
-                    "cd_write": {"type": "text"},
-                    "mode": {"type": "text"},
-                    "digital_audio": {"type": "text"},
-                    "snr": {"type": "text"},
-                    "sample_rate": {"type": "text"},
-                    "chipset": {"type": "text"},
-                    "configuration": {"type": "text"},
-                    "amount": {"type": "text"},
-                    "capacity_w": {"type": "text"},
-                    "capacity_va": {"type": "text"},
-                    "chipset": {"type": "text"},
-                    "length": {"type": "text"},
-                    "resolutions": {"type": "text"},
-                    "focus_type": {"type": "text"},
-                    "os": {"type": "text"},
-                    "fov": {"type": "text"},
-                    "protocol": {"type": "text"},
-                    "price_per_gb": {"type": "text"},
-                    "first_word_latency": {"type": "text"},
-                    "cas_latency": {"type": "text"},
-                    "cache": {"type": "text"},
-                    "graphics": {"type": "text"},
-                    "smt": {"type": "text"},
-                    
-                    # Vector fields
-                    "content_vector": {
-                        "type": "dense_vector",
-                        "dims": self.embedding_dimension,
-                        "index": True,
-                        "similarity": "cosine"
-                    },
-                    "searchable_content": {"type": "text", "analyzer": "standard"}
-                }
+                "properties": properties
             },
             "settings": {
                 "number_of_shards": 1,
@@ -495,7 +461,7 @@ class ElasticsearchVectorService:
         # Fallback: return the base name as-is
         return base_name
 
-    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: str = None) -> str:
+    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: Optional[str] = None) -> str:
         """Create searchable text content for embedding, category-aware"""
         text_parts = []
         category = None
@@ -510,12 +476,16 @@ class ElasticsearchVectorService:
                 value = item.get(field)
                 if value is not None:
                     text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
+            
+            # Always include normalized name field if available
+            if item.get('name') and 'name' not in FIELD_MAP[category]:
+                text_parts.append(f"Name: {item['name']}")
         else:
             # Fallback to general field extraction
             text_parts.append(f"Type: {item_type}")
             
-            # Add common fields
-            common_fields = ['name', 'description', 'category', 'type', 'price', 'features', 'tags']
+            # Add common fields (including laptop-specific fields)
+            common_fields = ['name', 'title', 'description', 'category', 'type', 'price', 'features', 'tags', 'brand', 'processor', 'ram', 'hard drive', 'operating system']
             for field in common_fields:
                 value = item.get(field)
                 if value is not None:
@@ -528,7 +498,7 @@ class ElasticsearchVectorService:
         
         return " | ".join(text_parts)
     
-    async def index_product(self, product: Dict[str, Any], filename: str = None):
+    async def index_product(self, product: Dict[str, Any], filename: Optional[str] = None):
         """Index a product with vector embedding into category-specific index"""
         try:
             # Generate searchable content
@@ -547,6 +517,27 @@ class ElasticsearchVectorService:
             if not doc.get("id"):
                 doc["id"] = f"product_{hash(str(product))}"
             
+            # Normalize name field - ensure all products have a "name" field
+            if not doc.get("name") and doc.get("title"):
+                doc["name"] = doc["title"]  # Use title as name for laptops
+            elif not doc.get("name") and doc.get("product_name"):
+                doc["name"] = doc["product_name"]  # Use product_name as fallback
+            elif not doc.get("name"):
+                doc["name"] = f"Product {doc.get('id', 'Unknown')}"  # Final fallback
+            
+            # Clean up document - remove empty field names and invalid fields
+            doc = {k: v for k, v in doc.items() if k and k.strip() and not k.startswith("__")}
+            
+            # Clean up price field - convert string prices to float
+            if "price" in doc and isinstance(doc["price"], str):
+                try:
+                    # Remove currency symbols and convert to float
+                    price_str = doc["price"].replace("$", "").replace(",", "").strip()
+                    doc["price"] = float(price_str)
+                except (ValueError, AttributeError):
+                    # If conversion fails, set to None or 0
+                    doc["price"] = None
+            
             # Determine which index to use based on category
             category = product.get("category")
             if not category and filename:
@@ -555,7 +546,7 @@ class ElasticsearchVectorService:
                 doc["category"] = category
             
             # Get the appropriate index for this category
-            index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+            index_name = CATEGORY_INDEX_MAP.get(str(category) if category else "", DEFAULT_PRODUCTS_INDEX)
             
             # Index document into category-specific index
             await self.client.index(
@@ -1009,7 +1000,7 @@ class ElasticsearchVectorService:
             await self._wait_for_elasticsearch_ready()
             
             logger.info(f"Loading data into Elasticsearch with vector embeddings...")
-            data_dir = settings.data_dir
+            data_dir = Path(settings.data_dir)
             total_products_indexed = 0
             total_solutions_indexed = 0
             files_processed = 0
@@ -1111,7 +1102,7 @@ class ElasticsearchVectorService:
     
     def _is_product_data(self, item: Dict[str, Any]) -> bool:
         """Check if item is product data"""
-        product_indicators = ['product_name', 'category', 'price', 'specifications']
+        product_indicators = ['product_name', 'category', 'price', 'specifications', 'title', 'brand']
         return any(key in item for key in product_indicators)
     
     def _is_solution_data(self, item: Dict[str, Any]) -> bool:
@@ -1121,7 +1112,7 @@ class ElasticsearchVectorService:
     
     def _is_valid_product(self, product: Dict[str, Any]) -> bool:
         """Validate product data"""
-        return bool(product.get('name') or product.get('product_name'))
+        return bool(product.get('name') or product.get('product_name') or product.get('title'))
     
     def _is_valid_solution(self, solution: Dict[str, Any]) -> bool:
         """Validate solution data"""
@@ -1236,7 +1227,7 @@ class ElasticsearchVectorService:
                 logger.info("🎯 Applied general default categories")
         elif not categories and settings.disable_automatic_category_defaults:
             logger.info("ℹ️ Automatic category defaults disabled (DISABLE_AUTOMATIC_CATEGORY_DEFAULTS=true)")
-            return None  # No categories to return
+            return []  # Return empty list instead of None
         
         logger.info(f"🎯 Final categories selected: {categories}")
         return categories
@@ -1465,6 +1456,66 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to get product stats: {e}")
             return {"total_products": 0, "categories": {}, "price_range": {}}
     
+    async def load_initial_data(self):
+        """Load initial data from JSON files - called during startup"""
+        try:
+            logger.info("Loading initial data from JSON files...")
+            result = await self.load_data_from_json(max_per_file=50)
+            logger.info(f"Initial data loading completed: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to load initial data: {e}")
+            raise
+    
+    async def load_laptop_data(self):
+        """Load only laptop data from laptop.json"""
+        try:
+            logger.info("Loading laptop data from laptop.json...")
+            data_dir = Path(settings.data_dir)
+            laptop_file = data_dir / "laptop.json"
+            
+            if not laptop_file.exists():
+                raise Exception("laptop.json file not found")
+            
+            total_products_indexed = 0
+            files_processed = 0
+            
+            try:
+                logger.info(f"Processing file: {laptop_file.name}")
+                with open(laptop_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                if isinstance(data, list):
+                    items = data[:50]  # Limit to 50 laptops
+                    for item in items:
+                        if self._is_product_data(item) and self._is_valid_product(item):
+                            await self.index_product(item, filename=laptop_file.name)
+                            total_products_indexed += 1
+                
+                files_processed += 1
+                logger.info(f"✅ {laptop_file.name}: {total_products_indexed} laptops indexed")
+                
+                # Refresh laptop index
+                try:
+                    await self.client.indices.refresh(index="laptop_vector")
+                    logger.info(f"✅ Refreshed laptop index with {total_products_indexed} documents")
+                except Exception as e:
+                    logger.warning(f"Failed to refresh laptop index: {e}")
+                
+                return {
+                    "files_processed": files_processed,
+                    "products_indexed": total_products_indexed,
+                    "solutions_indexed": 0
+                }
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to process {laptop_file.name}: {e}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Failed to load laptop data: {e}")
+            raise
+    
     async def reindex_all_data(self, force_replace: bool = False):
         """Compatibility method for old service interface - reindex all data"""
         try:
@@ -1604,60 +1655,107 @@ DATA STRUCTURE INFORMATION:
 Available Categories: {', '.join(data_structure.available_categories)}
 Searchable Fields: {', '.join(data_structure.searchable_fields)}
 
+COMPLETE FIELD MAPPING BY CATEGORY:
+{json.dumps(FIELD_MAP, indent=2)}
+
+CATEGORY TO INDEX MAPPING:
+{json.dumps(CATEGORY_INDEX_MAP, indent=2)}
+
 SEARCH STRATEGY: {search_type}
 
 TASK:
-Generate a search query strategy with these components:
+Generate a search query strategy that leverages the category-specific fields from the FIELD_MAP above:
 
 1. SEMANTIC_QUERY: Natural language query for vector search (keep simple and clear)
-2. KEYWORD_QUERY: Basic Elasticsearch query structure (use simple field matching)
-3. CATEGORY_FILTERS: List of most relevant product categories
-4. FIELD_PRIORITIES: Basic field boost values (name: 4.0, description: 3.0, etc.)
+2. KEYWORD_QUERY: Elasticsearch query structure that uses:
+   - The ACTUAL search terms from requirements (NOT "product")
+   - Category-specific fields from FIELD_MAP for the relevant categories
+   - Both phrase matching and individual term matching
+   - Proper field boosting based on relevance
+3. CATEGORY_FILTERS: List of most relevant product categories from the available categories
+4. FIELD_PRIORITIES: Field boost values including category-specific fields
 5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only'
 6. CONFIDENCE: Confidence score between 0.0 and 1.0
-7. REASONING: Brief explanation of strategy
+7. REASONING: Brief explanation of strategy and field selection
 8. SUGGESTED_FILTERS: Empty object {{}} (no complex filters)
 
-CRITICAL JSON FORMATTING REQUIREMENTS:
-- Use ONLY simple string values, no special characters
-- Ensure all strings are properly quoted with double quotes
-- Use simple field names: name, description, features, category
-- Avoid complex nested structures in keyword_query
-- Keep all JSON properly formatted and valid
+FIELD USAGE GUIDELINES:
+- For CPU queries: Use fields like "core_count", "core_clock", "boost_clock", "tdp"
+- For GPU/video-card queries: Use fields like "chipset", "memory", "core_clock", "boost_clock"
+- For memory queries: Use fields like "speed", "modules", "cas_latency"
+- For monitor queries: Use fields like "screen_size", "resolution", "refresh_rate"
+- For storage queries: Use fields like "capacity", "type", "interface", "cache"
+- Always include standard fields: "name", "description", "features", "category"
 
-EXAMPLE KEYWORD_QUERY STRUCTURE:
+EXAMPLE FOR "i9 CPU" query (using cpu category fields):
 {{
   "query": {{
     "bool": {{
       "should": [
-        {{"match": {{"name": {{"query": "gaming", "boost": 4.0}}}}}},
-        {{"match": {{"description": {{"query": "gaming", "boost": 3.0}}}}}}
-      ]
+        {{"match_phrase": {{"name": {{"query": "i9 CPU", "boost": 8.0}}}}}},
+        {{"match_phrase": {{"description": {{"query": "i9 CPU", "boost": 6.0}}}}}},
+        {{"match": {{"name": {{"query": "i9", "boost": 6.0}}}}}},
+        {{"match": {{"core_count": {{"query": "i9", "boost": 3.0}}}}}},
+        {{"match": {{"core_clock": {{"query": "high performance", "boost": 2.5}}}}}},
+        {{"match": {{"boost_clock": {{"query": "turbo", "boost": 2.5}}}}}},
+        {{"match": {{"description": {{"query": "i9", "boost": 4.0}}}}}},
+        {{"match": {{"description": {{"query": "CPU", "boost": 4.0}}}}}},
+        {{"match": {{"features": {{"query": "i9", "boost": 3.0}}}}}},
+        {{"match": {{"features": {{"query": "CPU", "boost": 3.0}}}}}},
+        {{"match": {{"category": {{"query": "cpu", "boost": 2.0}}}}}}
+      ],
+      "minimum_should_match": 1
     }}
   }},
   "size": 20
 }}
 
-IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces. Use simple, clean strings without special characters."""
+CRITICAL REQUIREMENTS:
+1. NEVER use "product" as a search term - use the actual terms from requirements
+2. Select the most relevant category from FIELD_MAP based on the requirements
+3. Use category-specific fields from FIELD_MAP for that category
+4. Create both exact phrase matches and individual term matches
+5. Boost category-specific fields appropriately (2.0-4.0 range)
+6. Include fallback matches on standard fields (name, description, features)
+7. Ensure JSON is properly formatted
+
+IMPORTANT: Analyze the requirements to determine the most relevant category, then use the fields from FIELD_MAP for that category to create precise, field-aware search queries."""
 
             try:
                 # Use Pydantic function calling for structured response
                 logger.info("🧠 Using AI for dynamic query generation...")
+                logger.info(f"🧠 Requirements passed to AI: {requirements}")
+                
                 dynamic_query = await self.llm_provider.generate_structured_response(
                     [AIMessage(role="user", content=query_generation_prompt)],
                     DynamicQueryGeneration
                 )
                 
-                logger.info(f"🧠 AI Query Generation:")
+                print(f"🧠 AI Query Generation SUCCESS:")
+                print(f"   Search Strategy: {dynamic_query.search_strategy}")
+                print(f"   Categories: {dynamic_query.category_filters}")
+                print(f"   Confidence: {dynamic_query.confidence:.1%}")
+                print(f"   Reasoning: {dynamic_query.reasoning}")
+                print(f"   Keyword Query: {dynamic_query.keyword_query}")
+                logger.info(f"🧠 AI Query Generation SUCCESS:")
                 logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
                 logger.info(f"   Categories: {dynamic_query.category_filters}")
                 logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
                 logger.info(f"   Reasoning: {dynamic_query.reasoning}")
-                
+                logger.info(f"   Keyword Query: {dynamic_query.keyword_query}")
+
+                # --- PATCH: Ensure keyword_query uses real search terms ---
+                import json as _json
+                keyword_query_str = _json.dumps(dynamic_query.keyword_query).lower() if dynamic_query.keyword_query else ""
+                if (not dynamic_query.keyword_query) or ("product" in keyword_query_str):
+                    print("⚠️ LLM returned default or empty keyword_query, using fallback.")
+                    dynamic_query.keyword_query = self._fallback_query_generation(requirements, search_type).keyword_query
+
                 return dynamic_query
                     
             except Exception as e:
                 logger.warning(f"AI query generation failed: {e}")
+                logger.warning(f"AI query generation error details: {type(e).__name__}: {str(e)}")
                 logger.info("🔄 Falling back to standard query generation...")
                 return self._fallback_query_generation(requirements, search_type)
                 
@@ -1672,58 +1770,110 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
         search_type: str
     ) -> DynamicQueryGeneration:
         """Fallback query generation when AI is not available"""
+        print("🔄 Using fallback query generation (AI not available or failed)")
+        print(f"🔄 Fallback requirements: {requirements}")
+        logger.info("🔄 Using fallback query generation (AI not available or failed)")
+        logger.info(f"🔄 Fallback requirements: {requirements}")
         
-        # Build semantic query - preserve exact terms from requirements
-        semantic_query = requirements.get('semantic_query', '')
-        if not semantic_query:
-            # Use technical requirements if available
-            tech_reqs = requirements.get('technical_requirements', [])
-            if tech_reqs:
-                semantic_query = ' '.join([str(req) for req in tech_reqs])
-            else:
-                use_case = requirements.get('use_case', 'business solution')
-                semantic_query = f"{use_case} technology solution"
+        # Extract the actual search terms from multiple sources
+        search_terms = []
         
-        # Extract the actual search query from semantic_query or technical_requirements
-        actual_query = semantic_query
-        if not actual_query and requirements.get('technical_requirements'):
-            tech_reqs = requirements.get('technical_requirements', [])
+        # Get search keywords from LLM context if available
+        if requirements.get('search_keywords'):
+            search_terms.extend(requirements['search_keywords'])
+        
+        # Get technical requirements
+        if requirements.get('technical_requirements'):
+            tech_reqs = requirements['technical_requirements']
             if isinstance(tech_reqs, list):
-                actual_query = ' '.join([str(req) for req in tech_reqs])
+                search_terms.extend([str(req) for req in tech_reqs])
             else:
-                actual_query = str(tech_reqs)
+                search_terms.append(str(tech_reqs))
         
-        # If still no query, use a fallback
-        if not actual_query:
-            actual_query = "business solution"
+        # Get search terms from requirements
+        if requirements.get('search_terms'):
+            req_terms = requirements['search_terms']
+            if isinstance(req_terms, list):
+                search_terms.extend([str(term) for term in req_terms])
+            else:
+                search_terms.append(str(req_terms))
         
-        # Create a simple, effective Elasticsearch query that uses the actual search terms
+        # Get semantic queries from LLM context
+        if requirements.get('semantic_queries'):
+            semantic_queries = requirements['semantic_queries']
+            if isinstance(semantic_queries, list):
+                search_terms.extend([str(query) for query in semantic_queries])
+            else:
+                search_terms.append(str(semantic_queries))
+        
+        # Get use case
+        if requirements.get('use_case'):
+            search_terms.append(str(requirements['use_case']))
+        
+        # Remove duplicates and empty strings
+        search_terms = list(set([term.strip() for term in search_terms if term and term.strip()]))
+        
+        # If no search terms, use fallback
+        if not search_terms:
+            search_terms = ['business solution']
+        
+        # Create the main search query by combining terms
+        main_query = ' '.join(search_terms)
+        
+        # Create individual term queries for better matching
+        individual_terms = []
+        for term in search_terms:
+            # Split compound terms (e.g., "i9 CPU" -> ["i9", "CPU"])
+            if ' ' in term:
+                individual_terms.extend(term.split())
+            else:
+                individual_terms.append(term)
+        
+        # Remove duplicates from individual terms
+        individual_terms = list(set([term.strip() for term in individual_terms if term and term.strip()]))
+        
+        # Create a comprehensive Elasticsearch query
+        should_clauses = []
+        
+        # Add exact phrase matching for the main query
+        should_clauses.append({"match_phrase": {"name": {"query": main_query, "boost": 8.0}}})
+        should_clauses.append({"match_phrase": {"description": {"query": main_query, "boost": 6.0}}})
+        
+        # Add individual term matching for better recall
+        for term in individual_terms:
+            if len(term) > 1:  # Only add terms with length > 1
+                should_clauses.append({"match": {"name": {"query": term, "boost": 4.0}}})
+                should_clauses.append({"match": {"description": {"query": term, "boost": 3.0}}})
+                should_clauses.append({"match": {"features": {"query": term, "boost": 2.0}}})
+                should_clauses.append({"match": {"searchable_content": {"query": term, "boost": 1.5}}})
+        
+        # Add category matching if categories are specified
+        categories = requirements.get('recommended_categories', [])
+        if not categories:
+            categories = requirements.get('product_categories', [])
+        
+        if categories:
+            for category in categories:
+                should_clauses.append({"match": {"category": {"query": category, "boost": 2.0}}})
+        
         keyword_query = {
             "query": {
                 "bool": {
-                    "should": [
-                        # Exact phrase matching gets highest boost
-                        {"match_phrase": {"name": {"query": actual_query, "boost": 6.0}}},
-                        {"match_phrase": {"description": {"query": actual_query, "boost": 4.0}}},
-                        # Regular matching with good boosts
-                        {"match": {"name": {"query": actual_query, "boost": 4.0}}},
-                        {"match": {"description": {"query": actual_query, "boost": 3.0}}},
-                        {"match": {"features": {"query": actual_query, "boost": 2.0}}},
-                        {"match": {"searchable_content": {"query": actual_query, "boost": 1.5}}}
-                    ],
+                    "should": should_clauses,
                     "minimum_should_match": 1
                 }
             },
             "size": 20
         }
         
-        # Get categories from requirements or use defaults
-        categories = requirements.get('recommended_categories', [])
+        # Build semantic query for vector search
+        semantic_query = main_query
+        if not semantic_query:
+            semantic_query = requirements.get('semantic_query', 'business solution')
+        
+        # Infer categories from search terms if not provided
         if not categories:
-            categories = requirements.get('product_categories', [])
-        if not categories:
-            # Infer categories from the query content
-            query_lower = actual_query.lower()
+            query_lower = main_query.lower()
             if any(term in query_lower for term in ['i9', 'i7', 'i5', 'ryzen', 'cpu', 'processor']):
                 categories = ['cpu']
             elif any(term in query_lower for term in ['rtx', 'gtx', 'graphics', 'video card', 'gpu']):
@@ -1745,6 +1895,34 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
                     categories = ['internal-hard-drive', 'external-hard-drive']
                 else:
                     categories = ['cpu', 'memory', 'internal-hard-drive']
+        
+        # Create field priorities based on search strategy
+        field_priorities = {
+            "name": 4.0,
+            "description": 3.0,
+            "features": 2.0,
+            "category": 1.5,
+            "searchable_content": 1.5
+        }
+        
+        # Determine search strategy
+        if search_type == "keyword_only":
+            search_strategy = "keyword_only"
+        elif search_type == "vector_only":
+            search_strategy = "vector_only"
+        else:
+            search_strategy = "hybrid"
+        
+        return DynamicQueryGeneration(
+            semantic_query=semantic_query,
+            keyword_query=keyword_query,
+            category_filters=categories,
+            field_priorities=field_priorities,
+            search_strategy=search_strategy,
+            confidence=0.7,
+            reasoning=f"Fallback query generation using search terms: {search_terms}",
+            suggested_filters={}
+        )
         
         # Determine field priorities based on query content
         field_priorities = {
@@ -1850,6 +2028,22 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
             # Use the AI-generated keyword query
             query = dynamic_query.keyword_query
             query["size"] = size
+            
+            # Debug: Log the actual query being used
+            print(f"🔍 AI-Generated Keyword Query:")
+            print(f"   Search Terms Used: {dynamic_query.semantic_query}")
+            print(f"   Field Priorities: {dynamic_query.field_priorities}")
+            try:
+                print(f"   Query Structure: {json.dumps(query, indent=2)}")
+            except (TypeError, ValueError):
+                print(f"   Query Structure: {str(query)}")
+            logger.info(f"🔍 AI-Generated Keyword Query:")
+            try:
+                logger.info(f"   Query Structure: {json.dumps(query, indent=2)}")
+            except (TypeError, ValueError):
+                logger.info(f"   Query Structure: {str(query)}")
+            logger.info(f"   Search Terms Used: {dynamic_query.semantic_query}")
+            logger.info(f"   Field Priorities: {dynamic_query.field_priorities}")
             
             # Add filters if suggested by AI
             if dynamic_query.suggested_filters:
@@ -1976,6 +2170,7 @@ CATEGORY DESCRIPTIONS:
 • ups: Uninterruptible power supplies, backup power for critical systems
 • wireless-network-card: WiFi adapters, wireless networking solutions
 • wired-network-card: Ethernet adapters, wired networking for reliability
+• laptop: Laptops, portable computers for mobility and convenience
 
 ANALYSIS GUIDELINES:
 1. Focus on categories that directly solve the customer's stated needs
@@ -2134,6 +2329,11 @@ Analyze the requirements and provide structured category recommendations."""
         if any(word in text for word in ['build', 'custom', 'system', 'motherboard', 'case', 'cooling']):
             categories.update(['motherboard', 'case', 'cpu-cooler'])
             logger.info("🔧 Detected system building needs")
+        
+        # Laptops
+        if any(word in text for word in ['laptop', 'portable', 'mobile', 'notebook']):
+            categories.add('laptop')
+            logger.info("💻 Detected laptop needs")
         
         # If no specific categories found, provide sensible defaults based on context
         if not categories:

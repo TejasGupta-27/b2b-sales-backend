@@ -7,16 +7,21 @@ from pathlib import Path
 import uuid
 
 from db.database import get_db
+from db.models import User as DBUser
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from services.pdf_generator import PDFGenerator
 from services.pitch_deck_service import PitchDeckService
 from services.metrics_service import get_metrics_service
+from services.auth_service import get_current_active_user
 from ai_services.factory import AIServiceFactory
 
 router = APIRouter()
 
 @router.post("/generate-quote")
-async def generate_quote(quote_request: Dict[str, Any]):
+async def generate_quote(
+    quote_request: Dict[str, Any],
+    current_user: DBUser = Depends(get_current_active_user)
+):
     """Generate a detailed quotation and pitch deck"""
     metrics_service = get_metrics_service()
     
@@ -25,7 +30,7 @@ async def generate_quote(quote_request: Dict[str, Any]):
         sales_agent = SimpleConversationalAgent(base_provider)
         
         # Generate the quote
-        quote = await sales_agent.generate_quote(quote_request)
+        quote = await sales_agent.generate_quote(quote_request, current_user)
         
         # Generate unique IDs
         quote_id = str(uuid.uuid4())
@@ -68,7 +73,10 @@ async def generate_quote(quote_request: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-quote-with-pdf")
-async def generate_quote_with_pdf(quote_request: Dict[str, Any]):
+async def generate_quote_with_pdf(
+    quote_request: Dict[str, Any],
+    current_user: DBUser = Depends(get_current_active_user)
+):
     """Generate a quotation with PDF file and pitch deck"""
     metrics_service = get_metrics_service()
     
@@ -77,7 +85,7 @@ async def generate_quote_with_pdf(quote_request: Dict[str, Any]):
         sales_agent = SimpleConversationalAgent(base_provider)
         
         # Generate the quote
-        quote = await sales_agent.generate_quote_with_pdf(quote_request)
+        quote = await sales_agent.generate_quote(quote_request, current_user)
         
         # Generate unique IDs
         quote_id = str(uuid.uuid4())
@@ -191,7 +199,10 @@ async def preview_quote_pdf(quote_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-pitch-deck")
-async def generate_pitch_deck(quote_request: Dict[str, Any]):
+async def generate_pitch_deck(
+    quote_request: Dict[str, Any],
+    current_user: DBUser = Depends(get_current_active_user)
+):
     """Generate a sales pitch deck from a quotation"""
     metrics_service = get_metrics_service()
     
@@ -200,7 +211,7 @@ async def generate_pitch_deck(quote_request: Dict[str, Any]):
         base_provider = AIServiceFactory.create_provider("azure_openai")
         sales_agent = SimpleConversationalAgent(base_provider)
         
-        quote = await sales_agent.generate_quote(quote_request)
+        quote = await sales_agent.generate_quote(quote_request, current_user)
         
         # Initialize pitch deck service
         pitch_deck_service = PitchDeckService()
