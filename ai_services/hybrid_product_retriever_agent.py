@@ -791,7 +791,7 @@ Think broadly about their needs and suggest relevant alternatives."""
         context_analysis: ContextAnalysis,
         similar_products_analysis: Optional[SimilarProductSearch]
     ) -> Dict[str, Any]:
-        """Perform AI-enhanced hybrid search with dynamic query generation"""
+        """Perform AI-enhanced hybrid search with dynamic query generation, fallback to vector-only if LLM fails"""
         
         print("🧠 AI-Enhanced Hybrid Search: Using dynamic query generation...")
         
@@ -822,61 +822,91 @@ Think broadly about their needs and suggest relevant alternatives."""
             "fusion_enabled": settings.use_rrf_merging,
             "elasticsearch_weight": settings.rrf_elasticsearch_weight,
             "semantic_weight": settings.rrf_semantic_weight,
-            "ai_enhanced": True
+            "ai_enhanced": True,
+            "llm_keyword_failed": False
         }
         
-        print("🧠 Step 1: AI-Enhanced Elasticsearch search...")
-        elasticsearch_products = await self._elasticsearch_search(enhanced_requirements)
-        search_methods["methods"].append("ai_enhanced_elasticsearch_keyword")
-        search_methods["elasticsearch_count"] = len(elasticsearch_products)
-        print(f"   Found {len(elasticsearch_products)} products via AI-enhanced keyword search")
+        # Step 1: Try AI-Enhanced Elasticsearch search with fallback
+        elasticsearch_products = []
+        try:
+            print("🧠 Step 1: AI-Enhanced Elasticsearch search...")
+            elasticsearch_products = await self._elasticsearch_search(enhanced_requirements)
+            search_methods["methods"].append("ai_enhanced_elasticsearch_keyword")
+            search_methods["elasticsearch_count"] = len(elasticsearch_products)
+            print(f"   Found {len(elasticsearch_products)} products via AI-enhanced keyword search")
+        except Exception as e:
+            print(f"⚠️ AI-Enhanced Elasticsearch search failed: {e}")
+            print("   Skipping keyword search, will use vector search only...")
+            search_methods["llm_keyword_failed"] = True
+            search_methods["elasticsearch_count"] = 0
+            search_methods["elasticsearch_error"] = str(e)
         
         # Step 2: AI-Enhanced Vector search for products
         vector_products = []
         if self.vector_service:
-            print("🧠 Step 2: AI-Enhanced Vector search for products...")
-            vector_products = await self._elasticsearch_vector_search_products(enhanced_requirements)
-            search_methods["methods"].append("ai_enhanced_vector_semantic")
-            search_methods["vector_products_count"] = len(vector_products)
-            print(f"   Found {len(vector_products)} products via AI-enhanced vector search")
+            try:
+                print("🧠 Step 2: AI-Enhanced Vector search for products...")
+                vector_products = await self._elasticsearch_vector_search_products(enhanced_requirements)
+                search_methods["methods"].append("ai_enhanced_vector_semantic")
+                search_methods["vector_products_count"] = len(vector_products)
+                print(f"   Found {len(vector_products)} products via AI-enhanced vector search")
+            except Exception as e:
+                print(f"⚠️ AI-Enhanced Vector search for products failed: {e}")
+                search_methods["vector_products_count"] = 0
+                search_methods["vector_products_error"] = str(e)
         
         # Step 3: Vector search for solutions
         vector_solutions = []
         if self.vector_service:
-            print("🧠 Step 3: Vector search for solutions...")
-            vector_solutions = await self._elasticsearch_vector_search_solutions(enhanced_requirements)
-            search_methods["methods"].append("vector_solutions")
-            search_methods["vector_solutions_count"] = len(vector_solutions)
-            print(f"   Found {len(vector_solutions)} solutions via vector search")
+            try:
+                print("🧠 Step 3: Vector search for solutions...")
+                vector_solutions = await self._elasticsearch_vector_search_solutions(enhanced_requirements)
+                search_methods["methods"].append("vector_solutions")
+                search_methods["vector_solutions_count"] = len(vector_solutions)
+                print(f"   Found {len(vector_solutions)} solutions via vector search")
+            except Exception as e:
+                print(f"⚠️ Vector search for solutions failed: {e}")
+                search_methods["vector_solutions_count"] = 0
+                search_methods["vector_solutions_error"] = str(e)
         
-        # Step 4: RRF fusion for products
-        print("🎯 Step 4: RRF fusion for products...")
-        categories = enhanced_requirements.get('recommended_categories') or enhanced_requirements.get('llm_context', {}).get('recommended_categories')
-        if settings.use_rrf_merging and categories:
-            fused_products = self.rrf_fusion.fuse_rankings_per_category(
-                elasticsearch_products, 
-                vector_products,
-                categories,
-                max_results=settings.final_result_limit
-            )
-            search_methods["fusion_method"] = "rrf_per_category"
-            print(f"   RRF per-category fusion complete: {len(fused_products)} products")
-        elif settings.use_rrf_merging:
-            fused_products = self.rrf_fusion.fuse_rankings(
-                elasticsearch_products, 
-                vector_products,
-                max_results=settings.final_result_limit
-            )
-            search_methods["fusion_method"] = "rrf"
-            print(f"   RRF fusion complete: {len(fused_products)} products")
+        # Step 4: Handle fusion or fallback to vector-only results
+        if search_methods["llm_keyword_failed"] and vector_products:
+            print("🎯 Step 4: LLM keyword search failed, using vector search results only...")
+            fused_products = vector_products[:settings.final_result_limit]
+            search_methods["fusion_method"] = "vector_only_fallback"
+            print(f"   Vector-only fallback complete: {len(fused_products)} products")
+        elif elasticsearch_products or vector_products:
+            print("🎯 Step 4: RRF fusion for products...")
+            categories = enhanced_requirements.get('recommended_categories') or enhanced_requirements.get('llm_context', {}).get('recommended_categories')
+            if settings.use_rrf_merging and categories and elasticsearch_products:
+                fused_products = self.rrf_fusion.fuse_rankings_per_category(
+                    elasticsearch_products, 
+                    vector_products,
+                    categories,
+                    max_results=settings.final_result_limit
+                )
+                search_methods["fusion_method"] = "rrf_per_category"
+                print(f"   RRF per-category fusion complete: {len(fused_products)} products")
+            elif settings.use_rrf_merging and elasticsearch_products:
+                fused_products = self.rrf_fusion.fuse_rankings(
+                    elasticsearch_products, 
+                    vector_products,
+                    max_results=settings.final_result_limit
+                )
+                search_methods["fusion_method"] = "rrf"
+                print(f"   RRF fusion complete: {len(fused_products)} products")
+            else:
+                # Simple merge if RRF is disabled or only vector results available
+                fused_products = self._merge_product_results_simple(
+                    elasticsearch_products, 
+                    vector_products
+                )
+                search_methods["fusion_method"] = "simple"
+                print(f"   Simple merge complete: {len(fused_products)} products")
         else:
-            # Simple merge if RRF is disabled
-            fused_products = self._merge_product_results_simple(
-                elasticsearch_products, 
-                vector_products
-            )
-            search_methods["fusion_method"] = "simple"
-            print(f"   Simple merge complete: {len(fused_products)} products")
+            print("⚠️ No products found from any search method")
+            fused_products = []
+            search_methods["fusion_method"] = "none"
         
         # Step 5: Process solutions (no fusion needed for solutions)
         solutions = vector_solutions[:settings.final_result_limit] if vector_solutions else []
@@ -1266,6 +1296,11 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'description': 'Reciprocal Rank Fusion parameters for hybrid search result merging'
             }
             
+            # Determine if LLM keyword search failed but we still have results
+            search_methods = enhanced_results.get('search_methods', {})
+            llm_keyword_failed = search_methods.get('llm_keyword_failed', False)
+            has_products = len(enhanced_results.get('products', [])) > 0
+            
             # Return structured response with LLM context
             retrieval_result = {
                 'products': enhanced_results.get('products', []),
@@ -1279,6 +1314,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 'rrf_parameters': rrf_parameters,
                 'retrieval_confidence': enhanced_results.get('retrieval_confidence', 0.0),
                 'llm_context_used': True,
+                'llm_keyword_failed': llm_keyword_failed,
+                'vector_fallback_used': llm_keyword_failed and has_products,
                 'similar_products_analysis': enhanced_results.get('similar_products_analysis', False),
                 'success': True
             }
@@ -1286,6 +1323,13 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             print(f"✅ LLM-Enhanced Hybrid Retriever: Found {len(enhanced_results.get('products', []))} products, {len(enhanced_results.get('solutions', []))} solutions")
             print(f"   Confidence: {enhanced_results.get('retrieval_confidence', 0.0):.1%}")
             print(f"   LLM Context: {enhanced_results.get('requirements', {}).get('llm_context', {}).get('primary_need', 'Unknown')}")
+            
+            # Log fallback information
+            if llm_keyword_failed and has_products:
+                print(f"   ✅ LLM keyword search failed but vector search succeeded - returned {len(enhanced_results.get('products', []))} products")
+            elif llm_keyword_failed:
+                print(f"   ⚠️ LLM keyword search failed and no vector results available")
+            
             return retrieval_result
             
         except Exception as e:
@@ -1415,12 +1459,17 @@ Provide detailed analysis considering both keyword relevance and semantic simila
         return min(score, 1.0)
 
     async def _elasticsearch_search(self, requirements: Dict[str, Any]) -> List[Dict]:
-        """Perform Elasticsearch keyword search for products"""
+        """Perform Elasticsearch keyword search for products with LLM fallback handling"""
         try:
-            # Use AI-powered dynamic query generation if available
+            # Try AI-powered dynamic query generation if available
             if self.vector_service and hasattr(self.vector_service, 'elasticsearch_search_with_ai_query'):
-                logger.info("🧠 Using AI-powered Elasticsearch search...")
-                return await self.vector_service.elasticsearch_search_with_ai_query(requirements, settings.final_result_limit)
+                try:
+                    logger.info("🧠 Using AI-powered Elasticsearch search...")
+                    return await self.vector_service.elasticsearch_search_with_ai_query(requirements, settings.final_result_limit)
+                except Exception as ai_error:
+                    logger.warning(f"AI-powered Elasticsearch search failed: {ai_error}")
+                    logger.info("🔄 Falling back to standard Elasticsearch search...")
+                    # Continue to fallback method below
             
             # Fallback to original method
             # Build search query from requirements
@@ -1472,8 +1521,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             return results
             
         except Exception as e:
-            logger.error(f"Elasticsearch search failed: {e}")
-            return []
+            logger.error(f"Elasticsearch search failed completely: {e}")
+            raise  # Re-raise the exception so the calling method can handle it
     
     async def _elasticsearch_vector_search_products(self, requirements: Dict[str, Any]) -> List[Dict]:
         """Perform vector search for products using semantic similarity with intelligent category filtering"""
@@ -1481,10 +1530,15 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             if not self.vector_service:
                 return []
             
-            # Use AI-powered dynamic query generation if available
+            # Try AI-powered dynamic query generation if available
             if hasattr(self.vector_service, 'vector_search_products_with_ai_query'):
-                logger.info("🧠 Using AI-powered vector search...")
-                return await self.vector_service.vector_search_products_with_ai_query(requirements, settings.final_result_limit)
+                try:
+                    logger.info("🧠 Using AI-powered vector search...")
+                    return await self.vector_service.vector_search_products_with_ai_query(requirements, settings.final_result_limit)
+                except Exception as ai_error:
+                    logger.warning(f"AI-powered vector search failed: {ai_error}")
+                    logger.info("🔄 Falling back to standard vector search...")
+                    # Continue to fallback method below
             
             # Fallback to original method - build a more specific query
             semantic_query = requirements.get('semantic_query', '')
@@ -1563,7 +1617,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             
         except Exception as e:
             logger.error(f"Vector search for products failed: {e}")
-            return []
+            raise  # Re-raise the exception so the calling method can handle it
     
     def _normalize_categories(self, categories) -> Optional[List[str]]:
         """Normalize and validate categories for vector search"""
