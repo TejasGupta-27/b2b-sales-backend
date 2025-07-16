@@ -534,7 +534,7 @@ class ElasticsearchVectorService:
                 doc["category"] = category
             
             # Get the appropriate index for this category
-            index_name = CATEGORY_INDEX_MAP.get(category, DEFAULT_PRODUCTS_INDEX)
+            index_name = CATEGORY_INDEX_MAP.get(str(category) if category else "", DEFAULT_PRODUCTS_INDEX)
             
             # Index document into category-specific index
             await self.client.index(
@@ -1643,28 +1643,39 @@ DATA STRUCTURE INFORMATION:
 Available Categories: {', '.join(data_structure.available_categories)}
 Searchable Fields: {', '.join(data_structure.searchable_fields)}
 
+COMPLETE FIELD MAPPING BY CATEGORY:
+{json.dumps(FIELD_MAP, indent=2)}
+
+CATEGORY TO INDEX MAPPING:
+{json.dumps(CATEGORY_INDEX_MAP, indent=2)}
+
 SEARCH STRATEGY: {search_type}
 
 TASK:
-Generate a search query strategy with these components:
+Generate a search query strategy that leverages the category-specific fields from the FIELD_MAP above:
 
 1. SEMANTIC_QUERY: Natural language query for vector search (keep simple and clear)
-2. KEYWORD_QUERY: Elasticsearch query structure that uses the ACTUAL search terms from requirements
-3. CATEGORY_FILTERS: List of most relevant product categories
-4. FIELD_PRIORITIES: Basic field boost values (name: 4.0, description: 3.0, etc.)
+2. KEYWORD_QUERY: Elasticsearch query structure that uses:
+   - The ACTUAL search terms from requirements (NOT "product")
+   - Category-specific fields from FIELD_MAP for the relevant categories
+   - Both phrase matching and individual term matching
+   - Proper field boosting based on relevance
+3. CATEGORY_FILTERS: List of most relevant product categories from the available categories
+4. FIELD_PRIORITIES: Field boost values including category-specific fields
 5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only'
 6. CONFIDENCE: Confidence score between 0.0 and 1.0
-7. REASONING: Brief explanation of strategy
+7. REASONING: Brief explanation of strategy and field selection
 8. SUGGESTED_FILTERS: Empty object {{}} (no complex filters)
 
-CRITICAL REQUIREMENTS:
-- Use the EXACT search terms from technical_requirements, search_keywords, and semantic_queries
-- Create individual term matches for better recall (e.g., "i9 CPU" should match both "i9" and "CPU")
-- Use exact phrase matching for the full search terms
-- Include category matching if categories are specified
-- Use proper field boosting: name (4.0), description (3.0), features (2.0), category (1.5)
+FIELD USAGE GUIDELINES:
+- For CPU queries: Use fields like "core_count", "core_clock", "boost_clock", "tdp"
+- For GPU/video-card queries: Use fields like "chipset", "memory", "core_clock", "boost_clock"
+- For memory queries: Use fields like "speed", "modules", "cas_latency"
+- For monitor queries: Use fields like "screen_size", "resolution", "refresh_rate"
+- For storage queries: Use fields like "capacity", "type", "interface", "cache"
+- Always include standard fields: "name", "description", "features", "category"
 
-EXAMPLE KEYWORD_QUERY STRUCTURE FOR "i9 CPU":
+EXAMPLE FOR "i9 CPU" query (using cpu category fields):
 {{
   "query": {{
     "bool": {{
@@ -1672,7 +1683,9 @@ EXAMPLE KEYWORD_QUERY STRUCTURE FOR "i9 CPU":
         {{"match_phrase": {{"name": {{"query": "i9 CPU", "boost": 8.0}}}}}},
         {{"match_phrase": {{"description": {{"query": "i9 CPU", "boost": 6.0}}}}}},
         {{"match": {{"name": {{"query": "i9", "boost": 6.0}}}}}},
-        {{"match": {{"name": {{"query": "CPU", "boost": 6.0}}}}}},
+        {{"match": {{"core_count": {{"query": "i9", "boost": 3.0}}}}}},
+        {{"match": {{"core_clock": {{"query": "high performance", "boost": 2.5}}}}}},
+        {{"match": {{"boost_clock": {{"query": "turbo", "boost": 2.5}}}}}},
         {{"match": {{"description": {{"query": "i9", "boost": 4.0}}}}}},
         {{"match": {{"description": {{"query": "CPU", "boost": 4.0}}}}}},
         {{"match": {{"features": {{"query": "i9", "boost": 3.0}}}}}},
@@ -1685,13 +1698,16 @@ EXAMPLE KEYWORD_QUERY STRUCTURE FOR "i9 CPU":
   "size": 20
 }}
 
-IMPORTANT: Replace ALL instances of "product" in the default query with the actual search terms from the requirements. Use the exact terms like "i9", "CPU", "Intel", etc.
+CRITICAL REQUIREMENTS:
+1. NEVER use "product" as a search term - use the actual terms from requirements
+2. Select the most relevant category from FIELD_MAP based on the requirements
+3. Use category-specific fields from FIELD_MAP for that category
+4. Create both exact phrase matches and individual term matches
+5. Boost category-specific fields appropriately (2.0-4.0 range)
+6. Include fallback matches on standard fields (name, description, features)
+7. Ensure JSON is properly formatted
 
-IMPORTANT: 
-- Use the actual search terms from the requirements, not generic terms
-- Create both phrase matches and individual term matches
-- Ensure all JSON is properly formatted with correct quotes and braces
-- Use simple, clean strings without special characters"""
+IMPORTANT: Analyze the requirements to determine the most relevant category, then use the fields from FIELD_MAP for that category to create precise, field-aware search queries."""
 
             try:
                 # Use Pydantic function calling for structured response
