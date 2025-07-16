@@ -11,6 +11,13 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+def get_product_name(product: Dict[str, Any]) -> str:
+    """Get product name, handling both 'name' and 'title' fields"""
+    return (product.get('name') or 
+            product.get('title') or 
+            product.get('product_name') or 
+            'Unknown Product')
+
 class ContextAnalysis(BaseModel):
     """LLM-powered context analysis for better product retrieval"""
     primary_need: str = Field(description="The main problem or need the customer is trying to solve")
@@ -164,7 +171,7 @@ class RRFHybridFusion:
         print(f"🎯 RRF Fusion complete: {len(fused_products)} unique products")
         print(f"   Top 5 RRF results:")
         for i, product in enumerate(fused_products[:5]):
-            print(f"     {i+1}. {product.get('name', 'Unknown')} (RRF: {product['rrf_score']:.4f}, Source: {product['search_source']})")
+            print(f"     {i+1}. {get_product_name(product)} (RRF: {product['rrf_score']:.4f}, Source: {product['search_source']})")
         
         return fused_products
     

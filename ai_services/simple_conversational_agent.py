@@ -11,7 +11,7 @@ import time
 
 from .base import AIProvider, AIMessage, AIResponse
 from services.prompt_manager import get_prompt_manager
-from .hybrid_product_retriever_agent import HybridProductRetrieverAgent
+from .hybrid_product_retriever_agent import HybridProductRetrieverAgent, get_product_name
 from .quote_generation_agent import QuoteGenerationAgent
 from config import settings
 from services.metrics_service import get_metrics_service
@@ -576,7 +576,7 @@ Here are the top recommended products by category for your needs:
         for cat, plist in cat_map.items():
             context += f"\n{cat.title()}:\n"
             for i, p in enumerate(plist[:2]):  # Top 2 per category
-                context += f"  {i+1}. {p.get('name', 'Unknown')} (${p.get('price', 'N/A')})\n"
+                context += f"  {i+1}. {get_product_name(p)} (${p.get('price', 'N/A')})\n"
                 context += f"     Description: {p.get('description', 'No description')[:100]}...\n"
         context += "\nPlease recommend a full build using the best available products from each category above. If a category is missing, note that as well."
 

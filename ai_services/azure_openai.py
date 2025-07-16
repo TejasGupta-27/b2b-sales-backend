@@ -156,7 +156,25 @@ class AzureOpenAIProvider(AIProvider):
             choice = response.choices[0]
             
             if choice.message.function_call:
-                function_args = json.loads(choice.message.function_call.arguments)
+                try:
+                    # First try to parse the JSON directly
+                    function_args = json.loads(choice.message.function_call.arguments)
+                except json.JSONDecodeError as json_error:
+                    logger.warning(f"Initial JSON parsing failed: {json_error}")
+                    logger.debug(f"Raw arguments: {choice.message.function_call.arguments[:500]}...")
+                    
+                    # Try to fix the malformed JSON
+                    fixed_json = self._fix_json_arguments(choice.message.function_call.arguments)
+                    if fixed_json:
+                        try:
+                            function_args = json.loads(fixed_json)
+                            logger.info("Successfully parsed JSON after fixing")
+                        except json.JSONDecodeError as fix_error:
+                            logger.error(f"JSON fixing failed: {fix_error}")
+                            raise Exception(f"Failed to parse function call arguments even after attempting fixes. Original error: {json_error}")
+                    else:
+                        raise Exception(f"Failed to fix malformed JSON. Original error: {json_error}")
+                
                 return response_model(**function_args)
             else:
                 raise ValueError("No function call in response")

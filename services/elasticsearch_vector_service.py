@@ -476,6 +476,10 @@ class ElasticsearchVectorService:
                 value = item.get(field)
                 if value is not None:
                     text_parts.append(f"{field.replace('_', ' ').capitalize()}: {value}")
+            
+            # Always include normalized name field if available
+            if item.get('name') and 'name' not in FIELD_MAP[category]:
+                text_parts.append(f"Name: {item['name']}")
         else:
             # Fallback to general field extraction
             text_parts.append(f"Type: {item_type}")
@@ -512,6 +516,14 @@ class ElasticsearchVectorService:
             # Ensure ID exists
             if not doc.get("id"):
                 doc["id"] = f"product_{hash(str(product))}"
+            
+            # Normalize name field - ensure all products have a "name" field
+            if not doc.get("name") and doc.get("title"):
+                doc["name"] = doc["title"]  # Use title as name for laptops
+            elif not doc.get("name") and doc.get("product_name"):
+                doc["name"] = doc["product_name"]  # Use product_name as fallback
+            elif not doc.get("name"):
+                doc["name"] = f"Product {doc.get('id', 'Unknown')}"  # Final fallback
             
             # Clean up document - remove empty field names and invalid fields
             doc = {k: v for k, v in doc.items() if k and k.strip() and not k.startswith("__")}
