@@ -461,7 +461,7 @@ class ElasticsearchVectorService:
         # Fallback: return the base name as-is
         return base_name
 
-    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: str = None) -> str:
+    def _create_searchable_content(self, item: Dict[str, Any], item_type: str = "product", filename: Optional[str] = None) -> str:
         """Create searchable text content for embedding, category-aware"""
         text_parts = []
         category = None
@@ -494,7 +494,7 @@ class ElasticsearchVectorService:
         
         return " | ".join(text_parts)
     
-    async def index_product(self, product: Dict[str, Any], filename: str = None):
+    async def index_product(self, product: Dict[str, Any], filename: Optional[str] = None):
         """Index a product with vector embedding into category-specific index"""
         try:
             # Generate searchable content
@@ -1649,7 +1649,7 @@ TASK:
 Generate a search query strategy with these components:
 
 1. SEMANTIC_QUERY: Natural language query for vector search (keep simple and clear)
-2. KEYWORD_QUERY: Basic Elasticsearch query structure (use simple field matching)
+2. KEYWORD_QUERY: Elasticsearch query structure that uses the ACTUAL search terms from requirements
 3. CATEGORY_FILTERS: List of most relevant product categories
 4. FIELD_PRIORITIES: Basic field boost values (name: 4.0, description: 3.0, etc.)
 5. SEARCH_STRATEGY: One of: 'hybrid', 'vector_only', 'keyword_only'
@@ -1657,27 +1657,37 @@ Generate a search query strategy with these components:
 7. REASONING: Brief explanation of strategy
 8. SUGGESTED_FILTERS: Empty object {{}} (no complex filters)
 
-CRITICAL JSON FORMATTING REQUIREMENTS:
-- Use ONLY simple string values, no special characters
-- Ensure all strings are properly quoted with double quotes
-- Use simple field names: name, description, features, category
-- Avoid complex nested structures in keyword_query
-- Keep all JSON properly formatted and valid
+CRITICAL REQUIREMENTS:
+- Use the EXACT search terms from technical_requirements, search_keywords, and semantic_queries
+- Create individual term matches for better recall (e.g., "i9 CPU" should match both "i9" and "CPU")
+- Use exact phrase matching for the full search terms
+- Include category matching if categories are specified
+- Use proper field boosting: name (4.0), description (3.0), features (2.0), category (1.5)
 
-EXAMPLE KEYWORD_QUERY STRUCTURE:
+EXAMPLE KEYWORD_QUERY STRUCTURE FOR "i9 CPU":
 {{
   "query": {{
     "bool": {{
       "should": [
-        {{"match": {{"name": {{"query": "gaming", "boost": 4.0}}}}}},
-        {{"match": {{"description": {{"query": "gaming", "boost": 3.0}}}}}}
-      ]
+        {{"match_phrase": {{"name": {{"query": "i9 CPU", "boost": 8.0}}}}}},
+        {{"match_phrase": {{"description": {{"query": "i9 CPU", "boost": 6.0}}}}}},
+        {{"match": {{"name": {{"query": "i9", "boost": 4.0}}}}}},
+        {{"match": {{"name": {{"query": "CPU", "boost": 4.0}}}}}},
+        {{"match": {{"description": {{"query": "i9", "boost": 3.0}}}}}},
+        {{"match": {{"description": {{"query": "CPU", "boost": 3.0}}}}}},
+        {{"match": {{"category": {{"query": "cpu", "boost": 2.0}}}}}}
+      ],
+      "minimum_should_match": 1
     }}
   }},
   "size": 20
 }}
 
-IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces. Use simple, clean strings without special characters."""
+IMPORTANT: 
+- Use the actual search terms from the requirements, not generic terms
+- Create both phrase matches and individual term matches
+- Ensure all JSON is properly formatted with correct quotes and braces
+- Use simple, clean strings without special characters"""
 
             try:
                 # Use Pydantic function calling for structured response
@@ -1712,57 +1722,105 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
     ) -> DynamicQueryGeneration:
         """Fallback query generation when AI is not available"""
         
-        # Build semantic query - preserve exact terms from requirements
-        semantic_query = requirements.get('semantic_query', '')
-        if not semantic_query:
-            # Use technical requirements if available
-            tech_reqs = requirements.get('technical_requirements', [])
-            if tech_reqs:
-                semantic_query = ' '.join([str(req) for req in tech_reqs])
-            else:
-                use_case = requirements.get('use_case', 'business solution')
-                semantic_query = f"{use_case} technology solution"
+        # Extract the actual search terms from multiple sources
+        search_terms = []
         
-        # Extract the actual search query from semantic_query or technical_requirements
-        actual_query = semantic_query
-        if not actual_query and requirements.get('technical_requirements'):
-            tech_reqs = requirements.get('technical_requirements', [])
+        # Get search keywords from LLM context if available
+        if requirements.get('search_keywords'):
+            search_terms.extend(requirements['search_keywords'])
+        
+        # Get technical requirements
+        if requirements.get('technical_requirements'):
+            tech_reqs = requirements['technical_requirements']
             if isinstance(tech_reqs, list):
-                actual_query = ' '.join([str(req) for req in tech_reqs])
+                search_terms.extend([str(req) for req in tech_reqs])
             else:
-                actual_query = str(tech_reqs)
+                search_terms.append(str(tech_reqs))
         
-        # If still no query, use a fallback
-        if not actual_query:
-            actual_query = "business solution"
+        # Get search terms from requirements
+        if requirements.get('search_terms'):
+            req_terms = requirements['search_terms']
+            if isinstance(req_terms, list):
+                search_terms.extend([str(term) for term in req_terms])
+            else:
+                search_terms.append(str(req_terms))
         
-        # Create a simple, effective Elasticsearch query that uses the actual search terms
+        # Get semantic queries from LLM context
+        if requirements.get('semantic_queries'):
+            semantic_queries = requirements['semantic_queries']
+            if isinstance(semantic_queries, list):
+                search_terms.extend([str(query) for query in semantic_queries])
+            else:
+                search_terms.append(str(semantic_queries))
+        
+        # Get use case
+        if requirements.get('use_case'):
+            search_terms.append(str(requirements['use_case']))
+        
+        # Remove duplicates and empty strings
+        search_terms = list(set([term.strip() for term in search_terms if term and term.strip()]))
+        
+        # If no search terms, use fallback
+        if not search_terms:
+            search_terms = ['business solution']
+        
+        # Create the main search query by combining terms
+        main_query = ' '.join(search_terms)
+        
+        # Create individual term queries for better matching
+        individual_terms = []
+        for term in search_terms:
+            # Split compound terms (e.g., "i9 CPU" -> ["i9", "CPU"])
+            if ' ' in term:
+                individual_terms.extend(term.split())
+            else:
+                individual_terms.append(term)
+        
+        # Remove duplicates from individual terms
+        individual_terms = list(set([term.strip() for term in individual_terms if term and term.strip()]))
+        
+        # Create a comprehensive Elasticsearch query
+        should_clauses = []
+        
+        # Add exact phrase matching for the main query
+        should_clauses.append({"match_phrase": {"name": {"query": main_query, "boost": 8.0}}})
+        should_clauses.append({"match_phrase": {"description": {"query": main_query, "boost": 6.0}}})
+        
+        # Add individual term matching for better recall
+        for term in individual_terms:
+            if len(term) > 1:  # Only add terms with length > 1
+                should_clauses.append({"match": {"name": {"query": term, "boost": 4.0}}})
+                should_clauses.append({"match": {"description": {"query": term, "boost": 3.0}}})
+                should_clauses.append({"match": {"features": {"query": term, "boost": 2.0}}})
+                should_clauses.append({"match": {"searchable_content": {"query": term, "boost": 1.5}}})
+        
+        # Add category matching if categories are specified
+        categories = requirements.get('recommended_categories', [])
+        if not categories:
+            categories = requirements.get('product_categories', [])
+        
+        if categories:
+            for category in categories:
+                should_clauses.append({"match": {"category": {"query": category, "boost": 2.0}}})
+        
         keyword_query = {
             "query": {
                 "bool": {
-                    "should": [
-                        # Exact phrase matching gets highest boost
-                        {"match_phrase": {"name": {"query": actual_query, "boost": 6.0}}},
-                        {"match_phrase": {"description": {"query": actual_query, "boost": 4.0}}},
-                        # Regular matching with good boosts
-                        {"match": {"name": {"query": actual_query, "boost": 4.0}}},
-                        {"match": {"description": {"query": actual_query, "boost": 3.0}}},
-                        {"match": {"features": {"query": actual_query, "boost": 2.0}}},
-                        {"match": {"searchable_content": {"query": actual_query, "boost": 1.5}}}
-                    ],
+                    "should": should_clauses,
                     "minimum_should_match": 1
                 }
             },
             "size": 20
         }
         
-        # Get categories from requirements or use defaults
-        categories = requirements.get('recommended_categories', [])
+        # Build semantic query for vector search
+        semantic_query = main_query
+        if not semantic_query:
+            semantic_query = requirements.get('semantic_query', 'business solution')
+        
+        # Infer categories from search terms if not provided
         if not categories:
-            categories = requirements.get('product_categories', [])
-        if not categories:
-            # Infer categories from the query content
-            query_lower = actual_query.lower()
+            query_lower = main_query.lower()
             if any(term in query_lower for term in ['i9', 'i7', 'i5', 'ryzen', 'cpu', 'processor']):
                 categories = ['cpu']
             elif any(term in query_lower for term in ['rtx', 'gtx', 'graphics', 'video card', 'gpu']):
@@ -1784,6 +1842,34 @@ IMPORTANT: Ensure all JSON is properly formatted with correct quotes and braces.
                     categories = ['internal-hard-drive', 'external-hard-drive']
                 else:
                     categories = ['cpu', 'memory', 'internal-hard-drive']
+        
+        # Create field priorities based on search strategy
+        field_priorities = {
+            "name": 4.0,
+            "description": 3.0,
+            "features": 2.0,
+            "category": 1.5,
+            "searchable_content": 1.5
+        }
+        
+        # Determine search strategy
+        if search_type == "keyword_only":
+            search_strategy = "keyword_only"
+        elif search_type == "vector_only":
+            search_strategy = "vector_only"
+        else:
+            search_strategy = "hybrid"
+        
+        return DynamicQueryGeneration(
+            semantic_query=semantic_query,
+            keyword_query=keyword_query,
+            category_filters=categories,
+            field_priorities=field_priorities,
+            search_strategy=search_strategy,
+            confidence=0.7,
+            reasoning=f"Fallback query generation using search terms: {search_terms}",
+            suggested_filters={}
+        )
         
         # Determine field priorities based on query content
         field_priorities = {

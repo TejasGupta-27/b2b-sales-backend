@@ -36,7 +36,7 @@ class SimilarProductSearch(BaseModel):
 class RRFHybridFusion:
     """Reciprocal Rank Fusion (RRF) implementation for hybrid search results"""
     
-    def __init__(self, k: float = None):
+    def __init__(self, k: Optional[float] = None):
         """
         Initialize RRF with parameter k
         
@@ -65,7 +65,7 @@ class RRFHybridFusion:
         self, 
         elasticsearch_products: List[Dict], 
         vector_products: List[Dict],
-        max_results: int = None
+        max_results: Optional[int] = None
     ) -> List[Dict]:
         """
         Fuse product rankings using RRF with requirement-based diversity selection
@@ -394,7 +394,7 @@ class RRFHybridFusion:
         elasticsearch_products: List[Dict],
         vector_products: List[Dict],
         categories: List[str],
-        max_results: int = None
+        max_results: Optional[int] = None
     ) -> List[Dict]:
         """
         Apply RRF fusion within each category and return balanced results.
@@ -470,9 +470,9 @@ class HybridProductRetrieverAgent(AIProvider):
     def __init__(
         self, 
         base_provider: AIProvider,
-        azure_embedding_endpoint: str = None,
-        azure_embedding_key: str = None,
-        rrf_k: float = None,
+        azure_embedding_endpoint: Optional[str] = None,
+        azure_embedding_key: Optional[str] = None,
+        rrf_k: Optional[float] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
