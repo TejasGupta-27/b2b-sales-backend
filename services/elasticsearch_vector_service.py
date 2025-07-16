@@ -961,7 +961,7 @@ class ElasticsearchVectorService:
             await self._wait_for_elasticsearch_ready()
             
             logger.info(f"Loading data into Elasticsearch with vector embeddings...")
-            data_dir = settings.data_dir
+            data_dir = Path(settings.data_dir)
             total_products_indexed = 0
             total_solutions_indexed = 0
             files_processed = 0
@@ -1188,7 +1188,7 @@ class ElasticsearchVectorService:
                 logger.info("🎯 Applied general default categories")
         elif not categories and settings.disable_automatic_category_defaults:
             logger.info("ℹ️ Automatic category defaults disabled (DISABLE_AUTOMATIC_CATEGORY_DEFAULTS=true)")
-            return None  # No categories to return
+            return []  # Return empty list instead of None
         
         logger.info(f"🎯 Final categories selected: {categories}")
         return categories
