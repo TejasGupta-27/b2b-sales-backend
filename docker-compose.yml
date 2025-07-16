@@ -65,6 +65,7 @@ services:
 
   # PostgreSQL Database
   postgres:
+    user: root
     image: postgres:15
     environment:
       POSTGRES_DB: b2b_sales

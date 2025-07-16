@@ -413,6 +413,12 @@ async def periodic_metrics_update():
                 # Update token usage metrics
                 metrics_service.update_token_usage_metrics()
                 
+                # Update organization metrics
+                metrics_service.update_organization_metrics(db)
+                
+                # Update user metrics
+                metrics_service.update_user_metrics(db)
+                
             finally:
                 db.close()
                 
