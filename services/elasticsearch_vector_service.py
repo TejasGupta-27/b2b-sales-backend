@@ -513,6 +513,16 @@ class ElasticsearchVectorService:
             if not doc.get("id"):
                 doc["id"] = f"product_{hash(str(product))}"
             
+            # Clean up price field - convert string prices to float
+            if "price" in doc and isinstance(doc["price"], str):
+                try:
+                    # Remove currency symbols and convert to float
+                    price_str = doc["price"].replace("$", "").replace(",", "").strip()
+                    doc["price"] = float(price_str)
+                except (ValueError, AttributeError):
+                    # If conversion fails, set to None or 0
+                    doc["price"] = None
+            
             # Determine which index to use based on category
             category = product.get("category")
             if not category and filename:
