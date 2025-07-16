@@ -96,7 +96,7 @@ class SimpleConversationalAgent(AIProvider):
         
         # Step 1: Analyze conversation intent
         intent_analysis = await self._analyze_conversation_intent(messages, customer_context)
-        print(f"   Intent: {intent_analysis.primary_intent}, Confidence: {intent_analysis.confidence:.2f}")
+        print(f"   Intent: {intent_analysis.intent_type}, Confidence: {intent_analysis.confidence:.2f}")
         
         # Step 2: Retrieve products/solutions only if needed
         product_data = None
