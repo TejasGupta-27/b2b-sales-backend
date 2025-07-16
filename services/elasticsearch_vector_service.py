@@ -1431,6 +1431,66 @@ class ElasticsearchVectorService:
             logger.error(f"Failed to get product stats: {e}")
             return {"total_products": 0, "categories": {}, "price_range": {}}
     
+    async def load_initial_data(self):
+        """Load initial data from JSON files - called during startup"""
+        try:
+            logger.info("Loading initial data from JSON files...")
+            result = await self.load_data_from_json(max_per_file=50)
+            logger.info(f"Initial data loading completed: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to load initial data: {e}")
+            raise
+    
+    async def load_laptop_data(self):
+        """Load only laptop data from laptop.json"""
+        try:
+            logger.info("Loading laptop data from laptop.json...")
+            data_dir = Path(settings.data_dir)
+            laptop_file = data_dir / "laptop.json"
+            
+            if not laptop_file.exists():
+                raise Exception("laptop.json file not found")
+            
+            total_products_indexed = 0
+            files_processed = 0
+            
+            try:
+                logger.info(f"Processing file: {laptop_file.name}")
+                with open(laptop_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                if isinstance(data, list):
+                    items = data[:50]  # Limit to 50 laptops
+                    for item in items:
+                        if self._is_product_data(item) and self._is_valid_product(item):
+                            await self.index_product(item, filename=laptop_file.name)
+                            total_products_indexed += 1
+                
+                files_processed += 1
+                logger.info(f"✅ {laptop_file.name}: {total_products_indexed} laptops indexed")
+                
+                # Refresh laptop index
+                try:
+                    await self.client.indices.refresh(index="laptop_vector")
+                    logger.info(f"✅ Refreshed laptop index with {total_products_indexed} documents")
+                except Exception as e:
+                    logger.warning(f"Failed to refresh laptop index: {e}")
+                
+                return {
+                    "files_processed": files_processed,
+                    "products_indexed": total_products_indexed,
+                    "solutions_indexed": 0
+                }
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to process {laptop_file.name}: {e}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Failed to load laptop data: {e}")
+            raise
+    
     async def reindex_all_data(self, force_replace: bool = False):
         """Compatibility method for old service interface - reindex all data"""
         try:
