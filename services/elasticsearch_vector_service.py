@@ -1715,7 +1715,14 @@ IMPORTANT:
                 logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
                 logger.info(f"   Reasoning: {dynamic_query.reasoning}")
                 logger.info(f"   Keyword Query: {dynamic_query.keyword_query}")
-                
+
+                # --- PATCH: Ensure keyword_query uses real search terms ---
+                import json as _json
+                keyword_query_str = _json.dumps(dynamic_query.keyword_query).lower() if dynamic_query.keyword_query else ""
+                if (not dynamic_query.keyword_query) or ("product" in keyword_query_str):
+                    print("⚠️ LLM returned default or empty keyword_query, using fallback.")
+                    dynamic_query.keyword_query = self._fallback_query_generation(requirements, search_type).keyword_query
+
                 return dynamic_query
                     
             except Exception as e:

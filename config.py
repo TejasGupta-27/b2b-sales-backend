@@ -68,8 +68,8 @@ class Settings(BaseSettings):
     enable_ai_enhanced_search: bool = os.getenv("ENABLE_AI_ENHANCED_SEARCH", "true").lower() == "true"
     use_rrf_merging: bool = os.getenv("USE_RRF_MERGING", "true").lower() == "true"
     rrf_k: float = float(os.getenv("RRF_K", "60"))
-    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.5"))
-    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.5"))
+    rrf_elasticsearch_weight: float = float(os.getenv("RRF_ELASTICSEARCH_WEIGHT", "0.2"))
+    rrf_semantic_weight: float = float(os.getenv("RRF_SEMANTIC_WEIGHT", "0.8"))
     final_result_limit: int = int(os.getenv("FINAL_RESULT_LIMIT", "20"))
     
     # Data Configuration
