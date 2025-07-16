@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")
     elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "eleven_multilingual_v1")
+    elevenlabs_stability: float = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    elevenlabs_similarity_boost: float = float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.5"))
+    elevenlabs_style: float = float(os.getenv("ELEVENLABS_STYLE", "0.0"))
+    elevenlabs_use_speaker_boost: bool = os.getenv("ELEVENLABS_USE_SPEAKER_BOOST", "true").lower() == "true"
+    
+    # Speech Service Configuration
+    speech_primary_provider: str = os.getenv("SPEECH_PRIMARY_PROVIDER", "elevenlabs")
+    speech_fallback_enabled: bool = os.getenv("SPEECH_FALLBACK_ENABLED", "true").lower() == "true"
+    speech_tts_primary_retries: int = int(os.getenv("SPEECH_TTS_PRIMARY_RETRIES", "1"))
     
     # Debug Configuration
     enable_debug_vector_endpoints: bool = os.getenv("ENABLE_DEBUG_VECTOR_ENDPOINTS", "false").lower() == "true"

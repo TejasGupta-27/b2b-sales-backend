@@ -42,7 +42,9 @@ FIELD_MAP = {
     "webcam": ["name", "price", "resolutions", "connection", "focus_type", "os", "fov"],
     "wired-network-card": ["name", "price", "interface", "color"],
     "wireless-network-card": ["name", "price", "protocol", "interface", "color"],
-   
+    "laptop": [
+        "title", "brand", "series", "item model number", "price", "ram", "computer memory type", "hard drive", "operating system", "processor", "chipset brand", "graphics coprocessor", "screen resolution", "max screen resolution", "standing screen display size", "item weight", "item dimensions  lxwxh", "color", "number of processors", "number of usb 3.0 ports", "wireless type", "tags", "url", "images", "customer reviews", "best sellers rank", "hard drive interface", "processor brand", "product dimensions"
+    ],
 }
 
 # Category to index mapping for per-category indices
@@ -72,6 +74,7 @@ CATEGORY_INDEX_MAP = {
     "webcam": "webcam_vector",
     "wired-network-card": "network_wired_vector",
     "wireless-network-card": "network_wireless_vector",
+    "laptop": "laptop_vector",
 }
 
 # Default index for uncategorized products
@@ -258,112 +261,61 @@ class ElasticsearchVectorService:
     async def create_vector_indices(self):
         """Create Elasticsearch indices with vector search mappings - one per category"""
         
-        # Products index with vector mapping
+        # Dynamically generate products mapping from FIELD_MAP
+        all_fields = set()
+        for fields in FIELD_MAP.values():
+            all_fields.update(fields)
+        
+        # Add standard fields that all products should have
+        standard_fields = {
+            "id", "name", "title", "category", "subcategory", "description", 
+            "specifications", "price", "currency", "availability", "tags", 
+            "features", "use_cases", "target_industries", "compatibility", 
+            "warranty", "support_level", "content_vector", "searchable_content"
+        }
+        all_fields.update(standard_fields)
+        
+        # Build dynamic properties mapping
+        properties = {
+            "id": {"type": "keyword"},
+            "name": {"type": "text", "analyzer": "standard"},
+            "title": {"type": "text", "analyzer": "standard"},
+            "category": {"type": "keyword"},
+            "subcategory": {"type": "keyword"},
+            "description": {"type": "text", "analyzer": "standard"},
+            "specifications": {"type": "object"},
+            "price": {"type": "float"},
+            "currency": {"type": "keyword"},
+            "availability": {"type": "boolean"},
+            "tags": {"type": "keyword"},
+            "features": {"type": "text", "analyzer": "standard"},
+            "use_cases": {"type": "text", "analyzer": "standard"},
+            "target_industries": {"type": "keyword"},
+            "compatibility": {"type": "text"},
+            "warranty": {"type": "text"},
+            "support_level": {"type": "keyword"},
+            
+            # Vector fields
+            "content_vector": {
+                "type": "dense_vector",
+                "dims": self.embedding_dimension,
+                "index": True,
+                "similarity": "cosine"
+            },
+            "searchable_content": {"type": "text", "analyzer": "standard"}
+        }
+        
+        # Add all fields from FIELD_MAP as text fields
+        for field in all_fields:
+            if field not in properties:
+                # Normalize field names (replace spaces with underscores)
+                normalized_field = field.replace(" ", "_").replace("-", "_")
+                properties[normalized_field] = {"type": "text", "analyzer": "standard"}
+        
+        # Products index with dynamic vector mapping
         products_mapping = {
             "mappings": {
-                "properties": {
-                    "id": {"type": "keyword"},
-                    "name": {"type": "text", "analyzer": "standard"},
-                    "category": {"type": "keyword"},
-                    "subcategory": {"type": "keyword"},
-                    "description": {"type": "text", "analyzer": "standard"},
-                    "specifications": {"type": "object"},
-                    "price": {"type": "float"},
-                    "currency": {"type": "keyword"},
-                    "availability": {"type": "boolean"},
-                    "tags": {"type": "keyword"},
-                    "features": {"type": "text", "analyzer": "standard"},
-                    "use_cases": {"type": "text", "analyzer": "standard"},
-                    "target_industries": {"type": "keyword"},
-                    "compatibility": {"type": "text"},
-                    "warranty": {"type": "text"},
-                    "support_level": {"type": "keyword"},
-                    
-                    # Dynamic fields that can be strings, numbers, or arrays
-                    "form_factor": {"type": "text"},
-                    "airflow": {"type": "text"},
-                    "noise_level": {"type": "text"},
-                    "rpm": {"type": "text"},
-                    "size": {"type": "text"},
-                    "capacity": {"type": "text"},
-                    "speed": {"type": "text"},
-                    "modules": {"type": "text"},
-                    "core_count": {"type": "text"},
-                    "core_clock": {"type": "text"},
-                    "boost_clock": {"type": "text"},
-                    "tdp": {"type": "text"},
-                    "memory": {"type": "text"},
-                    "wattage": {"type": "text"},
-                    "screen_size": {"type": "text"},
-                    "resolution": {"type": "text"},
-                    "refresh_rate": {"type": "text"},
-                    "response_time": {"type": "text"},
-                    "panel_type": {"type": "text"},
-                    "aspect_ratio": {"type": "text"},
-                    "type": {"type": "text"},
-                    "color": {"type": "text"},
-                    "interface": {"type": "text"},
-                    "efficiency": {"type": "text"},
-                    "modular": {"type": "text"},
-                    "socket": {"type": "text"},
-                    "max_memory": {"type": "text"},
-                    "memory_slots": {"type": "text"},
-                    "side_panel": {"type": "text"},
-                    "external_volume": {"type": "text"},
-                    "internal_35_bays": {"type": "text"},
-                    "channels": {"type": "text"},
-                    "channel_wattage": {"type": "text"},
-                    "pwm": {"type": "text"},
-                    "frequency_response": {"type": "text"},
-                    "microphone": {"type": "text"},
-                    "wireless": {"type": "text"},
-                    "enclosure_type": {"type": "text"},
-                    "style": {"type": "text"},
-                    "switches": {"type": "text"},
-                    "backlit": {"type": "text"},
-                    "tenkeyless": {"type": "text"},
-                    "connection_type": {"type": "text"},
-                    "tracking_method": {"type": "text"},
-                    "max_dpi": {"type": "text"},
-                    "hand_orientation": {"type": "text"},
-                    "bd": {"type": "text"},
-                    "dvd": {"type": "text"},
-                    "cd": {"type": "text"},
-                    "bd_write": {"type": "text"},
-                    "dvd_write": {"type": "text"},
-                    "cd_write": {"type": "text"},
-                    "mode": {"type": "text"},
-                    "digital_audio": {"type": "text"},
-                    "snr": {"type": "text"},
-                    "sample_rate": {"type": "text"},
-                    "chipset": {"type": "text"},
-                    "configuration": {"type": "text"},
-                    "amount": {"type": "text"},
-                    "capacity_w": {"type": "text"},
-                    "capacity_va": {"type": "text"},
-                    "chipset": {"type": "text"},
-                    "length": {"type": "text"},
-                    "resolutions": {"type": "text"},
-                    "focus_type": {"type": "text"},
-                    "os": {"type": "text"},
-                    "fov": {"type": "text"},
-                    "protocol": {"type": "text"},
-                    "price_per_gb": {"type": "text"},
-                    "first_word_latency": {"type": "text"},
-                    "cas_latency": {"type": "text"},
-                    "cache": {"type": "text"},
-                    "graphics": {"type": "text"},
-                    "smt": {"type": "text"},
-                    
-                    # Vector fields
-                    "content_vector": {
-                        "type": "dense_vector",
-                        "dims": self.embedding_dimension,
-                        "index": True,
-                        "similarity": "cosine"
-                    },
-                    "searchable_content": {"type": "text", "analyzer": "standard"}
-                }
+                "properties": properties
             },
             "settings": {
                 "number_of_shards": 1,
@@ -1976,6 +1928,7 @@ CATEGORY DESCRIPTIONS:
 • ups: Uninterruptible power supplies, backup power for critical systems
 • wireless-network-card: WiFi adapters, wireless networking solutions
 • wired-network-card: Ethernet adapters, wired networking for reliability
+• laptop: Laptops, portable computers for mobility and convenience
 
 ANALYSIS GUIDELINES:
 1. Focus on categories that directly solve the customer's stated needs
@@ -2134,6 +2087,11 @@ Analyze the requirements and provide structured category recommendations."""
         if any(word in text for word in ['build', 'custom', 'system', 'motherboard', 'case', 'cooling']):
             categories.update(['motherboard', 'case', 'cpu-cooler'])
             logger.info("🔧 Detected system building needs")
+        
+        # Laptops
+        if any(word in text for word in ['laptop', 'portable', 'mobile', 'notebook']):
+            categories.add('laptop')
+            logger.info("💻 Detected laptop needs")
         
         # If no specific categories found, provide sensible defaults based on context
         if not categories:

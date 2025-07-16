@@ -235,6 +235,7 @@ class RRFHybridFusion:
             'networking': [],           # Important for connectivity
             'cases_accessories': [],    # Nice to have (cases, cables)
             'audio_video': [],          # Nice to have (speakers, webcams)
+            'laptops': [],              # Dedicated group for laptops
             'other': []                 # Catch-all
         }
         
@@ -264,7 +265,8 @@ class RRFHybridFusion:
             'os': 'other',
             'sound-card': 'audio_video',
             'thermal-paste': 'cases_accessories',
-            'fan-controller': 'power_cooling'
+            'fan-controller': 'power_cooling',
+            'laptop': 'laptops', 
         }
         
         # Track categories found for logging
@@ -334,6 +336,7 @@ class RRFHybridFusion:
             'networking': 1,           # Important for connectivity
             'cases_accessories': 1,    # Nice to have (cases, cables)
             'audio_video': 1,          # Nice to have (speakers, webcams)
+            'laptops': 1,               # Dedicated group for laptops
             'other': 1                 # Catch-all
         }
         
