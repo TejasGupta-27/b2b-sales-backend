@@ -403,18 +403,19 @@ class ElasticsearchVectorService:
         except Exception as e:
             logger.warning(f"Solutions vector index creation issue: {e}")
     
-    def _truncate_text_for_embedding(self, text: str, max_tokens: int = 8000) -> str:
+    def _truncate_text_for_embedding(self, text: str, max_tokens: int = 7500) -> str:
         """Truncate text to fit within embedding model token limits"""
-        # Simple truncation by character count (approximate)
-        # Rough estimation: ~4 characters per token on average
-        max_chars = max_tokens * 4
+        # Conservative truncation to avoid token limit errors
+        # Use 7500 tokens as max to provide safety buffer for 8192 token limit
+        # Rough estimation: ~3 characters per token (more conservative than 4)
+        max_chars = max_tokens * 3
         
         if len(text) <= max_chars:
             return text
         
         # Truncate and add indicator
         truncated = text[:max_chars-20] + "... [truncated]"
-        logger.warning(f"🔄 Query truncated from {len(text)} to {len(truncated)} characters to fit token limit")
+        logger.warning(f"🔄 Query truncated from {len(text)} to {len(truncated)} characters to fit token limit (from ~{len(text)//3} to ~{len(truncated)//3} tokens)")
         return truncated
 
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:

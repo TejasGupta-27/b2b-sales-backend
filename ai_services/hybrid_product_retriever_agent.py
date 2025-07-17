@@ -1157,63 +1157,49 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
             )
     
     def _build_semantic_search_query(self, requirements: Dict[str, Any]) -> str:
-        """Build a comprehensive natural language query for semantic search without category restrictions"""
+        """Build a concise natural language query for semantic search without category restrictions"""
         
         query_parts = []
         
-        # Add use case and business context
+        # Add use case (prioritize this as most important)
         use_case = requirements.get('use_case', '')
         if use_case:
-            query_parts.append(use_case)
+            # Limit use case to reasonable length
+            use_case_limited = use_case[:200] if len(use_case) > 200 else use_case
+            query_parts.append(use_case_limited)
         
-        # Add technical requirements with more detail - preserve exact terms
+        # Add key technical requirements (limit to most important ones)
         tech_reqs = requirements.get('technical_requirements', [])
         if tech_reqs:
-            # Convert to string and add context, but preserve exact terms like "i5"
-            tech_text = ' '.join([str(req) for req in tech_reqs if str(req)])
+            # Take only first 3 technical requirements to keep query concise
+            key_tech_reqs = tech_reqs[:3] if isinstance(tech_reqs, list) else [str(tech_reqs)]
+            tech_text = ' '.join([str(req)[:100] for req in key_tech_reqs if str(req)])  # Limit each requirement
             if tech_text:
                 query_parts.append(f"Technical requirements: {tech_text}")
         
-        # Add business requirements
+        # Add business requirements (keep concise)
         business_reqs = requirements.get('business_requirements', [])
         if business_reqs:
-            business_text = ' '.join([str(req) for req in business_reqs if str(req)])
+            # Take only first 2 business requirements
+            key_business_reqs = business_reqs[:2] if isinstance(business_reqs, list) else [str(business_reqs)]
+            business_text = ' '.join([str(req)[:80] for req in key_business_reqs if str(req)])
             if business_text:
                 query_parts.append(f"Business needs: {business_text}")
         
-        # Add search terms as additional context (not as filters) - preserve exact terms
-        search_terms = requirements.get('search_terms', [])
-        if search_terms:
-            search_text = ' '.join([str(term) for term in search_terms if str(term)])
-            if search_text:
-                query_parts.append(f"Looking for: {search_text}")
-        
-        # Add industry context if available
-        industry = requirements.get('industry', '')
-        if industry:
-            query_parts.append(f"Industry: {industry}")
-        
-        # Add product categories as context, not filters
-        categories = requirements.get('product_categories', [])
-        if categories:
-            categories_text = ', '.join(categories)
-            query_parts.append(f"Product types: {categories_text}")
-        
-        # Add performance requirements if mentioned
-        performance_reqs = requirements.get('performance_requirements', [])
-        if performance_reqs:
-            perf_text = ' '.join([str(req) for req in performance_reqs if str(req)])
-            if perf_text:
-                query_parts.append(f"Performance needs: {perf_text}")
-        
-        # Build comprehensive query
+        # Build comprehensive query with length limit
         comprehensive_query = " ".join(query_parts)
+        
+        # Enforce maximum query length to prevent token overflow
+        max_query_length = 1000  # Conservative limit to stay well under token limits
+        if len(comprehensive_query) > max_query_length:
+            comprehensive_query = comprehensive_query[:max_query_length-20] + "... [truncated]"
+            logger.warning(f"🔄 Semantic query truncated to {max_query_length} characters to prevent token overflow")
         
         # If no specific requirements, create a general business query
         if not comprehensive_query.strip():
             comprehensive_query = "business technology solutions professional enterprise"
         
-        print(f"🔍 Built comprehensive semantic query: {comprehensive_query}")
+        print(f"🔍 Built concise semantic query ({len(comprehensive_query)} chars): {comprehensive_query}")
         return comprehensive_query
     
     async def _perform_hybrid_search(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
