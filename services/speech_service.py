@@ -14,6 +14,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from gtts import gTTS
 import base64
+from scipy.signal import resample_poly  # <-- Add this import
 from services.language_service import LanguageService
 
 # ElevenLabs integration
@@ -27,6 +28,15 @@ except ImportError:
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Helper function for resampling using scipy
+
+def resample_audio(audio_array, orig_sr, target_sr):
+    from math import gcd
+    factor = gcd(orig_sr, target_sr)
+    up = target_sr // factor
+    down = orig_sr // factor
+    return resample_poly(audio_array, up, down)
 
 class SpeechService:
     def __init__(self, model_name: str = "medium"):
@@ -149,7 +159,8 @@ class SpeechService:
             logger.info(f"Original audio: shape={audio_array.shape}, sample_rate={orig_sr}")
             target_sr = 16000
             if orig_sr != target_sr:
-                audio_array = librosa.core.resample(audio_array, orig_sr, target_sr)
+                # audio_array = librosa.core.resample(audio_array, orig_sr=orig_sr, target_sr=target_sr)
+                audio_array = resample_audio(audio_array, orig_sr, target_sr)
                 logger.info(f"Resampled audio to {target_sr} Hz")
             else:
                 logger.info("Audio already at 16kHz, no resampling needed")
@@ -174,11 +185,8 @@ class SpeechService:
             logger.info(f"Original audio: shape={audio_array.shape}, sample_rate={orig_sr}")
             target_sr = 16000
             if orig_sr != target_sr:
-                print("librosa.core.resample:", librosa.core.resample)
-                print("librosa.core.resample repr:", repr(librosa.core.resample))
-                print("librosa.core.resample doc:", librosa.core.resample.__doc__)
-                print("librosa module file:", librosa.__file__)
-                audio_array = librosa.core.resample(audio_array, orig_sr, target_sr)
+                # audio_array = librosa.core.resample(audio_array, orig_sr=orig_sr, target_sr=target_sr)
+                audio_array = resample_audio(audio_array, orig_sr, target_sr)
                 logger.info(f"Resampled audio to {target_sr} Hz")
             else:
                 logger.info("Audio already at 16kHz, no resampling needed")
