@@ -442,64 +442,67 @@ class RRFHybridFusion:
             for p in elasticsearch_products:
                 product_category = p.get('category', '').lower()
                 product_index = p.get('_index', '')
-                # Check category field or infer from index name
                 if product_category == category.lower():
                     es_cat.append(p)
                 elif not product_category and product_index:
-                    # Map index back to category
                     for cat, idx in CATEGORY_INDEX_MAP.items():
                         if product_index == idx and cat == category:
-                            p['category'] = category  # Set for consistency
+                            p['category'] = category
                             es_cat.append(p)
                             break
-            
             vec_cat = []
             for p in vector_products:
                 product_category = p.get('category', '').lower()
                 product_index = p.get('_index', '')
-                # Check category field or infer from index name
                 if product_category == category.lower():
                     vec_cat.append(p)
                 elif not product_category and product_index:
-                    # Map index back to category
                     for cat, idx in CATEGORY_INDEX_MAP.items():
                         if product_index == idx and cat == category:
-                            p['category'] = category  # Set for consistency
+                            p['category'] = category
                             vec_cat.append(p)
                             break
-            
             print(f"   📦 Category '{category}': {len(es_cat)} ES, {len(vec_cat)} vector products")
-            
-            # If we have products for this category, fuse them
+            # If we have products for this category, take top N by RRF score (no diversity selection)
             if es_cat or vec_cat:
-                # Allow more products per category if we have them (up to 2x the minimum)
-                category_max = min(target_per_category * 2, max_results // max(1, num_categories // 2))
-                fused = self.fuse_rankings(es_cat, vec_cat, max_results=category_max)
-                
-                # Add unique products from this category
-                for prod in fused:
-                    if prod.get('id') not in used_ids:
+                # Combine and score products
+                all_cat_products = es_cat + vec_cat
+                # Remove duplicates by id
+                unique_cat_products = {}
+                for prod in all_cat_products:
+                    unique_cat_products[prod.get('id')] = prod
+                # Calculate RRF scores
+                es_ranks = {prod.get('id'): i+1 for i, prod in enumerate(es_cat)}
+                vec_ranks = {prod.get('id'): i+1 for i, prod in enumerate(vec_cat)}
+                for prod in unique_cat_products.values():
+                    es_rank = es_ranks.get(prod.get('id'))
+                    vec_rank = vec_ranks.get(prod.get('id'))
+                    rrf_score = 0.0
+                    if es_rank is not None:
+                        rrf_score += self.calculate_rrf_score(es_rank) * settings.rrf_elasticsearch_weight
+                    if vec_rank is not None:
+                        rrf_score += self.calculate_rrf_score(vec_rank) * settings.rrf_semantic_weight
+                    prod['rrf_score'] = rrf_score
+                # Sort by RRF score
+                sorted_cat_products = sorted(unique_cat_products.values(), key=lambda x: x['rrf_score'], reverse=True)
+                # Add up to target_per_category products
+                added = 0
+                for prod in sorted_cat_products:
+                    if prod.get('id') not in used_ids and added < target_per_category:
                         final_products.append(prod)
                         used_ids.add(prod.get('id'))
+                        added += 1
                         print(f"     ✅ Added: {prod.get('name', 'Unknown')} (RRF: {prod.get('rrf_score', 0):.4f})")
-                        
-                        # Stop if we've reached the overall limit
-                        if len(final_products) >= max_results:
-                            break
+                    if len(final_products) >= max_results:
+                        break
             else:
                 print(f"     ⚠️ No products found for category '{category}'")
-        
         # If we haven't filled the quota, add remaining high-scoring products from any category
         if len(final_products) < max_results:
             print(f"📊 Adding additional products to reach {max_results} total...")
-            
-            # Get all unselected products
             all_products = elasticsearch_products + vector_products
             unselected_products = [p for p in all_products if p.get('id') not in used_ids]
-            
-            # Sort by score and add remaining products
             unselected_products.sort(key=lambda x: max(x.get('_score', 0), x.get('_similarity_score', 0)), reverse=True)
-            
             for product in unselected_products:
                 if len(final_products) >= max_results:
                     break
