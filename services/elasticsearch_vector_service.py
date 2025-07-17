@@ -403,16 +403,34 @@ class ElasticsearchVectorService:
         except Exception as e:
             logger.warning(f"Solutions vector index creation issue: {e}")
     
+    def _truncate_text_for_embedding(self, text: str, max_tokens: int = 7500) -> str:
+        """Truncate text to fit within embedding model token limits"""
+        # Conservative truncation to avoid token limit errors
+        # Use 7500 tokens as max to provide safety buffer for 8192 token limit
+        # Rough estimation: ~3 characters per token (more conservative than 4)
+        max_chars = max_tokens * 3
+        
+        if len(text) <= max_chars:
+            return text
+        
+        # Truncate and add indicator
+        truncated = text[:max_chars-20] + "... [truncated]"
+        logger.warning(f"🔄 Query truncated from {len(text)} to {len(truncated)} characters to fit token limit (from ~{len(text)//3} to ~{len(truncated)//3} tokens)")
+        return truncated
+
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings from Azure OpenAI"""
         try:
+            # Truncate texts that are too long
+            truncated_texts = [self._truncate_text_for_embedding(text) for text in texts]
+            
             headers = {
                 "Content-Type": "application/json",
                 "api-key": self.azure_embedding_key
             }
             
             data = {
-                "input": texts,
+                "input": truncated_texts,
                 "model": "text-embedding-3-large"
             }
             
@@ -603,7 +621,7 @@ class ElasticsearchVectorService:
     ) -> List[Dict[str, Any]]:
         """Perform vector search on products with optional category filtering and balanced results"""
         try:
-            logger.info(f"🔍 Vector search called with query: '{query}', categories: {categories}")
+            logger.info(f"🔍 Vector search called with query: '{query[:100]}...', categories: {categories}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
@@ -692,7 +710,23 @@ class ElasticsearchVectorService:
                 filtered_products = []
                 for product in products:
                     product_category = product.get('category', '').lower()
-                    if product_category in [cat.lower() for cat in categories]:
+                    product_index = product.get('_index', '')
+                    
+                    # Primary check: category field matches
+                    category_match = product_category in [cat.lower() for cat in categories]
+                    
+                    # Fallback check: index name indicates correct category
+                    index_match = False
+                    if not category_match and product_index:
+                        for cat in categories:
+                            expected_index = CATEGORY_INDEX_MAP.get(cat, '')
+                            if product_index == expected_index:
+                                index_match = True
+                                # Set the category field for future consistency
+                                product['category'] = cat
+                                break
+                    
+                    if category_match or index_match:
                         filtered_products.append(product)
                 
                 products = filtered_products
@@ -1710,54 +1744,96 @@ EXAMPLE FOR "i9 CPU" query (using cpu category fields):
   "size": 20
 }}
 
+EXAMPLE FOR "DDR5 RAM" query (using memory category fields):
+{{
+  "query": {{
+    "bool": {{
+      "should": [
+        {{"match_phrase": {{"name": {{"query": "DDR5 RAM", "boost": 8.0}}}}}},
+        {{"match_phrase": {{"description": {{"query": "DDR5 RAM", "boost": 6.0}}}}}},
+        {{"match": {{"name": {{"query": "DDR5", "boost": 6.0}}}}}},
+        {{"match": {{"name": {{"query": "RAM", "boost": 6.0}}}}}},
+        {{"match": {{"speed": {{"query": "DDR5", "boost": 3.0}}}}}},
+        {{"match": {{"modules": {{"query": "memory", "boost": 2.5}}}}}},
+        {{"match": {{"description": {{"query": "DDR5", "boost": 4.0}}}}}},
+        {{"match": {{"description": {{"query": "RAM", "boost": 4.0}}}}}},
+        {{"match": {{"features": {{"query": "DDR5", "boost": 3.0}}}}}},
+        {{"match": {{"category": {{"query": "memory", "boost": 2.0}}}}}}
+      ],
+      "minimum_should_match": 1
+    }}
+  }},
+  "size": 20
+}}
+
 CRITICAL REQUIREMENTS:
-1. NEVER use "product" as a search term - use the actual terms from requirements
-2. Select the most relevant category from FIELD_MAP based on the requirements
-3. Use category-specific fields from FIELD_MAP for that category
-4. Create both exact phrase matches and individual term matches
-5. Boost category-specific fields appropriately (2.0-4.0 range)
-6. Include fallback matches on standard fields (name, description, features)
-7. Ensure JSON is properly formatted
+1. NEVER use "product" as a search term - ALWAYS use the actual terms from customer requirements
+2. Extract real search terms from the requirements and use them in the query
+3. Select the most relevant category from FIELD_MAP based on the requirements
+4. Use category-specific fields from FIELD_MAP for that category
+5. Create both exact phrase matches and individual term matches using REAL TERMS
+6. Boost category-specific fields appropriately (2.0-4.0 range)
+7. Include fallback matches on standard fields (name, description, features)
+8. Ensure JSON is properly formatted
+9. MANDATORY: Use actual customer search terms, not placeholder words
 
 IMPORTANT: Analyze the requirements to determine the most relevant category, then use the fields from FIELD_MAP for that category to create precise, field-aware search queries."""
 
-            try:
-                # Use Pydantic function calling for structured response
-                logger.info("🧠 Using AI for dynamic query generation...")
-                logger.info(f"🧠 Requirements passed to AI: {requirements}")
-                
-                dynamic_query = await self.llm_provider.generate_structured_response(
-                    [AIMessage(role="user", content=query_generation_prompt)],
-                    DynamicQueryGeneration
-                )
-                
-                print(f"🧠 AI Query Generation SUCCESS:")
-                print(f"   Search Strategy: {dynamic_query.search_strategy}")
-                print(f"   Categories: {dynamic_query.category_filters}")
-                print(f"   Confidence: {dynamic_query.confidence:.1%}")
-                print(f"   Reasoning: {dynamic_query.reasoning}")
-                print(f"   Keyword Query: {dynamic_query.keyword_query}")
-                logger.info(f"🧠 AI Query Generation SUCCESS:")
-                logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
-                logger.info(f"   Categories: {dynamic_query.category_filters}")
-                logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
-                logger.info(f"   Reasoning: {dynamic_query.reasoning}")
-                logger.info(f"   Keyword Query: {dynamic_query.keyword_query}")
+            # Use Pydantic function calling for structured response
+            logger.info("🧠 Using AI for dynamic query generation...")
+            logger.info(f"🧠 Requirements passed to AI: {requirements}")
+            
+            dynamic_query = await self.llm_provider.generate_structured_response(
+                [AIMessage(role="user", content=query_generation_prompt)],
+                DynamicQueryGeneration
+            )
+            
+            print(f"🧠 AI Query Generation SUCCESS:")
+            print(f"   Search Strategy: {dynamic_query.search_strategy}")
+            print(f"   Categories: {dynamic_query.category_filters}")
+            print(f"   Confidence: {dynamic_query.confidence:.1%}")
+            print(f"   Reasoning: {dynamic_query.reasoning}")
+            print(f"   Keyword Query: {dynamic_query.keyword_query}")
+            logger.info(f"🧠 AI Query Generation SUCCESS:")
+            logger.info(f"   Search Strategy: {dynamic_query.search_strategy}")
+            logger.info(f"   Categories: {dynamic_query.category_filters}")
+            logger.info(f"   Confidence: {dynamic_query.confidence:.1%}")
+            logger.info(f"   Reasoning: {dynamic_query.reasoning}")
+            logger.info(f"   Keyword Query: {dynamic_query.keyword_query}")
 
-                # --- PATCH: Ensure keyword_query uses real search terms ---
-                import json as _json
-                keyword_query_str = _json.dumps(dynamic_query.keyword_query).lower() if dynamic_query.keyword_query else ""
-                if (not dynamic_query.keyword_query) or ("product" in keyword_query_str):
-                    print("⚠️ LLM returned default or empty keyword_query, using fallback.")
-                    dynamic_query.keyword_query = self._fallback_query_generation(requirements, search_type).keyword_query
+            # --- PATCH: Ensure keyword_query uses real search terms ---
+            import json as _json
+            keyword_query_str = _json.dumps(dynamic_query.keyword_query).lower() if dynamic_query.keyword_query else ""
+            
+            # Check if LLM returned placeholder queries instead of real search terms
+            has_real_terms = False
+            search_terms = []
+            
+            # Extract actual search terms from requirements
+            if requirements.get('search_keywords'):
+                search_terms.extend(requirements['search_keywords'])
+            if requirements.get('technical_requirements'):
+                tech_reqs = requirements['technical_requirements']
+                if isinstance(tech_reqs, list):
+                    search_terms.extend([str(req) for req in tech_reqs])
+                else:
+                    search_terms.append(str(tech_reqs))
+            if requirements.get('use_case'):
+                search_terms.append(str(requirements['use_case']))
+            if requirements.get('semantic_query'):
+                search_terms.append(str(requirements['semantic_query']))
+            
+            # Check if any real search terms appear in the keyword query
+            for term in search_terms:
+                if term and len(term.strip()) > 2 and term.strip().lower() in keyword_query_str:
+                    has_real_terms = True
+                    break
+            
+            if (not dynamic_query.keyword_query) or (not has_real_terms) or ("product" in keyword_query_str and not has_real_terms):
+                print(f"⚠️ LLM returned placeholder query (has_real_terms: {has_real_terms}), using fallback.")
+                dynamic_query.keyword_query = self._fallback_query_generation(requirements, search_type).keyword_query
 
-                return dynamic_query
-                    
-            except Exception as e:
-                logger.warning(f"AI query generation failed: {e}")
-                logger.warning(f"AI query generation error details: {type(e).__name__}: {str(e)}")
-                logger.info("🔄 Falling back to standard query generation...")
-                return self._fallback_query_generation(requirements, search_type)
+            return dynamic_query
                 
         except Exception as e:
             logger.error(f"Dynamic query generation failed: {e}")
@@ -2029,23 +2105,9 @@ IMPORTANT: Analyze the requirements to determine the most relevant category, the
             query = dynamic_query.keyword_query
             query["size"] = size
             
-            # Debug: Log the actual query being used
-            print(f"🔍 AI-Generated Keyword Query:")
-            print(f"   Search Terms Used: {dynamic_query.semantic_query}")
-            print(f"   Field Priorities: {dynamic_query.field_priorities}")
-            try:
-                print(f"   Query Structure: {json.dumps(query, indent=2)}")
-            except (TypeError, ValueError):
-                print(f"   Query Structure: {str(query)}")
-            logger.info(f"🔍 AI-Generated Keyword Query:")
-            try:
-                logger.info(f"   Query Structure: {json.dumps(query, indent=2)}")
-            except (TypeError, ValueError):
-                logger.info(f"   Query Structure: {str(query)}")
-            logger.info(f"   Search Terms Used: {dynamic_query.semantic_query}")
-            logger.info(f"   Field Priorities: {dynamic_query.field_priorities}")
-            
-            # Add filters if suggested by AI
+         
+            logger.info(f"🔍 AI-Generated Keyword Query: {len(str(query))} chars, {len(dynamic_query.field_priorities)} fields")
+       
             if dynamic_query.suggested_filters:
                 if "query" not in query:
                     query["query"] = {}
