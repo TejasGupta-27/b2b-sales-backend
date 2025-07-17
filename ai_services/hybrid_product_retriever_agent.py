@@ -703,7 +703,7 @@ For each category, create a specific semantic query that:
 
 **Video-Card/GPU Category**: Focus on graphics performance (VRAM, ray tracing, DLSS), gaming performance (4K, 1440p, frame rates), professional use (rendering, AI), power requirements, cooling solutions
 
-**Memory/RAM Category**: Focus on capacity needs (8GB, 16GB, 32GB+), speed specifications (DDR4/DDR5, MHz), latency timings, ECC vs non-ECC, RGB/aesthetics
+**Memory/RAM Category**: Focus on capacity needs (8GB, 16GB, 32GB+), speed specifications (DDR4, DDR5, MHz), latency timings, gaming performance, reliable brands like Corsair, G.Skill
 
 **Storage Category**: Focus on storage type (SSD, HDD, NVMe), capacity requirements, speed (read/write speeds), use case (boot drive, mass storage), form factor
 
@@ -1794,16 +1794,34 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                         else:
                             logger.info(f"🔄 Using generic query for '{category}' (no specific query available)")
                         
+                        # Debug logging for memory category
+                        if category == 'memory':
+                            logger.info(f"🐛 DEBUG MEMORY: Starting search for category 'memory'")
+                            logger.info(f"🐛 DEBUG MEMORY: Query = '{category_query[:100]}...'")
+                            logger.info(f"🐛 DEBUG MEMORY: Calling vector_service.vector_search_products")
+                        
                         logger.info(f"🔍 Searching category '{category}' with query: {category_query[:50]}...")
                         category_results = await self.vector_service.vector_search_products(
                             category_query,  # Use category-specific query
                             size=5,  # Exactly 5 products per category
                             categories=[category]  # Single category search
                         )
+                        
+                        # Debug logging for memory category results
+                        if category == 'memory':
+                            logger.info(f"🐛 DEBUG MEMORY: vector_search_products returned {len(category_results)} results")
+                            if category_results:
+                                logger.info(f"🐛 DEBUG MEMORY: First result: {category_results[0].get('name', 'Unknown')}")
+                            else:
+                                logger.info(f"🐛 DEBUG MEMORY: No results returned - this is the problem!")
+                        
                         logger.info(f"📦 Category '{category}': {len(category_results)} products found")
                         all_results.extend(category_results)
                     except Exception as e:
                         logger.error(f"❌ Error searching category '{category}': {e}")
+                        # Special debug for memory category exceptions
+                        if category == 'memory':
+                            logger.error(f"🐛 DEBUG MEMORY: Exception during search: {e}")
                         import traceback
                         logger.error(f"Full traceback: {traceback.format_exc()}")
                 
