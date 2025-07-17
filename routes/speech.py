@@ -93,6 +93,11 @@ async def transcribe_audio(
         
         # Handle file upload
         if audio:
+            # Log uploaded file size
+            audio.file.seek(0, 2)  # Move to end
+            size = audio.file.tell()
+            audio.file.seek(0)     # Reset to start
+            logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
             logger.info(f"Processing file upload: filename={audio.filename}, content_type={audio.content_type}")
             if not audio.content_type.startswith(('audio/', 'video/')):
                 raise HTTPException(
@@ -135,7 +140,7 @@ async def transcribe_audio(
             try:
                 # Decode base64 audio data
                 audio_bytes = base64.b64decode(audio_data.audio_bytes)
-                logger.info(f"Decoded {len(audio_bytes)} bytes from base64")
+                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 (from audio_data)")
                 result = await speech_service.transcribe_audio(
                     audio_bytes,
                     language=audio_data.language or language
@@ -208,6 +213,11 @@ async def transcribe_audio_detailed(
         
         # Handle file upload
         if audio:
+            # Log uploaded file size
+            audio.file.seek(0, 2)  # Move to end
+            size = audio.file.tell()
+            audio.file.seek(0)     # Reset to start
+            logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
             logger.info(f"Processing file upload for detailed transcription: filename={audio.filename}, content_type={audio.content_type}")
             if not audio.content_type.startswith(('audio/', 'video/')):
                 raise HTTPException(
@@ -251,7 +261,7 @@ async def transcribe_audio_detailed(
             try:
                 # Decode base64 audio data
                 audio_bytes = base64.b64decode(audio_data.audio_bytes)
-                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 for detailed transcription")
+                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 (from audio_data)")
                 result = await speech_service.transcribe_audio(
                     audio_bytes,
                     language=audio_data.language or language
@@ -323,7 +333,11 @@ async def handle_voice_message(
                 status_code=400,
                 detail="File must be an audio file"
             )
-        
+        # Log uploaded file size
+        audio.file.seek(0, 2)  # Move to end
+        size = audio.file.tell()
+        audio.file.seek(0)     # Reset to start
+        logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
         # Transcribe the audio to text
         transcription_result = await speech_service.transcribe_audio(
             audio.file,
