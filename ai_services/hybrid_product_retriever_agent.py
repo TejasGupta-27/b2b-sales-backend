@@ -18,6 +18,12 @@ def get_product_name(product: Dict[str, Any]) -> str:
             product.get('product_name') or 
             'Unknown Product')
 
+class CategorySpecificQuery(BaseModel):
+    """Category-specific search query with tailored semantic meaning"""
+    category: str = Field(description="Product category name")
+    semantic_query: str = Field(description="Tailored semantic search query for this specific category")
+    focus_attributes: List[str] = Field(description="Key attributes this category query should focus on")
+
 class ContextAnalysis(BaseModel):
     """LLM-powered context analysis for better product retrieval"""
     primary_need: str = Field(description="The main problem or need the customer is trying to solve")
@@ -27,7 +33,8 @@ class ContextAnalysis(BaseModel):
     timeline: str = Field(description="Implementation timeline (immediate/short-term/long-term)")
     similar_products: List[str] = Field(description="Similar products or solutions they might be interested in")
     search_keywords: List[str] = Field(description="Keywords to use for product search")
-    semantic_queries: List[str] = Field(description="Semantic search queries for better matching")
+    semantic_queries: List[str] = Field(description="General semantic search queries for better matching")
+    category_specific_queries: List[CategorySpecificQuery] = Field(description="Category-specific semantic queries tailored to each product category", default_factory=list)
     recommended_categories: List[str] = Field(description="Recommended product categories based on analysis", default_factory=list)
     category_confidence: float = Field(description="Confidence in category recommendations (0.0 to 1.0)", default=0.0)
     confidence: float = Field(description="Confidence in the analysis (0.0 to 1.0)")
@@ -625,10 +632,12 @@ ANALYSIS TASK:
 3. Extract technical requirements and constraints
 4. Determine budget level and timeline indicators
 5. Identify similar products or solutions they might be interested in
-6. Generate effective search keywords and semantic queries
+6. Generate effective search keywords and general semantic queries
 7. Assess confidence in the analysis
 
-Focus on understanding their real needs, not just what they're asking for. Think about what would be most helpful for them."""
+Focus on understanding their real needs, not just what they're asking for. Think about what would be most helpful for them.
+
+NOTE: You will generate category-specific semantic queries in a separate step after categories are identified."""
 
         try:
             # Step 1: Get basic context analysis
@@ -660,13 +669,68 @@ Focus on understanding their real needs, not just what they're asking for. Think
             context_analysis.recommended_categories = categories
             context_analysis.category_confidence = category_confidence
             
+            # Step 3: Generate category-specific semantic queries
+            if categories:
+                logger.info(f"🎯 Generating category-specific semantic queries for {len(categories)} categories...")
+                category_queries_prompt = f"""Based on the customer's context and the recommended product categories, generate tailored semantic search queries for each category.
+
+CUSTOMER CONTEXT:
+Primary Need: {context_analysis.primary_need}
+Business Context: {context_analysis.business_context}
+Technical Requirements: {context_analysis.technical_requirements}
+Budget Indicator: {context_analysis.budget_indicator}
+Timeline: {context_analysis.timeline}
+
+RECOMMENDED CATEGORIES: {categories}
+
+TASK:
+For each category, create a specific semantic query that:
+1. Focuses on the unique attributes important for that category
+2. Incorporates the customer's specific requirements and context
+3. Uses terminology and concepts relevant to that product type
+4. Maximizes relevance for finding the best products in that category
+
+EXAMPLES:
+- CPU category: Focus on performance (cores, speed, architecture), workload types, power efficiency
+- Keyboard category: Focus on typing experience (mechanical/membrane), layout, connectivity, ergonomics
+- Memory category: Focus on capacity, speed (DDR type), compatibility, performance requirements
+- Storage category: Focus on capacity, speed (SSD/HDD), interface, reliability, use case
+
+Generate queries that will find the most relevant products for each category based on their specific needs."""
+
+                try:
+                    category_queries_response = await self.base_provider.generate_structured_response(
+                        [AIMessage(role="user", content=category_queries_prompt)],
+                        List[CategorySpecificQuery]
+                    )
+                    context_analysis.category_specific_queries = category_queries_response
+                    
+                    logger.info(f"✅ Generated {len(category_queries_response)} category-specific queries:")
+                    for query in category_queries_response:
+                        logger.info(f"   📦 {query.category}: {query.semantic_query[:100]}...")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Failed to generate category-specific queries: {e}")
+                    # Fallback: create basic queries for each category
+                    fallback_queries = []
+                    for category in categories:
+                        fallback_query = f"{context_analysis.primary_need} {category} {' '.join(context_analysis.technical_requirements[:3])}"
+                        fallback_queries.append(CategorySpecificQuery(
+                            category=category,
+                            semantic_query=fallback_query,
+                            focus_attributes=[]
+                        ))
+                    context_analysis.category_specific_queries = fallback_queries
+                    logger.info(f"🔄 Using fallback category queries for {len(fallback_queries)} categories")
+
             logger.info(f"✅ Enhanced Context Analysis:")
             logger.info(f"   Primary Need: {context_analysis.primary_need}")
             logger.info(f"   Technical Focus: {context_analysis.business_context}")
             logger.info(f"   Recommended Categories: {categories}")
             logger.info(f"   Category Confidence: {category_confidence:.1%}")
             logger.info(f"   Search Keywords: {context_analysis.search_keywords}")
-            
+            logger.info(f"   Category-Specific Queries: {len(context_analysis.category_specific_queries)}")
+
             return context_analysis
             
         except Exception as e:
@@ -742,7 +806,8 @@ Think broadly about their needs and suggest relevant alternatives."""
                 'timeline': context_analysis.timeline,
                 'confidence': context_analysis.confidence,
                 'recommended_categories': context_analysis.recommended_categories,
-                'category_confidence': context_analysis.category_confidence
+                'category_confidence': context_analysis.category_confidence,
+                'category_specific_queries': context_analysis.category_specific_queries
             },
             'search_keywords': context_analysis.search_keywords,
             'semantic_queries': context_analysis.semantic_queries,
@@ -813,7 +878,8 @@ Think broadly about their needs and suggest relevant alternatives."""
             'business_context': context_analysis.business_context,
             'technical_requirements': context_analysis.technical_requirements,
             'recommended_categories': context_analysis.recommended_categories,
-            'category_confidence': context_analysis.category_confidence
+            'category_confidence': context_analysis.category_confidence,
+            'category_specific_queries': context_analysis.category_specific_queries
         }
         
         # Use AI-powered dynamic query generation for both search types
@@ -1476,42 +1542,108 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             search_terms = requirements.get('search_terms', [])
             product_categories = requirements.get('product_categories', [])
             use_case = requirements.get('use_case', '')
-            
+
+            # Get categories for search strategy
+            categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories') or product_categories
+
             # Combine search terms
             query_terms = search_terms + product_categories
             if use_case:
                 query_terms.append(use_case)
-            
+
             # Remove duplicates and empty strings
             query_terms = list(set([term for term in query_terms if term and term.strip()]))
-            
+
             if not query_terms:
                 query_terms = ['business', 'solution']  # Fallback
-            
-            # Build Elasticsearch query
-            query = {
-                "query": {
-                    "bool": {
-                        "should": [
-                            {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in query_terms
-                        ] + [
-                            {"match_phrase": {"description": {"query": term, "boost": 2.0}}} for term in query_terms
-                        ] + [
-                            {"match": {"name": {"query": term, "boost": 2.0}}} for term in query_terms
-                        ] + [
-                            {"match": {"description": {"query": term, "boost": 1.0}}} for term in query_terms
-                        ] + [
-                            {"match": {"category": {"query": term, "boost": 1.5}}} for term in query_terms
-                        ]
-                    }
-                },
-                "size": settings.final_result_limit
-            }
-            
-            print(f"🔍 Elasticsearch query: {json.dumps(query, indent=2)}")
-            
-            # Perform search
-            results = await self.elasticsearch.search_products(query)
+
+            # Search each category individually to guarantee 5 products per category
+            if categories and len(categories) > 1:
+                logger.info(f"🎯 Multi-category ES search: searching each category individually for 5 products")
+                all_results = []
+                
+                # Get category-specific queries from llm_context if available
+                llm_context = requirements.get('llm_context', {})
+                category_specific_queries = {}
+                
+                # Try to get category-specific queries from the enhanced context analysis
+                if hasattr(llm_context, 'category_specific_queries'):
+                    for query_obj in llm_context.category_specific_queries:
+                        category_specific_queries[query_obj.category] = query_obj.semantic_query
+                elif isinstance(llm_context, dict) and 'category_specific_queries' in llm_context:
+                    for query_obj in llm_context['category_specific_queries']:
+                        if hasattr(query_obj, 'category') and hasattr(query_obj, 'semantic_query'):
+                            category_specific_queries[query_obj.category] = query_obj.semantic_query
+                        elif isinstance(query_obj, dict):
+                            category_specific_queries[query_obj.get('category', '')] = query_obj.get('semantic_query', '')
+                
+                for category in categories:
+                    try:
+                        # Use category-specific terms if available
+                        category_query_terms = query_terms.copy()
+                        if category in category_specific_queries:
+                            category_semantic_query = category_specific_queries[category]
+                            # Extract additional terms from category-specific query
+                            category_terms = category_semantic_query.split()
+                            category_query_terms.extend(category_terms)
+                            category_query_terms = list(set([term for term in category_query_terms if term and term.strip()]))
+                            logger.info(f"🎯 Enhanced ES terms for '{category}': added {len(category_terms)} category-specific terms")
+                        
+                        # Build category-specific query
+                        category_query = {
+                            "query": {
+                                "bool": {
+                                    "must": [
+                                        {"term": {"category.keyword": category}}  # Force exact category match
+                                    ],
+                                    "should": [
+                                        {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in category_query_terms
+                                    ] + [
+                                        {"match_phrase": {"description": {"query": term, "boost": 2.0}}} for term in category_query_terms
+                                    ] + [
+                                        {"match": {"name": {"query": term, "boost": 2.0}}} for term in category_query_terms
+                                    ] + [
+                                        {"match": {"description": {"query": term, "boost": 1.0}}} for term in category_query_terms
+                                    ]
+                                }
+                            },
+                            "size": 5  # Exactly 5 products per category
+                        }
+                        
+                        category_results = await self.elasticsearch.search_products(category_query)
+                        logger.info(f"📦 ES Category '{category}': {len(category_results)} products found")
+                        all_results.extend(category_results)
+                    except Exception as e:
+                        logger.error(f"❌ ES Error searching category '{category}': {e}")
+                
+                results = all_results
+                logger.info(f"🎯 ES Combined results: {len(results)} products across {len(categories)} categories")
+            else:
+                # Single category or no category filtering - use original logic
+                # Build Elasticsearch query
+                query = {
+                    "query": {
+                        "bool": {
+                            "should": [
+                                {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in query_terms
+                            ] + [
+                                {"match_phrase": {"description": {"query": term, "boost": 2.0}}} for term in query_terms
+                            ] + [
+                                {"match": {"name": {"query": term, "boost": 2.0}}} for term in query_terms
+                            ] + [
+                                {"match": {"description": {"query": term, "boost": 1.0}}} for term in query_terms
+                            ] + [
+                                {"match": {"category": {"query": term, "boost": 1.5}}} for term in query_terms
+                            ]
+                        }
+                    },
+                    "size": settings.final_result_limit
+                }
+                
+                print(f"🔍 Elasticsearch query: {json.dumps(query, indent=2)}")
+                
+                # Perform search
+                results = await self.elasticsearch.search_products(query)
             
             # Add search metadata
             for product in results:
@@ -1595,11 +1727,54 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 logger.info(f"🎯 Final category filtering: {categories} (count: {len(categories)})")
             
             # Perform vector search with category filtering using the correct method name and parameter
-            results = await self.vector_service.vector_search_products(
-                semantic_query, 
-                size=settings.final_result_limit,
-                categories=categories  # Pass categories for intelligent filtering
-            )
+            # If we have multiple categories, search each category individually to guarantee 5 products per category
+            if categories and len(categories) > 1:
+                logger.info(f"🎯 Multi-category search: searching each category individually for 5 products")
+                all_results = []
+                
+                # Get category-specific queries from llm_context if available
+                category_specific_queries = {}
+                
+                # Try to get category-specific queries from the enhanced context analysis
+                if hasattr(llm_context, 'category_specific_queries'):
+                    for query_obj in llm_context.category_specific_queries:
+                        category_specific_queries[query_obj.category] = query_obj.semantic_query
+                elif isinstance(llm_context, dict) and 'category_specific_queries' in llm_context:
+                    for query_obj in llm_context['category_specific_queries']:
+                        if hasattr(query_obj, 'category') and hasattr(query_obj, 'semantic_query'):
+                            category_specific_queries[query_obj.category] = query_obj.semantic_query
+                        elif isinstance(query_obj, dict):
+                            category_specific_queries[query_obj.get('category', '')] = query_obj.get('semantic_query', semantic_query)
+                
+                for category in categories:
+                    try:
+                        # Use category-specific query if available, otherwise fallback to generic query
+                        category_query = category_specific_queries.get(category, semantic_query)
+                        
+                        if category_query != semantic_query:
+                            logger.info(f"🎯 Using tailored query for '{category}': {category_query[:80]}...")
+                        else:
+                            logger.info(f"🔄 Using generic query for '{category}' (no specific query available)")
+                        
+                        category_results = await self.vector_service.vector_search_products(
+                            category_query,  # Use category-specific query
+                            size=5,  # Exactly 5 products per category
+                            categories=[category]  # Single category search
+                        )
+                        logger.info(f"📦 Category '{category}': {len(category_results)} products found")
+                        all_results.extend(category_results)
+                    except Exception as e:
+                        logger.error(f"❌ Error searching category '{category}': {e}")
+                
+                results = all_results
+                logger.info(f"🎯 Combined results: {len(results)} products across {len(categories)} categories")
+            else:
+                # Single category or no category filtering - use original logic
+                results = await self.vector_service.vector_search_products(
+                    semantic_query, 
+                    size=settings.final_result_limit,
+                    categories=categories  # Pass categories for intelligent filtering
+                )
             
             # Add search metadata
             for product in results:
