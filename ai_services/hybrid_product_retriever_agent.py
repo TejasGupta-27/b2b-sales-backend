@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from .base import AIProvider, AIMessage, AIResponse
-from services.elasticsearch_vector_service import get_elasticsearch_service
+from services.elasticsearch_vector_service import get_elasticsearch_service, CATEGORY_INDEX_MAP
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from .function_models import RequirementExtraction, ProductAnalysis
 from config import settings
@@ -437,9 +437,36 @@ class RRFHybridFusion:
             # Calculate target for this category (minimum + extra if available)
             target_per_category = min_per_category + (1 if i < remainder else 0)
             
-            # Get products for this category
-            es_cat = [p for p in elasticsearch_products if p.get('category') == category]
-            vec_cat = [p for p in vector_products if p.get('category') == category]
+            # Get products for this category (check both category field and index)
+            es_cat = []
+            for p in elasticsearch_products:
+                product_category = p.get('category', '').lower()
+                product_index = p.get('_index', '')
+                # Check category field or infer from index name
+                if product_category == category.lower():
+                    es_cat.append(p)
+                elif not product_category and product_index:
+                    # Map index back to category
+                    for cat, idx in CATEGORY_INDEX_MAP.items():
+                        if product_index == idx and cat == category:
+                            p['category'] = category  # Set for consistency
+                            es_cat.append(p)
+                            break
+            
+            vec_cat = []
+            for p in vector_products:
+                product_category = p.get('category', '').lower()
+                product_index = p.get('_index', '')
+                # Check category field or infer from index name
+                if product_category == category.lower():
+                    vec_cat.append(p)
+                elif not product_category and product_index:
+                    # Map index back to category
+                    for cat, idx in CATEGORY_INDEX_MAP.items():
+                        if product_index == idx and cat == category:
+                            p['category'] = category  # Set for consistency
+                            vec_cat.append(p)
+                            break
             
             print(f"   📦 Category '{category}': {len(es_cat)} ES, {len(vec_cat)} vector products")
             
@@ -1623,13 +1650,10 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                             category_query_terms = list(set([term for term in category_query_terms if term and term.strip()]))
                             logger.info(f"🎯 Enhanced ES terms for '{category}': added {len(category_terms)} category-specific terms")
                         
-                        # Build category-specific query
+                        # Build category-specific query (rely on index filtering, not category field)
                         category_query = {
                             "query": {
                                 "bool": {
-                                    "must": [
-                                        {"term": {"category.keyword": category}}  # Force exact category match
-                                    ],
                                     "should": [
                                         {"match_phrase": {"name": {"query": term, "boost": 4.0}}} for term in category_query_terms
                                     ] + [
@@ -1638,7 +1662,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                                         {"match": {"name": {"query": term, "boost": 2.0}}} for term in category_query_terms
                                     ] + [
                                         {"match": {"description": {"query": term, "boost": 1.0}}} for term in category_query_terms
-                                    ]
+                                    ],
+                                    "minimum_should_match": 1
                                 }
                             },
                             "size": 5  # Exactly 5 products per category

@@ -494,6 +494,8 @@ APPROACH:
 
 Be helpful and knowledgeable, not pushy or salesy.
 
+
+
 For the list of products provided, recommend a full build by selecting the best product(s) from each category (CPU, GPU, Memory, Storage, Power Supply, etc.). If a category is missing, mention that. Explain your choices for each category and how they fit the customer's needs."""
         
         # Build enhanced context

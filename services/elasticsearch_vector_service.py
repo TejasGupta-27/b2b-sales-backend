@@ -710,7 +710,23 @@ class ElasticsearchVectorService:
                 filtered_products = []
                 for product in products:
                     product_category = product.get('category', '').lower()
-                    if product_category in [cat.lower() for cat in categories]:
+                    product_index = product.get('_index', '')
+                    
+                    # Primary check: category field matches
+                    category_match = product_category in [cat.lower() for cat in categories]
+                    
+                    # Fallback check: index name indicates correct category
+                    index_match = False
+                    if not category_match and product_index:
+                        for cat in categories:
+                            expected_index = CATEGORY_INDEX_MAP.get(cat, '')
+                            if product_index == expected_index:
+                                index_match = True
+                                # Set the category field for future consistency
+                                product['category'] = cat
+                                break
+                    
+                    if category_match or index_match:
                         filtered_products.append(product)
                 
                 products = filtered_products
