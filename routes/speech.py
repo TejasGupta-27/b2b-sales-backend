@@ -339,6 +339,11 @@ async def handle_voice_message(
         size = audio.file.tell()
         audio.file.seek(0)     # Reset to start
         logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
+        # Save uploaded audio for debugging
+        with open("/tmp/debug_upload.wav", "wb") as f:
+            f.write(audio.file.read())
+        logger.info("Saved uploaded audio to /tmp/debug_upload.wav for inspection.")
+        audio.file.seek(0)  # Reset again for further processing
         # Transcribe the audio to text
         transcription_result = await speech_service.transcribe_audio(
             audio.file,
