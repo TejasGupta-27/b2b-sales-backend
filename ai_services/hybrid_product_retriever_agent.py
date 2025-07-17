@@ -676,52 +676,51 @@ NOTE: You will generate category-specific semantic queries in a separate step af
                 # Get additional requirements from the conversation and customer context
                 conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages[-3:]])
                 
-                category_queries_prompt = f"""Based on the complete customer context and requirements, generate highly tailored semantic search queries for each product category.
+                category_queries_prompt = f"""Generate truly unique and tailored semantic search queries for each product category. Each query should focus on the specific attributes and terminology most relevant to that category type.
 
-CUSTOMER CONTEXT:
+CUSTOMER REQUIREMENTS:
 Primary Need: {context_analysis.primary_need}
 Business Context: {context_analysis.business_context}
 Technical Requirements: {context_analysis.technical_requirements}
-Budget Indicator: {context_analysis.budget_indicator}
+Budget: {context_analysis.budget_indicator}
 Timeline: {context_analysis.timeline}
-Search Keywords: {context_analysis.search_keywords}
 
-ADDITIONAL CUSTOMER INFORMATION:
+CUSTOMER PROFILE:
 Industry: {customer_context.get('industry', 'Not specified') if customer_context else 'Not specified'}
 Company Size: {customer_context.get('company_size', 'Not specified') if customer_context else 'Not specified'}
 Budget Range: {customer_context.get('budget_range', 'Not specified') if customer_context else 'Not specified'}
-Contact: {customer_context.get('contact_name', 'Not specified') if customer_context else 'Not specified'}
 
-RECENT CONVERSATION:
-{conversation_text}
+CATEGORIES TO TARGET: {categories}
 
-RECOMMENDED CATEGORIES: {categories}
+INSTRUCTIONS:
+For each category, create a specific semantic query that:
 
-TASK:
-For each category, create a highly specific semantic query that:
-1. **Incorporates ALL the customer's specific requirements and context**
-2. **Reflects their industry, company size, and budget constraints**  
-3. **Uses terminology and concepts most relevant to that product category**
-4. **Considers their timeline and urgency**
-5. **Incorporates technical requirements specific to that category**
-6. **Matches their business context and use case**
+**CPU Category**: Focus on performance metrics (cores, clock speed, architecture, generation), workload type (gaming, productivity, server), power efficiency, socket compatibility, overclocking capability
 
-CATEGORY-SPECIFIC FOCUS EXAMPLES:
-- CPU: Performance (cores, speed, architecture), workload types, power efficiency, compatibility
-- Keyboard: Typing experience (mechanical/membrane), layout, connectivity, ergonomics, professional vs gaming
-- Memory: Capacity, speed (DDR type), compatibility, performance requirements, ECC vs non-ECC
-- Storage: Capacity, speed (SSD/HDD), interface, reliability, enterprise vs consumer, backup needs
-- Monitor: Size, resolution, refresh rate, color accuracy, professional vs gaming use
-- Motherboard: Socket type, expansion slots, features, form factor, connectivity
+**Video-Card/GPU Category**: Focus on graphics performance (VRAM, ray tracing, DLSS), gaming performance (4K, 1440p, frame rates), professional use (rendering, AI), power requirements, cooling solutions
 
-IMPORTANT:
-- **Each query should be unique and tailored specifically to that category AND the customer's needs**
-- **Include specific technical terms relevant to both the category and the customer's requirements**
-- **Consider their budget level when suggesting performance tiers**
-- **Factor in their industry requirements (e.g., enterprise features for business, gaming features for entertainment)**
-- **Use their actual conversation context to understand what they really need**
+**Memory/RAM Category**: Focus on capacity needs (8GB, 16GB, 32GB+), speed specifications (DDR4/DDR5, MHz), latency timings, ECC vs non-ECC, RGB/aesthetics
 
-Generate queries that will find the MOST relevant products for each category based on their complete profile and needs."""
+**Storage Category**: Focus on storage type (SSD, HDD, NVMe), capacity requirements, speed (read/write speeds), use case (boot drive, mass storage), form factor
+
+**Motherboard Category**: Focus on socket compatibility, chipset features, expansion slots, connectivity (Wi-Fi, Bluetooth, USB), form factor (ATX, mATX), overclocking support
+
+**Power-Supply Category**: Focus on wattage requirements, efficiency rating (80+ certification), modular vs non-modular, form factor, reliability
+
+**CPU-Cooler Category**: Focus on cooling performance (air vs liquid), socket compatibility, noise levels, RGB lighting, thermal capacity (TDP)
+
+**Case Category**: Focus on form factor support, airflow design, aesthetics, build quality, cable management, front panel connectivity
+
+**Monitor Category**: Focus on display specs (resolution, refresh rate, response time), panel type (IPS, TN, VA), size preferences, gaming vs productivity features
+
+IMPORTANT RULES:
+1. **Each query must be completely different and category-specific**
+2. **Use technical terminology specific to that product type**  
+3. **Incorporate the customer's specific requirements into each category context**
+4. **Focus on what matters most for that category given their use case**
+5. **Keep queries focused and relevant - avoid generic terms**
+
+Generate queries that will find the most relevant products for each category based on their specific needs and the unique attributes that matter for that product type."""
 
                 try:
                     category_queries_response = await self.base_provider.generate_structured_response(
@@ -1686,7 +1685,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                     "size": settings.final_result_limit
                 }
                 
-                print(f"🔍 Elasticsearch query: {json.dumps(query, indent=2)}")
+                print(f"🔍 Elasticsearch query size: {len(json.dumps(query))} characters")
                 
                 # Perform search
                 results = await self.elasticsearch.search_products(query)

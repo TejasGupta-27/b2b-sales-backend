@@ -403,16 +403,33 @@ class ElasticsearchVectorService:
         except Exception as e:
             logger.warning(f"Solutions vector index creation issue: {e}")
     
+    def _truncate_text_for_embedding(self, text: str, max_tokens: int = 8000) -> str:
+        """Truncate text to fit within embedding model token limits"""
+        # Simple truncation by character count (approximate)
+        # Rough estimation: ~4 characters per token on average
+        max_chars = max_tokens * 4
+        
+        if len(text) <= max_chars:
+            return text
+        
+        # Truncate and add indicator
+        truncated = text[:max_chars-20] + "... [truncated]"
+        logger.warning(f"🔄 Query truncated from {len(text)} to {len(truncated)} characters to fit token limit")
+        return truncated
+
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings from Azure OpenAI"""
         try:
+            # Truncate texts that are too long
+            truncated_texts = [self._truncate_text_for_embedding(text) for text in texts]
+            
             headers = {
                 "Content-Type": "application/json",
                 "api-key": self.azure_embedding_key
             }
             
             data = {
-                "input": texts,
+                "input": truncated_texts,
                 "model": "text-embedding-3-large"
             }
             
@@ -603,7 +620,7 @@ class ElasticsearchVectorService:
     ) -> List[Dict[str, Any]]:
         """Perform vector search on products with optional category filtering and balanced results"""
         try:
-            logger.info(f"🔍 Vector search called with query: '{query}', categories: {categories}")
+            logger.info(f"🔍 Vector search called with query: '{query[:100]}...', categories: {categories}")
             
             # Get query embedding
             query_embeddings = await self.get_embeddings([query])
@@ -2029,23 +2046,9 @@ IMPORTANT: Analyze the requirements to determine the most relevant category, the
             query = dynamic_query.keyword_query
             query["size"] = size
             
-            # Debug: Log the actual query being used
-            print(f"🔍 AI-Generated Keyword Query:")
-            print(f"   Search Terms Used: {dynamic_query.semantic_query}")
-            print(f"   Field Priorities: {dynamic_query.field_priorities}")
-            try:
-                print(f"   Query Structure: {json.dumps(query, indent=2)}")
-            except (TypeError, ValueError):
-                print(f"   Query Structure: {str(query)}")
-            logger.info(f"🔍 AI-Generated Keyword Query:")
-            try:
-                logger.info(f"   Query Structure: {json.dumps(query, indent=2)}")
-            except (TypeError, ValueError):
-                logger.info(f"   Query Structure: {str(query)}")
-            logger.info(f"   Search Terms Used: {dynamic_query.semantic_query}")
-            logger.info(f"   Field Priorities: {dynamic_query.field_priorities}")
-            
-            # Add filters if suggested by AI
+         
+            logger.info(f"🔍 AI-Generated Keyword Query: {len(str(query))} chars, {len(dynamic_query.field_priorities)} fields")
+       
             if dynamic_query.suggested_filters:
                 if "query" not in query:
                     query["query"] = {}
