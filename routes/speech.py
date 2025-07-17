@@ -417,12 +417,12 @@ async def handle_voice_message(
             lead = check_lead_access(lead_id, current_user, db)
         
         # Save user message with user association
-        logger.info(f"VOICE: About to insert message_type={MessageType.USER.value!r} ({type(MessageType.USER.value)})")
+        logger.info(f"VOICE: About to insert message_type={MessageType.USER.name!r} ({type(MessageType.USER.name)})")
         user_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
             user_id=current_user.id,  # Associate with current user
-            message_type=MessageType.USER.value,
+            message_type=MessageType.USER.name,
             content=text_message,
             stage=conversation_stage,
             message_metadata={
@@ -533,7 +533,7 @@ async def handle_voice_message(
         assistant_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
-            message_type=MessageType.ASSISTANT.value,
+            message_type=MessageType.ASSISTANT.name,
             content=response.content,
             stage=conversation_stage,
             message_metadata=response_metadata
