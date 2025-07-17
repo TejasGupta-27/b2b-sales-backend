@@ -63,3 +63,8 @@ python-pptx
 # Monitoring and metrics
 prometheus-client
 psutil
+
+soxr
+resampy
+scipy
+samplerate
