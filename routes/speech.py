@@ -417,6 +417,7 @@ async def handle_voice_message(
             lead = check_lead_access(lead_id, current_user, db)
         
         # Save user message with user association
+        logger.info(f"VOICE: About to insert message_type={MessageType.USER.value!r} ({type(MessageType.USER.value)})")
         user_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
