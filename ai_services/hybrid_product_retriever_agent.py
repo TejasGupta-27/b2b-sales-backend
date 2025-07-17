@@ -22,7 +22,7 @@ class CategorySpecificQuery(BaseModel):
     """Category-specific search query with tailored semantic meaning"""
     category: str = Field(description="Product category name")
     semantic_query: str = Field(description="Tailored semantic search query for this specific category")
-    focus_attributes: List[str] = Field(description="Key attributes this category query should focus on")
+    focus_attributes: List[str] = Field(description="Key attributes this category query should focus on", default_factory=list)
 
 class CategorySpecificQueries(BaseModel):
     """Wrapper for multiple category-specific queries"""
@@ -703,7 +703,7 @@ For each category, create a specific semantic query that:
 
 **Video-Card/GPU Category**: Focus on graphics performance (VRAM, ray tracing, DLSS), gaming performance (4K, 1440p, frame rates), professional use (rendering, AI), power requirements, cooling solutions
 
-**Memory/RAM Category**: Focus on capacity needs (8GB, 16GB, 32GB+), speed specifications (DDR4, DDR5, MHz), latency timings, gaming performance, reliable brands like Corsair, G.Skill
+**Memory/RAM Category**: Focus on gaming-optimized RAM with good capacity (16GB, 32GB), speed specifications (DDR4 3200MHz+, DDR5), low latency for performance, reliable gaming brands, dual-channel or quad-channel kits
 
 **Storage Category**: Focus on storage type (SSD, HDD, NVMe), capacity requirements, speed (read/write speeds), use case (boot drive, mass storage), form factor
 
@@ -911,6 +911,7 @@ Think broadly about their needs and suggest relevant alternatives."""
         enhanced_requirements = requirements.copy()
         enhanced_requirements['search_keywords'] = search_keywords
         enhanced_requirements['semantic_queries'] = semantic_queries
+        enhanced_requirements['recommended_categories'] = context_analysis.recommended_categories  # ✅ Store at top level too!
         enhanced_requirements['llm_context'] = {
             'primary_need': context_analysis.primary_need,
             'business_context': context_analysis.business_context,
@@ -1753,6 +1754,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             elif requirements.get('product_categories'):
                 categories = requirements['product_categories']
                 logger.info(f"🎯 Using product_categories as fallback: {categories}")
+            else:
+                logger.warning(f"🐛 DEBUG: NO CATEGORIES FOUND - this is why individual search isn't triggered!")
             
             # Normalize and validate categories
             categories = self._normalize_categories(categories)
