@@ -534,6 +534,7 @@ async def handle_voice_message(
         assistant_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
+            user_id=current_user.id,  # Set user_id for assistant message
             message_type=MessageType.ASSISTANT.name,
             content=response.content,
             stage=conversation_stage,
