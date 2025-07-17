@@ -24,6 +24,10 @@ class CategorySpecificQuery(BaseModel):
     semantic_query: str = Field(description="Tailored semantic search query for this specific category")
     focus_attributes: List[str] = Field(description="Key attributes this category query should focus on")
 
+class CategorySpecificQueries(BaseModel):
+    """Wrapper for multiple category-specific queries"""
+    queries: List[CategorySpecificQuery] = Field(description="List of category-specific semantic queries")
+
 class ContextAnalysis(BaseModel):
     """LLM-powered context analysis for better product retrieval"""
     primary_need: str = Field(description="The main problem or need the customer is trying to solve")
@@ -725,12 +729,12 @@ Generate queries that will find the most relevant products for each category bas
                 try:
                     category_queries_response = await self.base_provider.generate_structured_response(
                         [AIMessage(role="user", content=category_queries_prompt)],
-                        List[CategorySpecificQuery]
+                        CategorySpecificQueries
                     )
-                    context_analysis.category_specific_queries = category_queries_response
+                    context_analysis.category_specific_queries = category_queries_response.queries
                     
-                    logger.info(f"✅ Generated {len(category_queries_response)} category-specific queries:")
-                    for query in category_queries_response:
+                    logger.info(f"✅ Generated {len(category_queries_response.queries)} category-specific queries:")
+                    for query in category_queries_response.queries:
                         logger.info(f"   📦 {query.category}: {query.semantic_query[:100]}...")
                         
                 except Exception as e:
