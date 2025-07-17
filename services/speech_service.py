@@ -149,7 +149,7 @@ class SpeechService:
             logger.info(f"Original audio: shape={audio_array.shape}, sample_rate={orig_sr}")
             target_sr = 16000
             if orig_sr != target_sr:
-                audio_array = librosa.resample(audio_array, target_sr)
+                audio_array = librosa.resample(audio_array, orig_sr, target_sr)
                 logger.info(f"Resampled audio to {target_sr} Hz")
             else:
                 logger.info("Audio already at 16kHz, no resampling needed")
