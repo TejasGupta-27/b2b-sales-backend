@@ -116,7 +116,15 @@ class SimpleConversationalAgent(AIProvider):
                     print(f"   Search Methods: {product_data.get('search_methods', {}).get('methods', [])}")
                 else:
                     print(f"   🔄 Standard Search: No AI enhancement")
-                    
+                
+                # --- METRICS: Record product recommendations ---
+                for p in product_data.get('products', []):
+                    category = p.get('category', 'unknown')
+                    product_id = p.get('id', p.get('product_id', 'unknown'))
+                    product_name = p.get('name', p.get('title', 'Unknown Product'))
+                    self.metrics_service.record_product_recommendation(category, product_id, product_name)
+                # --- END METRICS ---
+                
             except Exception as e:
                 print(f"⚠️ Product retrieval failed: {e}")
                 product_data = {'products': [], 'solutions': [], 'error': str(e)}

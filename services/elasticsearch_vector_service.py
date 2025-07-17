@@ -766,7 +766,17 @@ class ElasticsearchVectorService:
             
             # Limit to requested size
             products = products[:size]
-            
+
+            # --- METRICS: Record product recommendations ---
+            from services.metrics_service import get_metrics_service
+            metrics_service = get_metrics_service()
+            for p in products:
+                category = p.get('category', 'unknown')
+                product_id = p.get('id', p.get('product_id', 'unknown'))
+                product_name = p.get('name', p.get('title', 'Unknown Product'))
+                metrics_service.record_product_recommendation(category, product_id, product_name)
+            # --- END METRICS ---
+
             logger.info(f"🔍 Vector search returned {len(products)} products for query: '{query}'")
             if products:
                 # Log product names for debugging
