@@ -174,6 +174,8 @@ class SpeechService:
             logger.info(f"Original audio: shape={audio_array.shape}, sample_rate={orig_sr}")
             target_sr = 16000
             if orig_sr != target_sr:
+                print("librosa.core.resample:", librosa.core.resample)
+                print("librosa module file:", librosa.__file__)
                 audio_array = librosa.core.resample(audio_array, orig_sr, target_sr)
                 logger.info(f"Resampled audio to {target_sr} Hz")
             else:
