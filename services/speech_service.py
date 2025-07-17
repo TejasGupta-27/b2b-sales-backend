@@ -194,31 +194,15 @@ class SpeechService:
         language: Optional[str] = None
     ) -> dict:
         """
-        Transcribe audio data using ElevenLabs Speech-to-Text.
-        
-        Args:
-            audio_data: Audio data as file-like object or bytes
-            language: Optional language code (e.g., "en", "ja", "es")
-            
-        Returns:
-            dict: Contains transcription text and metadata
+        Transcribe audio using ElevenLabs STT API. Audio is always resampled to 16kHz mono WAV.
         """
         try:
-            # Prepare audio data for ElevenLabs
-            if isinstance(audio_data, bytes):
-                audio_bytes = audio_data
-            else:
-                audio_bytes = audio_data.read()
-            
-            # Validate audio data
-            if len(audio_bytes) == 0:
-                raise Exception("Empty audio data provided to ElevenLabs STT")
-            
-            logger.info(f"Sending {len(audio_bytes)} bytes to ElevenLabs STT")
+            wav_bytes = self.get_resampled_bytes(audio_data)
+            logger.info(f"Sending {len(wav_bytes)} bytes to ElevenLabs STT")
             
             # ElevenLabs STT expects file-like object
             from io import BytesIO
-            audio_file = BytesIO(audio_bytes)
+            audio_file = BytesIO(wav_bytes)
             
             # Run ElevenLabs STT in executor since it's synchronous
             loop = asyncio.get_event_loop()
@@ -244,7 +228,7 @@ class SpeechService:
             
             # If transcription is empty, log additional debug info
             if not transcription_text.strip():
-                logger.warning(f"ElevenLabs returned empty transcription for {len(audio_bytes)} bytes of audio data")
+                logger.warning(f"ElevenLabs returned empty transcription for {len(wav_bytes)} bytes of audio data")
                 # Check if result has any debug information
                 if hasattr(result, '__dict__'):
                     logger.debug(f"Full ElevenLabs result: {result.__dict__}")
@@ -299,9 +283,9 @@ class SpeechService:
             duration = 0
             if processed_words:
                 duration = processed_words[-1]['end']
-            elif len(audio_bytes) > 0:
+            elif len(wav_bytes) > 0:
                 # Rough estimation: assume 16kHz, 16-bit audio
-                estimated_samples = len(audio_bytes) // 2  # 16-bit = 2 bytes per sample
+                estimated_samples = len(wav_bytes) // 2  # 16-bit = 2 bytes per sample
                 duration = estimated_samples / 16000  # 16kHz sample rate
             
             return {
@@ -322,7 +306,7 @@ class SpeechService:
             }
             
         except Exception as e:
-            logger.error(f"ElevenLabs STT error: {str(e)}")
+            logger.error(f"ElevenLabs STT error: {e}")
             raise
 
     async def _whisper_speech_to_text(
