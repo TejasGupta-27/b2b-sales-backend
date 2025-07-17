@@ -14,6 +14,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from gtts import gTTS
 import base64
+from services.language_service import LanguageService
 
 # ElevenLabs integration
 try:
@@ -46,6 +47,9 @@ class SpeechService:
         # ElevenLabs setup
         self.elevenlabs_client = None
         self.use_elevenlabs = ELEVENLABS_AVAILABLE and settings.elevenlabs_api_key
+        
+        # Initialize language service for language detection
+        self.language_service = LanguageService()
         
         if self.use_elevenlabs:
             try:
