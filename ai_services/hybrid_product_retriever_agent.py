@@ -1070,15 +1070,8 @@ Think broadly about their needs and suggest relevant alternatives."""
         # Perform hybrid search
         hybrid_results = await self._perform_hybrid_search(requirements)
         
-        # Use per-category fusion for fallback if categories are present
-        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
-        if categories:
-            hybrid_results['products'] = self.rrf_fusion.fuse_rankings_per_category(
-                [p for p in hybrid_results['products'] if p.get('search_source') in ('elasticsearch', 'both')],
-                [p for p in hybrid_results['products'] if p.get('search_source') in ('vector', 'both')],
-                categories,
-                max_results=settings.final_result_limit
-            )
+        # Results from _perform_hybrid_search are already fused - no need to re-fuse
+        # This was causing inconsistent results by re-processing already-fused data
         
         # Analyze results
         analysis = await self._analyze_hybrid_recommendations(
@@ -1313,16 +1306,8 @@ Return a bullet list of technical requirements (one per line, e.g., 'GPU: NVIDIA
     ) -> Dict[str, Any]:
         """Analyze hybrid recommendations using Pydantic function calling"""
         
-        # Use per-category fusion for analysis if categories are present
-        categories = requirements.get('recommended_categories') or requirements.get('llm_context', {}).get('recommended_categories')
-        if categories:
-            # Re-fuse products per category for analysis
-            products = self.rrf_fusion.fuse_rankings_per_category(
-                [p for p in products if p.get('search_source') in ('elasticsearch', 'both')],
-                [p for p in products if p.get('search_source') in ('vector', 'both')],
-                categories,
-                max_results=settings.final_result_limit
-            )
+        # Products are already properly fused - no need to re-fuse for analysis
+        # Re-fusing was causing inconsistent results
         
         analysis_prompt = f"""You are a technical solution architect analyzing hybrid search results from both keyword and semantic search.
 
@@ -1666,10 +1651,29 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                                     "minimum_should_match": 1
                                 }
                             },
-                            "size": 5  # Exactly 5 products per category
+                            "size": 5,  # Exactly 5 products per category
+                            "_source": {"excludes": ["content_vector"]}  # Exclude vector field for efficiency
                         }
                         
-                        category_results = await self.elasticsearch.search_products(category_query)
+                        # Get the category-specific index name
+                        category_index = CATEGORY_INDEX_MAP.get(category, f"{category}_vector")
+                        logger.info(f"🎯 ES searching index '{category_index}' for category '{category}'")
+                        
+                        # Search the specific category index directly
+                        try:
+                            response = await self.elasticsearch.client.search(index=category_index, body=category_query)
+                            category_results = []
+                            for hit in response["hits"]["hits"]:
+                                product = hit["_source"]
+                                product["_score"] = hit["_score"]
+                                product["_index"] = hit["_index"]
+                                product["search_source"] = "elasticsearch"
+                                product["keyword_score"] = hit["_score"]
+                                category_results.append(product)
+                        except Exception as index_error:
+                            logger.warning(f"⚠️ Failed to search index '{category_index}': {index_error}")
+                            # Fallback to general search if index doesn't exist
+                            category_results = []
                         logger.info(f"📦 ES Category '{category}': {len(category_results)} products found")
                         all_results.extend(category_results)
                     except Exception as e:
