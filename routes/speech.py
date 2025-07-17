@@ -323,6 +323,7 @@ async def handle_voice_message(
     Also includes text-to-speech for the response.
     Requires authentication and uses role-based access control.
     """
+    primary_language = 'en'  # Default to English if not set
     try:
         # Import required dependencies
         from services.auth_service import get_current_active_user, check_lead_access, get_lead_access_filter
@@ -512,8 +513,8 @@ async def handle_voice_message(
             "transcription_metadata": transcription_result,
             "speech_metadata": speech_result,
             "detected_language": detected_language,
-            "response_language": primary_language,
-            "language_confidence": language_confidence,
+            "response_language": response_language,  # Use response_language instead of primary_language
+            "language_confidence": detection_result.get('confidence', 1.0) if 'detection_result' in locals() and detection_result else 1.0,
             "multilingual_support": True,
             "language_detection_enabled": True
         }
