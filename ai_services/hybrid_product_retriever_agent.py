@@ -736,6 +736,8 @@ Generate queries that will find the MOST relevant products for each category bas
                         
                 except Exception as e:
                     logger.error(f"❌ Failed to generate category-specific queries: {e}")
+                    import traceback
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
                     # Fallback: create basic queries for each category
                     fallback_queries = []
                     for category in categories:
@@ -747,6 +749,8 @@ Generate queries that will find the MOST relevant products for each category bas
                         ))
                     context_analysis.category_specific_queries = fallback_queries
                     logger.info(f"🔄 Using fallback category queries for {len(fallback_queries)} categories")
+                    for query in fallback_queries:
+                        logger.info(f"   🔄 {query.category}: {query.semantic_query}")
 
             logger.info(f"✅ Enhanced Context Analysis:")
             logger.info(f"   Primary Need: {context_analysis.primary_need}")
@@ -832,7 +836,13 @@ Think broadly about their needs and suggest relevant alternatives."""
                 'confidence': context_analysis.confidence,
                 'recommended_categories': context_analysis.recommended_categories,
                 'category_confidence': context_analysis.category_confidence,
-                'category_specific_queries': context_analysis.category_specific_queries
+                'category_specific_queries': [
+                    {
+                        'category': query.category,
+                        'semantic_query': query.semantic_query,
+                        'focus_attributes': query.focus_attributes
+                    } for query in context_analysis.category_specific_queries
+                ]  # Convert to dictionaries to avoid JSON serialization issues
             },
             'search_keywords': context_analysis.search_keywords,
             'semantic_queries': context_analysis.semantic_queries,
@@ -904,7 +914,13 @@ Think broadly about their needs and suggest relevant alternatives."""
             'technical_requirements': context_analysis.technical_requirements,
             'recommended_categories': context_analysis.recommended_categories,
             'category_confidence': context_analysis.category_confidence,
-            'category_specific_queries': context_analysis.category_specific_queries
+            'category_specific_queries': [
+                {
+                    'category': query.category,
+                    'semantic_query': query.semantic_query,
+                    'focus_attributes': query.focus_attributes
+                } for query in context_analysis.category_specific_queries
+            ]  # Convert to dictionaries to avoid JSON serialization issues
         }
         
         # Use AI-powered dynamic query generation for both search types
@@ -1592,16 +1608,19 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 category_specific_queries = {}
                 
                 # Try to get category-specific queries from the enhanced context analysis
-                if hasattr(llm_context, 'category_specific_queries'):
-                    for query_obj in llm_context.category_specific_queries:
-                        category_specific_queries[query_obj.category] = query_obj.semantic_query
-                elif isinstance(llm_context, dict) and 'category_specific_queries' in llm_context:
+                if isinstance(llm_context, dict) and 'category_specific_queries' in llm_context:
                     for query_obj in llm_context['category_specific_queries']:
-                        if hasattr(query_obj, 'category') and hasattr(query_obj, 'semantic_query'):
+                        if isinstance(query_obj, dict):
+                            category = query_obj.get('category', '')
+                            semantic_query = query_obj.get('semantic_query', '')
+                            if category and semantic_query:
+                                category_specific_queries[category] = semantic_query
+                                logger.info(f"🎯 Loaded category query for '{category}': {semantic_query[:80]}...")
+                        elif hasattr(query_obj, 'category') and hasattr(query_obj, 'semantic_query'):
                             category_specific_queries[query_obj.category] = query_obj.semantic_query
-                        elif isinstance(query_obj, dict):
-                            category_specific_queries[query_obj.get('category', '')] = query_obj.get('semantic_query', '')
                 
+                logger.info(f"🎯 Category-specific queries loaded: {list(category_specific_queries.keys())}")
+
                 for category in categories:
                     try:
                         # Use category-specific terms if available
@@ -1640,6 +1659,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                         all_results.extend(category_results)
                     except Exception as e:
                         logger.error(f"❌ ES Error searching category '{category}': {e}")
+                        import traceback
+                        logger.error(f"Full traceback: {traceback.format_exc()}")
                 
                 results = all_results
                 logger.info(f"🎯 ES Combined results: {len(results)} products across {len(categories)} categories")
@@ -1761,16 +1782,19 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                 category_specific_queries = {}
                 
                 # Try to get category-specific queries from the enhanced context analysis
-                if hasattr(llm_context, 'category_specific_queries'):
-                    for query_obj in llm_context.category_specific_queries:
-                        category_specific_queries[query_obj.category] = query_obj.semantic_query
-                elif isinstance(llm_context, dict) and 'category_specific_queries' in llm_context:
+                if isinstance(llm_context, dict) and 'category_specific_queries' in llm_context:
                     for query_obj in llm_context['category_specific_queries']:
-                        if hasattr(query_obj, 'category') and hasattr(query_obj, 'semantic_query'):
+                        if isinstance(query_obj, dict):
+                            category = query_obj.get('category', '')
+                            semantic_query = query_obj.get('semantic_query', '')
+                            if category and semantic_query:
+                                category_specific_queries[category] = semantic_query
+                                logger.info(f"🎯 Loaded category query for '{category}': {semantic_query[:80]}...")
+                        elif hasattr(query_obj, 'category') and hasattr(query_obj, 'semantic_query'):
                             category_specific_queries[query_obj.category] = query_obj.semantic_query
-                        elif isinstance(query_obj, dict):
-                            category_specific_queries[query_obj.get('category', '')] = query_obj.get('semantic_query', semantic_query)
                 
+                logger.info(f"🎯 Category-specific queries loaded: {list(category_specific_queries.keys())}")
+
                 for category in categories:
                     try:
                         # Use category-specific query if available, otherwise fallback to generic query
@@ -1781,6 +1805,7 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                         else:
                             logger.info(f"🔄 Using generic query for '{category}' (no specific query available)")
                         
+                        logger.info(f"🔍 Searching category '{category}' with query: {category_query[:50]}...")
                         category_results = await self.vector_service.vector_search_products(
                             category_query,  # Use category-specific query
                             size=5,  # Exactly 5 products per category
@@ -1790,6 +1815,8 @@ Provide detailed analysis considering both keyword relevance and semantic simila
                         all_results.extend(category_results)
                     except Exception as e:
                         logger.error(f"❌ Error searching category '{category}': {e}")
+                        import traceback
+                        logger.error(f"Full traceback: {traceback.format_exc()}")
                 
                 results = all_results
                 logger.info(f"🎯 Combined results: {len(results)} products across {len(categories)} categories")
