@@ -672,7 +672,11 @@ NOTE: You will generate category-specific semantic queries in a separate step af
             # Step 3: Generate category-specific semantic queries
             if categories:
                 logger.info(f"🎯 Generating category-specific semantic queries for {len(categories)} categories...")
-                category_queries_prompt = f"""Based on the customer's context and the recommended product categories, generate tailored semantic search queries for each category.
+                
+                # Get additional requirements from the conversation and customer context
+                conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages[-3:]])
+                
+                category_queries_prompt = f"""Based on the complete customer context and requirements, generate highly tailored semantic search queries for each product category.
 
 CUSTOMER CONTEXT:
 Primary Need: {context_analysis.primary_need}
@@ -680,23 +684,44 @@ Business Context: {context_analysis.business_context}
 Technical Requirements: {context_analysis.technical_requirements}
 Budget Indicator: {context_analysis.budget_indicator}
 Timeline: {context_analysis.timeline}
+Search Keywords: {context_analysis.search_keywords}
+
+ADDITIONAL CUSTOMER INFORMATION:
+Industry: {customer_context.get('industry', 'Not specified') if customer_context else 'Not specified'}
+Company Size: {customer_context.get('company_size', 'Not specified') if customer_context else 'Not specified'}
+Budget Range: {customer_context.get('budget_range', 'Not specified') if customer_context else 'Not specified'}
+Contact: {customer_context.get('contact_name', 'Not specified') if customer_context else 'Not specified'}
+
+RECENT CONVERSATION:
+{conversation_text}
 
 RECOMMENDED CATEGORIES: {categories}
 
 TASK:
-For each category, create a specific semantic query that:
-1. Focuses on the unique attributes important for that category
-2. Incorporates the customer's specific requirements and context
-3. Uses terminology and concepts relevant to that product type
-4. Maximizes relevance for finding the best products in that category
+For each category, create a highly specific semantic query that:
+1. **Incorporates ALL the customer's specific requirements and context**
+2. **Reflects their industry, company size, and budget constraints**  
+3. **Uses terminology and concepts most relevant to that product category**
+4. **Considers their timeline and urgency**
+5. **Incorporates technical requirements specific to that category**
+6. **Matches their business context and use case**
 
-EXAMPLES:
-- CPU category: Focus on performance (cores, speed, architecture), workload types, power efficiency
-- Keyboard category: Focus on typing experience (mechanical/membrane), layout, connectivity, ergonomics
-- Memory category: Focus on capacity, speed (DDR type), compatibility, performance requirements
-- Storage category: Focus on capacity, speed (SSD/HDD), interface, reliability, use case
+CATEGORY-SPECIFIC FOCUS EXAMPLES:
+- CPU: Performance (cores, speed, architecture), workload types, power efficiency, compatibility
+- Keyboard: Typing experience (mechanical/membrane), layout, connectivity, ergonomics, professional vs gaming
+- Memory: Capacity, speed (DDR type), compatibility, performance requirements, ECC vs non-ECC
+- Storage: Capacity, speed (SSD/HDD), interface, reliability, enterprise vs consumer, backup needs
+- Monitor: Size, resolution, refresh rate, color accuracy, professional vs gaming use
+- Motherboard: Socket type, expansion slots, features, form factor, connectivity
 
-Generate queries that will find the most relevant products for each category based on their specific needs."""
+IMPORTANT:
+- **Each query should be unique and tailored specifically to that category AND the customer's needs**
+- **Include specific technical terms relevant to both the category and the customer's requirements**
+- **Consider their budget level when suggesting performance tiers**
+- **Factor in their industry requirements (e.g., enterprise features for business, gaming features for entertainment)**
+- **Use their actual conversation context to understand what they really need**
+
+Generate queries that will find the MOST relevant products for each category based on their complete profile and needs."""
 
                 try:
                     category_queries_response = await self.base_provider.generate_structured_response(
