@@ -145,6 +145,8 @@ class SpeechService:
             if isinstance(audio_data, bytes):
                 audio_bytes = audio_data
             else:
+                # Always seek to the start before reading
+                audio_data.seek(0)
                 audio_bytes = audio_data.read()
             
             if len(audio_bytes) == 0:
