@@ -96,9 +96,10 @@ You are a business assistant. Based on the product quotation below, generate a s
 
 Each slide must contain a **title** and 5–6 persuasive bullet points.
 
-3. Add a **comparison table** duplicating the same product 3 times with slightly varied names:
-   - Copy the product specs from the quotation
-   - Change the name to `"Product Name Variant 1"`, `"Variant 2"`, etc.
+3. Add a **comparison table** with 3 hypothetical alternative products:
+   - Use the quoted product as the first row
+   - Generate 3 realistic alternative products with different specs, prices, and features
+   - Each alternative should be a viable option with different trade-offs (e.g., higher performance/higher price, lower performance/lower price, different feature focus)
    - Add them to a table with the following structure:
 
 ### JSON OUTPUT FORMAT
@@ -116,15 +117,16 @@ Return your response as valid JSON:
       "title": "Product Comparison",
       "columns": ["Product Name", "Price", "CPU", "RAM", "Storage", "Warranty", "Support"],
       "rows": [
-        ["...Variant 1...", "...", "...", "...", "...", "...", "..."],
-        ["...Variant 2...", "...", "...", "...", "...", "...", "..."],
-        ["...Variant 3...", "...", "...", "...", "...", "...", "..."]
+        ["Quoted Product", "...", "...", "...", "...", "...", "..."],
+        ["Alternative 1", "...", "...", "...", "...", "...", "..."],
+        ["Alternative 2", "...", "...", "...", "...", "...", "..."],
+        ["Alternative 3", "...", "...", "...", "...", "...", "..."]
       ]
     }}
   ]
 }}
 
-✅ Use ONLY the product and specifications mentioned in the quotation — do NOT make up new ones.
+✅ For the comparison table, generate 3 realistic alternative products with different specifications, prices, and features based on the quoted product type.
 ✅ Return valid JSON ONLY — no commentary, no markdown.
 
 {language_note}
