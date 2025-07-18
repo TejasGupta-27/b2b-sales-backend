@@ -93,6 +93,11 @@ async def transcribe_audio(
         
         # Handle file upload
         if audio:
+            # Log uploaded file size
+            audio.file.seek(0, 2)  # Move to end
+            size = audio.file.tell()
+            audio.file.seek(0)     # Reset to start
+            logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
             logger.info(f"Processing file upload: filename={audio.filename}, content_type={audio.content_type}")
             if not audio.content_type.startswith(('audio/', 'video/')):
                 raise HTTPException(
@@ -135,7 +140,7 @@ async def transcribe_audio(
             try:
                 # Decode base64 audio data
                 audio_bytes = base64.b64decode(audio_data.audio_bytes)
-                logger.info(f"Decoded {len(audio_bytes)} bytes from base64")
+                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 (from audio_data)")
                 result = await speech_service.transcribe_audio(
                     audio_bytes,
                     language=audio_data.language or language
@@ -208,6 +213,11 @@ async def transcribe_audio_detailed(
         
         # Handle file upload
         if audio:
+            # Log uploaded file size
+            audio.file.seek(0, 2)  # Move to end
+            size = audio.file.tell()
+            audio.file.seek(0)     # Reset to start
+            logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
             logger.info(f"Processing file upload for detailed transcription: filename={audio.filename}, content_type={audio.content_type}")
             if not audio.content_type.startswith(('audio/', 'video/')):
                 raise HTTPException(
@@ -251,7 +261,7 @@ async def transcribe_audio_detailed(
             try:
                 # Decode base64 audio data
                 audio_bytes = base64.b64decode(audio_data.audio_bytes)
-                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 for detailed transcription")
+                logger.info(f"Decoded {len(audio_bytes)} bytes from base64 (from audio_data)")
                 result = await speech_service.transcribe_audio(
                     audio_bytes,
                     language=audio_data.language or language
@@ -313,6 +323,7 @@ async def handle_voice_message(
     Also includes text-to-speech for the response.
     Requires authentication and uses role-based access control.
     """
+    primary_language = 'en'  # Default to English if not set
     try:
         # Import required dependencies
         from services.auth_service import get_current_active_user, check_lead_access, get_lead_access_filter
@@ -323,7 +334,16 @@ async def handle_voice_message(
                 status_code=400,
                 detail="File must be an audio file"
             )
-        
+        # Log uploaded file size
+        audio.file.seek(0, 2)  # Move to end
+        size = audio.file.tell()
+        audio.file.seek(0)     # Reset to start
+        logger.info(f"Uploaded file size: {size} bytes (filename={audio.filename})")
+        # Save uploaded audio for debugging
+        with open("/tmp/debug_upload.wav", "wb") as f:
+            f.write(audio.file.read())
+        logger.info("Saved uploaded audio to /tmp/debug_upload.wav for inspection.")
+        audio.file.seek(0)  # Reset again for further processing
         # Transcribe the audio to text
         transcription_result = await speech_service.transcribe_audio(
             audio.file,
@@ -403,11 +423,12 @@ async def handle_voice_message(
             lead = check_lead_access(lead_id, current_user, db)
         
         # Save user message with user association
+        logger.info(f"VOICE: About to insert message_type={MessageType.USER.name!r} ({type(MessageType.USER.name)})")
         user_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
             user_id=current_user.id,  # Associate with current user
-            message_type=MessageType.USER.value,
+            message_type=MessageType.USER.name,
             content=text_message,
             stage=conversation_stage,
             message_metadata={
@@ -497,8 +518,8 @@ async def handle_voice_message(
             "transcription_metadata": transcription_result,
             "speech_metadata": speech_result,
             "detected_language": detected_language,
-            "response_language": primary_language,
-            "language_confidence": language_confidence,
+            "response_language": response_language,  # Use response_language instead of primary_language
+            "language_confidence": detection_result.get('confidence', 1.0) if 'detection_result' in locals() and detection_result else 1.0,
             "multilingual_support": True,
             "language_detection_enabled": True
         }
@@ -518,7 +539,8 @@ async def handle_voice_message(
         assistant_message = DBChatMessage(
             id=str(uuid.uuid4()),
             lead_id=lead_id,
-            message_type=MessageType.ASSISTANT.value,
+            user_id=current_user.id,  # Set user_id for assistant message
+            message_type=MessageType.ASSISTANT.name,
             content=response.content,
             stage=conversation_stage,
             message_metadata=response_metadata

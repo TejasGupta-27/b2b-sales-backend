@@ -22,7 +22,6 @@ AGENT_PERSONALITY = {
     "response_length": "concise_but_helpful"
 }
 
-# Response Templates (not hardcoded, but guidelines)
 RESPONSE_GUIDELINES = {
     "product_inquiries": {
         "approach": "enthusiastic_help",

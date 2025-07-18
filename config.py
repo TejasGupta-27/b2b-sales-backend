@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")
     elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
-    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "eleven_multilingual_v1")
+    elevenlabs_stt_model_id: str = os.getenv("ELEVENLABS_STT_MODEL_ID", "scribe_v1")
     elevenlabs_stability: float = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
     elevenlabs_similarity_boost: float = float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.5"))
     elevenlabs_style: float = float(os.getenv("ELEVENLABS_STYLE", "0.0"))

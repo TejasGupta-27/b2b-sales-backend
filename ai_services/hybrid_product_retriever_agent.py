@@ -1400,6 +1400,16 @@ Provide detailed analysis considering both keyword relevance and semantic simila
             # Use the enhanced conversation analysis with LLM context
             enhanced_results = await self.analyze_conversation_and_retrieve(messages, customer_context)
             
+            # --- METRICS: Record product recommendations ---
+            from services.metrics_service import get_metrics_service
+            metrics_service = get_metrics_service()
+            for p in enhanced_results.get('products', []):
+                category = p.get('category', 'unknown')
+                product_id = p.get('id', p.get('product_id', 'unknown'))
+                product_name = p.get('name', p.get('title', 'Unknown Product'))
+                metrics_service.record_product_recommendation(category, product_id, product_name)
+            # --- END METRICS ---
+            
             # Build RRF parameters for response
             rrf_parameters = {
                 'k': self.rrf_fusion.k,

@@ -14,6 +14,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from gtts import gTTS
 import base64
+from scipy.signal import resample_poly  # <-- Add this import
+from services.language_service import LanguageService
 
 # ElevenLabs integration
 try:
@@ -26,6 +28,15 @@ except ImportError:
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Helper function for resampling using scipy
+
+def resample_audio(audio_array, orig_sr, target_sr):
+    from math import gcd
+    factor = gcd(orig_sr, target_sr)
+    up = target_sr // factor
+    down = orig_sr // factor
+    return resample_poly(audio_array, up, down)
 
 class SpeechService:
     def __init__(self, model_name: str = "medium"):
@@ -46,6 +57,9 @@ class SpeechService:
         # ElevenLabs setup
         self.elevenlabs_client = None
         self.use_elevenlabs = ELEVENLABS_AVAILABLE and settings.elevenlabs_api_key
+        
+        # Initialize language service for language detection
+        self.language_service = LanguageService()
         
         if self.use_elevenlabs:
             try:
@@ -131,106 +145,60 @@ class SpeechService:
     
     def _preprocess_audio(self, audio_data: Union[BinaryIO, bytes]) -> tuple[np.ndarray, int]:
         """
-        Preprocess audio data to ensure it's in the correct format for Whisper.
-        
-        Args:
-            audio_data: Audio data as file-like object or bytes
-            
-        Returns:
-            tuple: (audio_array, sample_rate)
+        Preprocess audio data to ensure it's in the correct format for Whisper (16kHz mono PCM WAV).
         """
-        temp_file = None
         try:
-            # Get audio bytes
             if isinstance(audio_data, bytes):
                 audio_bytes = audio_data
             else:
+                audio_data.seek(0)
                 audio_bytes = audio_data.read()
-            
             if len(audio_bytes) == 0:
                 raise Exception("Empty audio data received")
-            
-            logger.info(f"Processing audio data: {len(audio_bytes)} bytes")
-            
-            # Try different file extensions based on audio format detection
-            possible_extensions = ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm']
-            audio_array = None
-            sr = None
-            
-            for ext in possible_extensions:
-                try:
-                    # Create a temporary file with the specific extension
-                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as temp_file:
-                        temp_file.write(audio_bytes)
-                        temp_file.flush()
-                        temp_path = temp_file.name
-                    
-                    # Try to load audio with librosa
-                    try:
-                        audio_array, sr = librosa.load(
-                            temp_path,
-                            sr=self.target_sr,  # Resample to 16kHz
-                            mono=True,  # Convert to mono
-                            dtype=np.float32
-                        )
-                        logger.info(f"Successfully loaded audio as {ext} format")
-                        break  # Success, exit the loop
-                        
-                    except Exception as librosa_error:
-                        logger.debug(f"Librosa failed for {ext}: {librosa_error}")
-                        # Try soundfile as fallback
-                        try:
-                            audio_array, sr = sf.read(temp_path, dtype=np.float32)
-                            if sr != self.target_sr:
-                                # Manually resample if needed
-                                audio_array = librosa.resample(audio_array, orig_sr=sr, target_sr=self.target_sr)
-                                sr = self.target_sr
-                            # Convert to mono if stereo
-                            if len(audio_array.shape) > 1:
-                                audio_array = np.mean(audio_array, axis=1)
-                            logger.info(f"Successfully loaded audio as {ext} format using soundfile")
-                            break  # Success, exit the loop
-                            
-                        except Exception as sf_error:
-                            logger.debug(f"Soundfile failed for {ext}: {sf_error}")
-                            continue  # Try next extension
-                    
-                    # Clean up this temp file before trying next extension
-                    try:
-                        os.unlink(temp_path)
-                    except:
-                        pass
-                        
-                except Exception as e:
-                    logger.debug(f"Failed to create temp file with {ext}: {e}")
-                    continue
-            
-            # If we still don't have audio data, it means all formats failed
-            if audio_array is None:
-                raise Exception("Unable to decode audio data - format not supported or corrupted data")
-            
-            # Validate audio data
-            if len(audio_array) == 0:
-                raise Exception("Audio data is empty after decoding")
-            
-            # Normalize audio
-            if np.abs(audio_array).max() > 1.0:
-                audio_array = audio_array / np.abs(audio_array).max()
-            
-            logger.info(f"Audio preprocessed successfully: shape={audio_array.shape}, sr={sr}, dtype={audio_array.dtype}, duration={len(audio_array)/sr:.2f}s")
-            return audio_array, sr
-                
+            audio_array, orig_sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
+            logger.info(f"Original audio: shape={audio_array.shape}, sample_rate={orig_sr}")
+            target_sr = 16000
+            if orig_sr != target_sr:
+                # audio_array = librosa.core.resample(audio_array, orig_sr=orig_sr, target_sr=target_sr)
+                audio_array = resample_audio(audio_array, orig_sr, target_sr)
+                logger.info(f"Resampled audio to {target_sr} Hz")
+            else:
+                logger.info("Audio already at 16kHz, no resampling needed")
+            return audio_array, target_sr
         except Exception as e:
-            error_msg = f"Error preprocessing audio: {str(e)}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
-        finally:
-            # Clean up temporary file
-            if temp_file and hasattr(temp_file, 'name'):
-                try:
-                    os.unlink(temp_file.name)
-                except Exception as e:
-                    logger.warning(f"Failed to delete temporary file: {str(e)}")
+            logger.error(f"Error preprocessing audio: {e}")
+            raise
+
+    def get_resampled_bytes(self, audio_data: Union[BinaryIO, bytes]) -> bytes:
+        """
+        Resample audio to 16kHz mono and return as WAV bytes for ElevenLabs.
+        """
+        try:
+            if isinstance(audio_data, bytes):
+                audio_bytes = audio_data
+            else:
+                audio_data.seek(0)
+                audio_bytes = audio_data.read()
+            if len(audio_bytes) == 0:
+                raise Exception("Empty audio data received")
+            audio_array, orig_sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
+            logger.info(f"Original audio: shape={audio_array.shape}, sample_rate={orig_sr}")
+            target_sr = 16000
+            if orig_sr != target_sr:
+                # audio_array = librosa.core.resample(audio_array, orig_sr=orig_sr, target_sr=target_sr)
+                audio_array = resample_audio(audio_array, orig_sr, target_sr)
+                logger.info(f"Resampled audio to {target_sr} Hz")
+            else:
+                logger.info("Audio already at 16kHz, no resampling needed")
+            buffer = io.BytesIO()
+            sf.write(buffer, audio_array, target_sr, format='WAV')
+            buffer.seek(0)
+            resampled_bytes = buffer.read()
+            logger.info(f"Resampled audio bytes length: {len(resampled_bytes)}")
+            return resampled_bytes
+        except Exception as e:
+            logger.error(f"Error resampling audio for ElevenLabs: {e}")
+            raise
 
     async def _elevenlabs_speech_to_text(
         self,
@@ -238,31 +206,15 @@ class SpeechService:
         language: Optional[str] = None
     ) -> dict:
         """
-        Transcribe audio data using ElevenLabs Speech-to-Text.
-        
-        Args:
-            audio_data: Audio data as file-like object or bytes
-            language: Optional language code (e.g., "en", "ja", "es")
-            
-        Returns:
-            dict: Contains transcription text and metadata
+        Transcribe audio using ElevenLabs STT API. Audio is always resampled to 16kHz mono WAV.
         """
         try:
-            # Prepare audio data for ElevenLabs
-            if isinstance(audio_data, bytes):
-                audio_bytes = audio_data
-            else:
-                audio_bytes = audio_data.read()
-            
-            # Validate audio data
-            if len(audio_bytes) == 0:
-                raise Exception("Empty audio data provided to ElevenLabs STT")
-            
-            logger.info(f"Sending {len(audio_bytes)} bytes to ElevenLabs STT")
+            wav_bytes = self.get_resampled_bytes(audio_data)
+            logger.info(f"Sending {len(wav_bytes)} bytes to ElevenLabs STT")
             
             # ElevenLabs STT expects file-like object
             from io import BytesIO
-            audio_file = BytesIO(audio_bytes)
+            audio_file = BytesIO(wav_bytes)
             
             # Run ElevenLabs STT in executor since it's synchronous
             loop = asyncio.get_event_loop()
@@ -288,7 +240,7 @@ class SpeechService:
             
             # If transcription is empty, log additional debug info
             if not transcription_text.strip():
-                logger.warning(f"ElevenLabs returned empty transcription for {len(audio_bytes)} bytes of audio data")
+                logger.warning(f"ElevenLabs returned empty transcription for {len(wav_bytes)} bytes of audio data")
                 # Check if result has any debug information
                 if hasattr(result, '__dict__'):
                     logger.debug(f"Full ElevenLabs result: {result.__dict__}")
@@ -343,9 +295,9 @@ class SpeechService:
             duration = 0
             if processed_words:
                 duration = processed_words[-1]['end']
-            elif len(audio_bytes) > 0:
+            elif len(wav_bytes) > 0:
                 # Rough estimation: assume 16kHz, 16-bit audio
-                estimated_samples = len(audio_bytes) // 2  # 16-bit = 2 bytes per sample
+                estimated_samples = len(wav_bytes) // 2  # 16-bit = 2 bytes per sample
                 duration = estimated_samples / 16000  # 16kHz sample rate
             
             return {
@@ -366,7 +318,7 @@ class SpeechService:
             }
             
         except Exception as e:
-            logger.error(f"ElevenLabs STT error: {str(e)}")
+            logger.error(f"ElevenLabs STT error: {e}")
             raise
 
     async def _whisper_speech_to_text(
