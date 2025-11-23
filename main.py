@@ -17,55 +17,42 @@ import asyncio
 import time
 import psutil
 
-# Import database components
 from db.database import get_db, engine, create_tables, test_connection, reset_database, cleanup_conflicting_data
 from db.models import ChatMessage as DBChatMessage, Lead as DBLead, LeadStatus, User as DBUser
 
-# Import routes
 from routes.leads import router as leads_router
 from routes.quotes import router as quotes_router
 from routes.speech import router as speech_router
 from routes.recommendations import router as recommendations_router
 from routes.admin import router as admin_router
-from routes.auth import router as auth_router  # Add authentication routes
+from routes.auth import router as auth_router
 
-# Import AI services
 from ai_services.factory import AIServiceFactory
 from ai_services.simple_conversational_agent import SimpleConversationalAgent
 from ai_services.quote_generation_agent import QuoteGenerationAgent
 from ai_services.base import AIMessage
 
-# Import models
 from models.chat import MessageType, ChatRequest, ChatResponse
 from models.lead import Lead
 
-# Import services
 from services.cache_service import get_cache_service, start_cache_cleanup_task
 from services.elasticsearch_vector_service import get_elasticsearch_service
 from services.elasticsearch_vector_service import get_elasticsearch_vector_service
 from services.metrics_service import metrics_middleware, metrics_endpoint, get_metrics_service
 
-# Import authentication
 from services.auth_service import get_current_active_user, auth_service, check_lead_access, get_lead_access_filter
 
-# Import configuration
 from config import settings
 
-# Import speech service
 from services.speech_service import SpeechService
 from dependencies import get_speech_service
 
-# Import PDF generator
 from services.pdf_generator import PDFGenerator
 
-# Import pitch deck service
 from services.pitch_deck_service import PitchDeckService
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Add file handler for main application logs
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 main_log_handler = logging.FileHandler(log_dir / "main.log")
@@ -74,20 +61,15 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 main_log_handler.setFormatter(formatter)
 logger.addHandler(main_log_handler)
 
-# Create FastAPI app
 app = FastAPI(
     title="B2B Sales AI Assistant",
     description="AI-powered B2B sales assistant with dynamic product intelligence and multi-user support",
-    version="3.0.0"  # Updated version for multi-user support
+    version="3.0.0"
 )
 
-# Add metrics middleware
 app.middleware("http")(metrics_middleware)
 
-# Add compression middleware for better response times
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -96,18 +78,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers - Add authentication first
-app.include_router(auth_router)  # Authentication routes (no auth required)
+app.include_router(auth_router)
 app.include_router(leads_router)
 app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
 app.include_router(admin_router)
 
-# Add metrics endpoint
 app.get("/metrics")(metrics_endpoint)
-
-# Keep your working models
 class SalesChatMessage(BaseModel):
     message: str
     lead_id: Optional[str] = None
@@ -172,9 +150,7 @@ conversational_agent = None
 quote_agent = None
 elasticsearch_service = None
 
-# Add simple context helper function
 def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Dict[str, Any]]) -> List[AIMessage]:
-    """Add simple context without complex analysis"""
     context_parts = []
     
     if customer_context:
@@ -189,14 +165,12 @@ def _add_simple_context(messages: List[AIMessage], customer_context: Optional[Di
     return messages
 
 def get_cached_ai_provider():
-    """Get cached AI provider instance"""
     global ai_provider
     if ai_provider is None:
         ai_provider = AIServiceFactory.create_provider(settings.default_ai_provider)
     return ai_provider
 
 def get_cached_conversational_agent():
-    """Get cached conversational agent instance"""
     global conversational_agent
     if conversational_agent is None:
         base_provider = get_cached_ai_provider()
@@ -204,7 +178,6 @@ def get_cached_conversational_agent():
     return conversational_agent
 
 def get_cached_quote_agent():
-    """Get cached quote generation agent instance"""
     global quote_agent
     if quote_agent is None:
         base_provider = get_cached_ai_provider()
@@ -212,31 +185,26 @@ def get_cached_quote_agent():
     return quote_agent
 
 def get_cached_speech_service():
-    """Get cached speech service instance"""
     global speech_service
     return speech_service
 
 def get_cached_elasticsearch_service():
-    """Get cached elasticsearch service instance"""
     global elasticsearch_service
     if elasticsearch_service is None:
         elasticsearch_service = get_elasticsearch_service()
     return elasticsearch_service
 
 def get_cached_vector_service():
-    """Get cached vector service instance"""
     global vector_service
     return vector_service
 
 def get_cpu_usage():
-    """Get current CPU usage percentage"""
     try:
         return psutil.cpu_percent(interval=1)
     except Exception:
         return 0.0
 
 def should_disable_speech_service():
-    """Check if speech service should be disabled based on CPU usage"""
     if settings.disable_speech_service:
         return True
     
@@ -249,7 +217,6 @@ def should_disable_speech_service():
     return False
 
 def save_quote_to_database(quote: Dict[str, Any], lead_id: str = None, user_id: str = None, db: Session = None) -> str:
-    """Save quote to database for persistence with user association"""
     try:
         from db.models import Quote
         from datetime import datetime, timedelta
@@ -317,7 +284,6 @@ def save_quote_to_database(quote: Dict[str, Any], lead_id: str = None, user_id: 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on startup"""
     global vector_service, speech_service, conversational_agent, quote_agent, elasticsearch_service
     
     try:
@@ -394,7 +360,6 @@ async def startup_event():
         raise
 
 async def periodic_metrics_update():
-    """Periodically update lead and database metrics"""
     while True:
         try:
             await asyncio.sleep(60)  # Update every minute
@@ -428,7 +393,6 @@ async def periodic_metrics_update():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup on shutdown"""
     try:
         elasticsearch_service = get_elasticsearch_service()
         await elasticsearch_service.close()
@@ -445,11 +409,10 @@ async def root():
 
 @app.post("/api/chat")
 async def sales_chat(
-    request: SalesChatMessage, 
+    request: SalesChatMessage,
     current_user: DBUser = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Optimized sales chat endpoint with reduced latency and user authentication"""
     metrics_service = get_metrics_service()
     start_time = time.time()
     
@@ -642,10 +605,8 @@ async def sales_chat(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Keep all your existing working endpoints
 @app.get("/api/products")
 async def get_products():
-    """Get products with caching for improved performance"""
     cache_service = get_cache_service()
     
     # Try to get from cache first
@@ -669,9 +630,8 @@ async def get_products():
 @app.post("/api/generate-quote")
 async def generate_quote(
     quote_request: Dict[str, Any],
-    current_user: DBUser = Depends(get_current_active_user)  # Add user authentication
+    current_user: DBUser = Depends(get_current_active_user)
 ):
-    """Generate a detailed quotation and pitch deck using QuoteGenerationAgent"""
     metrics_service = get_metrics_service()
     start_time = time.time()
     
@@ -701,15 +661,14 @@ async def generate_quote(
         quote = await quote_agent.generate_quote_from_conversation(
             conversation_messages=conversation_messages,
             customer_context=customer_context,
-            current_user=current_user  # Pass the authenticated user
+            current_user=current_user
         )
         
         # Check if quote generation was successful
         if not quote:
             metrics_service.record_quote_generation(status="failed")
             raise HTTPException(status_code=500, detail="Quote generation failed - no quote returned")
-        
-        # Record comprehensive quote metrics
+
         try:
             # Extract quote details for metrics
             quote_data = {
@@ -719,8 +678,7 @@ async def generate_quote(
                 'quote_requested_at': quote.get('created_at', datetime.now().isoformat()),
                 'generated_at': datetime.now().isoformat()
             }
-            
-            # Record detailed quote metrics
+
             metrics_service.record_quote_with_details(quote_data)
             
             # Record sales velocity metrics

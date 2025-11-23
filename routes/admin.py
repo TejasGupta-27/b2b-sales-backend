@@ -20,16 +20,13 @@ import shutil
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-# Configuration file for storing prompts
 PROMPTS_CONFIG_FILE = Path("Data/admin_config/prompts.json")
 DATA_CONFIG_FILE = Path("Data/admin_config/data_sources.json")
 
-# Ensure config directory exists
 PROMPTS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 @router.get("/", response_class=HTMLResponse)
 async def admin_dashboard():
-    """Serve the admin dashboard HTML"""
     try:
         template_path = Path("templates/admin.html")
         if template_path.exists():
@@ -57,7 +54,6 @@ async def get_conversational_config():
 
 @router.post("/conversational/config/{config_type}")
 async def update_conversational_config(config_type: str, config_data: Dict[str, Any]):
-    """Update conversational configuration"""
     try:
         prompt_manager = get_prompt_manager()
         success = prompt_manager.update_conversational_config(config_type, config_data)
